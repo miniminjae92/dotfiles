@@ -4,6 +4,8 @@ export ZSH=~/.oh-my-zsh
 # disable oh-my-zsh themes for pure prompt
 ZSH_THEME=""
 
+plugins=(git)
+
 source $ZSH/oh-my-zsh.sh
 export ZPLUG_HOME=/opt/homebrew/opt/zplug
 source $ZPLUG_HOME/init.zsh
