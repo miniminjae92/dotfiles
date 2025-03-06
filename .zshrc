@@ -1,5 +1,6 @@
 # ~.zshrc
 export ZSH=~/.oh-my-zsh
+export CDPATH=.,**
 
 # disable oh-my-zsh themes for pure prompt
 ZSH_THEME=""
