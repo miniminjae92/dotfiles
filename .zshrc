@@ -105,3 +105,9 @@ eval $(thefuck --alias fk)
 eval "$(zoxide init zsh)"
 
 alias cd="z"
+
+# ---- git alias ----
+
+alias gst="git status"
+alias gaa="git add ."
+alias gcmsg="git commit -m"

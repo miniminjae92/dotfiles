@@ -49,6 +49,8 @@ return {
 				"clang-format",
 				"pylint", -- python linter
 				"eslint_d", -- js linter
+				"cpplint", -- c/c++ linter
+				"codelldb", -- c/c++ debugger
 			},
 		})
 	end,
