@@ -1,0 +1,24 @@
+# 시스템 파일 (Mac 관련)
+.DS_Store
+
+# Vim/Neovim 관련 파일 (캐시, 백업, 스왑 파일)
+*.sw[a-z]
+.*.swp
+Session.vim
+
+# nvim/vim spell check 데이터
+nvim/spell/
+vim/spell/
+
+# Python 관련 캐시 파일
+*.py[cod]
+__pycache__/
+
+# 터미널 관련 파일 (zsh history)
+.zsh_history
+
+# SSH 설정 (보안 이슈)
+.ssh/
+
+# GPG 키 관련 (보안)
+.gnupg/
