@@ -6,6 +6,13 @@ local keymap = vim.keymap -- for conciseness
 ---------------------
 -- General Keymaps -------------------
 
+-- indent
+keymap.set("v", "<", "<gv", { desc = "Continue Left Indent" })
+keymap.set("v", ">", ">gv", { desc = "Continue Right Indent" })
+
+-- paste all
+keymap.set("n", "<leader>gg", "ggVGy", { desc = "Copy entire line" })
+
 -- use jk to exit insert mode
 keymap.set("i", "jk", "<ESC>", { desc = "Exit insert mode with jk" })
 

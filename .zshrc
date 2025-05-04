@@ -112,4 +112,13 @@ alias gst="git status"
 alias gaa="git add ."
 alias gcmsg="git commit -m"
 alias gp="git push"
+
+# Created by `pipx` on 2025-05-04 06:36:44
+export PATH="$PATH:/Users/miniminjae/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
+
+# User alias
 alias cl="clear"
+alias vi="nvim"
+alias vim="nvim"
+alias norm="norminette"

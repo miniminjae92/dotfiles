@@ -20,11 +20,15 @@ return {
 				liquid = { "prettier" },
 				lua = { "stylua" },
 				python = { "isort", "black" },
-				c = { "clang-format" },
-				cpp = { "clang-format" },
-				-- TODO: formatting c settings
-				-- c = { "clang-format" },
-				-- cpp = { "clang-format" },
+				c = { "forty_two" },
+				cpp = { "forty_two" },
+			},
+			formatters = {
+				forty_two = {
+					command = "42formatter",
+					args = { "$FILENAME" },
+					stdin = false,
+				},
 			},
 			format_on_save = {
 				lsp_fallback = true,
