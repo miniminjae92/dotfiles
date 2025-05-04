@@ -122,3 +122,5 @@ alias cl="clear"
 alias vi="nvim"
 alias vim="nvim"
 alias norm="norminette"
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
