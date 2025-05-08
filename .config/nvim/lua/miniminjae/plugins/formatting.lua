@@ -25,7 +25,7 @@ return {
 			},
 			formatters = {
 				forty_two = {
-					command = "42formatter",
+					command = vim.fn.expand("~/.local/bin/c_formatter_42"),
 					args = { "$FILENAME" },
 					stdin = false,
 				},
