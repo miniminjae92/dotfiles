@@ -33,6 +33,6 @@ au BufReadPost *
 \   exe "norm g`\"" |
 \ endif
 
-call plug#begin('~/.vim/plugged')
-
-call plug#end()
+" call plug#begin('~/.vim/plugged')
+"
+" call plug#end()
