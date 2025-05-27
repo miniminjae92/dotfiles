@@ -120,7 +120,6 @@ export PATH="$HOME/.local/bin:$PATH"
 # User alias
 alias cl="clear"
 alias vi="nvim"
-alias vim="nvim"
 alias norm="norminette"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
