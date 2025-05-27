@@ -22,6 +22,7 @@ return {
 				python = { "isort", "black" },
 				c = { "forty_two" },
 				cpp = { "forty_two" },
+				java = { "google-java-format" },
 			},
 			formatters = {
 				forty_two = {

@@ -1,3 +1,4 @@
+-- plugins/lsp/mason.lua
 return {
 	"williamboman/mason.nvim",
 	dependencies = {
@@ -23,7 +24,6 @@ return {
 				},
 			},
 		})
-
 		mason_lspconfig.setup({
 			-- list of servers for mason to install
 			ensure_installed = {
@@ -37,9 +37,9 @@ return {
 				"prismals",
 				"pyright",
 				"clangd", -- C/C++ LSP server
+				"jdtls",
 			},
 		})
-
 		mason_tool_installer.setup({
 			ensure_installed = {
 				"prettier", -- prettier formatter
@@ -51,6 +51,9 @@ return {
 				"eslint_d", -- js linter
 				"cpplint", -- c/c++ linter
 				"codelldb", -- c/c++ debugger
+				"google-java-format",
+				"java-debug-adapter",
+				"java-test",
 			},
 		})
 	end,

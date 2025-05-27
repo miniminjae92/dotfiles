@@ -31,6 +31,10 @@ bindkey '^[[B' history-search-forward
 source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
+# ---- JAVA ----
+export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
+export JAVA_HOME=$(/usr/libexec/java_home -v21)
+
 # ---- FZF -----
 
 # Set up fzf key bindings and fuzzy completion

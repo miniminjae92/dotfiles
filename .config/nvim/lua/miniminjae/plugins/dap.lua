@@ -1,3 +1,4 @@
+-- plugins/dap.lua
 return {
 	"mfussenegger/nvim-dap",
 	dependencies = {
@@ -118,4 +119,4 @@ return {
 			dapui.eval()
 		end, { desc = "Debug: Evaluate Selection" })
 	end,
-} 
+}
