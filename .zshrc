@@ -35,6 +35,9 @@ source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zs
 export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
 export JAVA_HOME=$(/usr/libexec/java_home -v17)
 
+# ---- Python ----
+export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
+
 # ---- FZF -----
 
 # Set up fzf key bindings and fuzzy completion
