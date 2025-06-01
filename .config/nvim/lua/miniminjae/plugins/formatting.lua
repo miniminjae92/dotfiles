@@ -30,6 +30,10 @@ return {
 					args = { "$FILENAME" },
 					stdin = false,
 				},
+				black = {
+					command = vim.fn.expand("~/.local/share/nvim/mason/bin/black"),
+					stdin = false,
+				},
 			},
 			format_on_save = {
 				lsp_fallback = true,
