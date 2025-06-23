@@ -1,0 +1,195 @@
+[
+  // 🟦 VIM 창 간 이동 단축키
+  {
+    "key": "ctrl+h", // 왼쪽 창으로 이동
+    "command": "workbench.action.focusLeftGroup",
+    "when": "editorTextFocus && vim.active && vim.mode != 'Insert'"
+  },
+  {
+    "key": "ctrl+l", // 오른쪽 창으로 이동
+    "command": "workbench.action.focusRightGroup",
+    "when": "editorTextFocus && vim.active && vim.mode != 'Insert'"
+  },
+  {
+    "key": "ctrl+k", // 위쪽 창으로 이동
+    "command": "workbench.action.focusAboveGroup",
+    "when": "editorTextFocus && vim.active && vim.mode != 'Insert'"
+  },
+  {
+    "key": "ctrl+j", // 아래쪽 창으로 이동
+    "command": "workbench.action.focusBelowGroup",
+    "when": "editorTextFocus && vim.active && vim.mode != 'Insert'"
+  },
+  // 🟩 코드 탐색 및 편집
+  // {
+  //   "key": "ctrl+space f", // 문서 전체 포맷팅
+  //   "command": "editor.action.formatDocument",
+  //   "when": "editorTextFocus && !editorReadonly"
+  // },
+  // {
+  //   "key": "ctrl+]", // 정의로 이동
+  //   "command": "editor.action.revealDefinition",
+  //   "when": "editorHasDefinitionProvider && editorTextFocus"
+  // },
+  // {
+  //   "key": "ctrl+t", // 이전 위치로 돌아가기
+  //   "command": "workbench.action.navigateBack"
+  // },
+  // ✍ 자동완성 제어
+  // {
+  //   "key": "ctrl+j", // 자동완성 다음 항목 선택
+  //   "command": "selectNextSuggestion",
+  //   "when": "suggestWidgetVisible"
+  // },
+  // {
+  //   "key": "ctrl+k", // 자동완성 이전 항목 선택
+  //   "command": "selectPrevSuggestion",
+  //   "when": "suggestWidgetVisible"
+  // },
+  // {
+  //   "key": "ctrl+j", // 빠른 열기 다음 항목
+  //   "command": "workbench.action.quickOpenSelectNext",
+  //   "when": "inQuickOpen"
+  // },
+  // {
+  //   "key": "ctrl+k", // 빠른 열기 이전 항목
+  //   "command": "workbench.action.quickOpenSelectPrevious",
+  //   "when": "inQuickOpen"
+  // },
+  // 🔍 검색 기능
+  // {
+  //   "key": "ctrl+shift+f", // 전체 파일 검색
+  //   "command": "workbench.action.findInFiles",
+  //   "when": "editorFocus"
+  // },
+  {
+    "key": "F4", // 다음 검색 결과로 이동
+    "command": "editor.action.nextMatchFindAction",
+    "when": "editorFocus"
+  },
+  {
+    "key": "shift+F4", // 이전 검색 결과로 이동
+    "command": "editor.action.previousMatchFindAction",
+    "when": "editorFocus"
+  },
+  // 🚨 문제 탐색
+  {
+    "key": "F8", // 다음 에러/경고로 이동
+    "command": "editor.action.marker.nextInFiles",
+    "when": "editorFocus"
+  },
+  {
+    "key": "shift+F8", // 이전 에러/경고로 이동
+    "command": "editor.action.marker.prevInFiles",
+    "when": "editorFocus"
+  },
+  // 📁 파일 탐색기 관련
+  // {
+  //   "key": "ctrl+shift+e", // 파일 탐색기 열기 또는 에디터로 복귀
+  //   "command": "workbench.files.action.focusFilesExplorer",
+  //   "when": "editorTextFocus"
+  // },
+  // {
+  //   "key": "ctrl+shift+e",
+  //   "command": "workbench.action.focusActiveEditorGroup",
+  //   "when": "explorerViewletVisible && filesExplorerFocus"
+  // },
+  {
+    "key": "cmd+shift+1", // 파일을 첫 번째 에디터 그룹에 열기
+    "command": "explorer.openToSide",
+    "args": {
+      "group": 0
+    },
+    "when": "explorerViewletVisible && filesExplorerFocus && !inputFocus"
+  },
+  {
+    "key": "cmd+shift+2", // 파일을 두 번째 에디터 그룹에 열기
+    "command": "explorer.openToSide",
+    "args": {
+      "group": 1
+    },
+    "when": "explorerViewletVisible && filesExplorerFocus && !inputFocus"
+  },
+  {
+    "key": "r", // 파일 이름 바꾸기
+    "command": "renameFile",
+    "when": "explorerViewletVisible && filesExplorerFocus"
+  },
+  // {
+  //   "key": "enter", // 파일 이름 바꾸기 비활성화
+  //   "command": "-renameFile",
+  //   "when": "explorerViewletVisible && filesExplorerFocus"
+  // },
+  {
+    "key": "enter", // 항목 선택 (입력창 아닐 때)
+    "command": "list.select",
+    "when": "listFocus && !inputFocus"
+  },
+  // 🪟 Split 창 조절
+  {
+    "key": "alt+h", // 현재 창 너비 줄이기
+    "command": "workbench.action.decreaseViewWidth"
+  },
+  {
+    "key": "alt+l", // 현재 창 너비 늘리기
+    "command": "workbench.action.increaseViewWidth"
+  },
+  // {
+  //   "key": "ctrl+w m", // 현재 에디터 창 최대화/복구 전환
+  //   "command": "workbench.action.toggleMaximizeEditorGroup"
+  // },
+  // 📑 탭 전환
+  {
+    "key": "alt+[", // 이전 탭으로 이동
+    "command": "workbench.action.previousEditor"
+  },
+  {
+    "key": "alt+]", // 다음 탭으로 이동
+    "command": "workbench.action.nextEditor"
+  },
+  // 🗂️ 워크스페이스 관리
+  // {
+  //   "key": "ctrl+shift+w", // 워크스페이스 닫기
+  //   "command": "workbench.action.closeFolder",
+  //   "when": "emptyWorkspaceSupport"
+  // },
+  // {
+  //   "key": "ctrl+k p", // 현재 파일 경로 복사
+  //   "command": "workbench.action.files.copyPathOfActiveFile"
+  // },
+  // 💻 터미널 관련
+  {
+    "key": "ctrl+;", // 터미널 포커스
+    "command": "workbench.action.terminal.focus"
+  },
+  {
+    "key": "ctrl+;", // 에디터로 포커스 복귀
+    "command": "workbench.action.focusActiveEditorGroup",
+    "when": "terminalFocus"
+  },
+  {
+    "key": "ctrl+shift+;", // 터미널 패널 최대화/복구 전환 + 포커스
+    "command": "multiCommand.toggleMaximizedPanelAndFocusTerminal",
+    "when": "!terminalFocus || terminalFocus"
+  },
+  // 🔢 빠른 에디터 그룹 전환
+  {
+    "key": "ctrl+1", // 첫 번째 에디터 그룹 포커스
+    "command": "workbench.action.focusFirstEditorGroup"
+  },
+  {
+    "key": "ctrl+2", // 두 번째 에디터 그룹 포커스
+    "command": "workbench.action.focusSecondEditorGroup"
+  },
+  // 🔽 패널 탐색
+  {
+    "key": "ctrl+j", // 패널에서 아래 항목으로 이동
+    "command": "list.focusDown",
+    "when": "panelFocus"
+  },
+  {
+    "key": "ctrl+k", // 패널에서 위 항목으로 이동
+    "command": "list.focusUp",
+    "when": "panelFocus"
+  }
+]

@@ -1,0 +1,238 @@
+{
+  // VSCode 에디터 관련 설정들
+  "editor.lineNumbers": "relative", // 현재 커서 기준 상대 줄 번호 표시
+  "editor.scrollBeyondLastLine": false, // 파일 마지막 줄 넘어서 스크롤 막기
+  "editor.cursorSurroundingLines": 8, // 스크롤 시 커서 위아래로 8줄 여백 유지
+  "editor.smoothScrolling": true, // 부드러운 스크롤 활성화
+  "editor.bracketPairColorization.enabled": true, // 괄호 짝 색상 표시
+  "editor.guides.bracketPairs": true, // 괄호 짝 수직선 표시
+  "editor.minimap.renderCharacters": false, // 미니맵에서 글자 안 보이게
+  "editor.minimap.scale": 2, // 미니맵 확대 배율 2배
+  "editor.formatOnSave": true,
+  // Vim 플러그인 설정
+  "vim.easymotion": true, // easymotion 플러그인 사용
+  "vim.incsearch": true, // 실시간 검색 하이라이트
+  "vim.useSystemClipboard": true, // 시스템 클립보드 연동
+  "vim.useCtrlKeys": true, // Ctrl 키 조합 사용
+  "vim.hlsearch": true, // 검색 하이라이트 유지
+  "vim.leader": " ", // 리더 키를 스페이스로 지정
+  "vim.sneak": true, // sneak 플러그인 사용
+  "vim.smartRelativeLine": true, // normal mode 에서 상대 번호, insert mode 에선 절대
+  "vim.foldfix": true, // 접기 관련 버그 수정
+  "vim.highlightedyank.enable": true, // 복사 시 하이라이트
+  "vim.highlightedyank.duration": 200, // 복사 하이라이트 지속 시간(ms)
+  "vim.searchHighlightColor": "rgba(180, 142, 173, 0.5)", // 검색 하이라이트 색상
+  "vim.startup.firstline": false, // 첫 줄에서 시작 안 함
+  // 상태 표시줄에 모드별 색상 적용
+  "vim.statusBarColorControl": true,
+  "vim.statusBarColors.normal": "#519aba",
+  "vim.statusBarColors.insert": "#98c379",
+  "vim.statusBarColors.visual": "#c678dd",
+  "vim.statusBarColors.visualline": "#c678dd",
+  "vim.statusBarColors.visualblock": "#c678dd",
+  "vim.statusBarColors.replace": "#e06c75",
+  // 키 처리 제어: 특정 키만 Vim에 맡기기
+  "vim.handleKeys": {
+    "<C-d>": true, // Ctrl+d 스크롤 down
+    "<C-u>": true, // Ctrl+u 스크롤 up
+    "<C-f>": false // Ctrl+f 는 VSCode 찾기 기능으로 넘김
+  },
+  // Insert 모드에서 jj로 빠져나오기
+  "vim.insertModeKeyBindings": [
+    {
+      "before": [
+        "j",
+        "k"
+      ],
+      "after": [
+        "<Esc>"
+      ]
+    }
+  ],
+  // Normal 모드에서 커맨드 설정
+  "vim.normalModeKeyBindingsNonRecursive": [
+    {
+      "before": [
+        "<leader>",
+        "h"
+      ],
+      "commands": [
+        ":nohl"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "s",
+        "v"
+      ],
+      "commands": [
+        "workbench.action.splitEditor"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "s",
+        "x"
+      ],
+      "commands": [
+        "workbench.action.closeActiveEditor"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "e",
+        "e"
+      ],
+      "commands": [
+        "workbench.action.toggleSidebarVisibility"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "e",
+        "f"
+      ],
+      "commands": [
+        "revealInExplorer"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "f",
+        "y"
+      ],
+      "commands": [
+        "copyFilePath"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "f",
+        "n"
+      ],
+      "commands": [
+        "explorer.newFile"
+      ]
+    },
+    {
+      "before": [
+        "g",
+        "c",
+        "c"
+      ],
+      "commands": [
+        "editor.action.commentLine"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "f",
+        "s"
+      ],
+      "commands": [
+        "workbench.action.findInFiles"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "s",
+        "m"
+      ],
+      "commands": [
+        "workbench.action.toggleMaximizeEditorGroup"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "f",
+        "p"
+      ],
+      "commands": [
+        "workbench.action.files.copyPathOfActiveFile"
+      ]
+    },
+  ],
+  // Visual 모드에서 커맨드 설정
+  "vim.visualModeKeyBindings": [
+    {
+      "before": [
+        "g",
+        "c"
+      ],
+      "commands": [
+        "editor.action.commentLine",
+        "extension.vim_escape"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "a"
+      ],
+      "commands": [
+        "editor.action.selectHighlights"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "s",
+        "t"
+      ],
+      "commands": [
+        "editor.action.sortLinesAscending"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "u"
+      ],
+      "commands": [
+        "editor.action.transformToUppercase"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "l"
+      ],
+      "commands": [
+        "editor.action.transformToLowercase"
+      ]
+    },
+  ],
+  // 여러 커맨드를 한 번에 실행 (multi-command 확장 필요)
+  "multiCommand.commands": [
+    {
+      "command": "multiCommand.toggleMaximizedPanelAndFocusTerminal",
+      "sequence": [
+        "workbench.action.toggleMaximizedPanel",
+        "workbench.action.terminal.focus"
+      ]
+    },
+    {
+      "command": "multiCommand.newTerminalAndFocus",
+      "sequence": [
+        "workbench.action.terminal.new",
+        "workbench.action.terminal.focus"
+      ]
+    }
+  ],
+  "workbench.colorCustomizations": {
+    "statusBar.background": "#519aba",
+    "statusBar.noFolderBackground": "#519aba",
+    "statusBar.debuggingBackground": "#519aba",
+    "statusBar.foreground": "#ffffff",
+    "statusBar.debuggingForeground": "#ffffff"
+  },
+}
