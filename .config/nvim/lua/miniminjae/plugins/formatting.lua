@@ -1,3 +1,4 @@
+-- plugins/formatting.lua
 return {
 	"stevearc/conform.nvim",
 	event = { "BufReadPre", "BufNewFile" },

@@ -1,3 +1,4 @@
+-- plugins/treesitter.lua
 return {
 	"nvim-treesitter/nvim-treesitter",
 	event = { "BufReadPre", "BufNewFile" },

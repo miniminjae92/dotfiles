@@ -54,6 +54,7 @@ return {
 				"google-java-format",
 				"java-debug-adapter",
 				"java-test",
+				"typescript-language-server",
 			},
 		})
 	end,
