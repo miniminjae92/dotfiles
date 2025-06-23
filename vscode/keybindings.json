@@ -191,5 +191,10 @@
     "key": "ctrl+k", // 패널에서 위 항목으로 이동
     "command": "list.focusUp",
     "when": "panelFocus"
+  },
+  {
+    "key": "cmd+`",
+    "command": "workbench.action.terminal.toggleTerminal",
+    "when": "terminal.active"
   }
 ]
