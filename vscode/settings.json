@@ -175,6 +175,16 @@
       "before": [
         "<leader>",
         "d",
+        "c"
+      ],
+      "commands": [
+        "workbench.action.debug.continue"
+      ]
+    },
+    {
+      "before": [
+        "<leader>",
+        "d",
         "b"
       ],
       "commands": [
@@ -185,7 +195,7 @@
       "before": [
         "<leader>",
         "d",
-        "c"
+        "r"
       ],
       "commands": [
         "workbench.action.debug.restart"
