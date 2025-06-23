@@ -17,3 +17,7 @@ ln -s ~/.dotfiles/.zshrc ~/.zshrc;
 ln -s ~/.dotfiles/.config/nvim ~/.config/nvim;
 
 ln -s ~/.dotfiles/.tmux.conf ~/.tmux.conf;
+
+ln -sf ~/.dotfiles/.gitignore ~/.gitignore_global
+
+git config --global core.excludesFile ~/.gitignore_global
