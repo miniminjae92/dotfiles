@@ -316,4 +316,6 @@
     "statusBar.foreground": "#ffffff",
     "statusBar.debuggingForeground": "#ffffff"
   },
+  "workbench.colorTheme": "Solarized Osaka",
+  "workbench.iconTheme": "material-icon-theme",
 }
