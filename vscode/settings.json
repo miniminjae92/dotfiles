@@ -165,6 +165,13 @@
     }
   ],
   "workbench.colorTheme": "Solarized Osaka",
-  "workbench.iconTheme": "material-icon-theme"
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.colorCustomizations": {
+    "statusBar.background": "#519aba",
+    "statusBar.noFolderBackground": "#519aba",
+    "statusBar.debuggingBackground": "#519aba",
+    "statusBar.foreground": "#ffffff",
+    "statusBar.debuggingForeground": "#ffffff"
+  }
 }
 
