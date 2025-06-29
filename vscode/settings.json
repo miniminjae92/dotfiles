@@ -164,7 +164,11 @@
       ]
     }
   ],
-  "workbench.colorTheme": "Solarized Osaka",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": false
+  },
   "workbench.iconTheme": "material-icon-theme",
   "workbench.colorCustomizations": {
     "statusBar.background": "#519aba",
@@ -172,6 +176,8 @@
     "statusBar.debuggingBackground": "#519aba",
     "statusBar.foreground": "#ffffff",
     "statusBar.debuggingForeground": "#ffffff"
-  }
+  },
+  "workbench.colorTheme": "Solarized Osaka",
+  "editor.fontSize": 14,
+  "editor.fontFamily": "JetBrainsMonoNL-Regular, Menlo, Monaco, 'Courier New', monospace"
 }
-
