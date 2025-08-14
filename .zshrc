@@ -130,3 +130,5 @@ alias vi="nvim"
 alias norm="norminette"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+export GEMINI_API_KEY="AIzaSyCoQNfM9KMNNBnxn0lyNJxRbMMH1COo50s"
