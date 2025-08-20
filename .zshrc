@@ -131,4 +131,8 @@ alias norm="norminette"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-export GEMINI_API_KEY="AIzaSyCoQNfM9KMNNBnxn0lyNJxRbMMH1COo50s"
+# Gemini CLI Settings
+if [ -f "$HOME/.gemini.env" ]; then
+	source "$HOME/.gemini.env"
+	export GOOGLE_API_KEY
+fi
