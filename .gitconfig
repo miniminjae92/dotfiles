@@ -22,3 +22,5 @@
 [user]
 	name = Minjae Kang
 	email = rkdalswoals@gmail.com
+[init]
+	defaultBranch = main

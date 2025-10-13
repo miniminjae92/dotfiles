@@ -36,7 +36,13 @@ export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
 export JAVA_HOME=$(/usr/libexec/java_home -v17)
 
 # ---- Python ----
-export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
+# export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
+# pyenv & pyenv-virtualenv settings
+export PKG_CONFIG_PATH="$(brew --prefix tcl-tk@8)/lib/pkgconfig"
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
 
 # ---- FZF -----
 
