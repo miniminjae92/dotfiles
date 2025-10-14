@@ -152,6 +152,22 @@ return {
 						},
 					})
 				end,
+				["pyright"] = function()
+					-- configure python server
+					lspconfig["pyright"].setup({
+						capabilities = capabilities,
+						settings = {
+							python = {
+								analysis = {
+									-- "off", "basic", "strict" 중 선택 가능
+									-- basic: 기본적인 타입 오류 검사
+									-- strict: 엄격한 타입 오류 검사
+									typeCheckingMode = "basic",
+								},
+							},
+						},
+					})
+				end,
 			})
 		end,
 	},

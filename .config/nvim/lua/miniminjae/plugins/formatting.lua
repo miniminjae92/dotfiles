@@ -20,7 +20,8 @@ return {
 				graphql = { "prettier" },
 				liquid = { "prettier" },
 				lua = { "stylua" },
-				python = { "isort", "black" },
+				-- remove isort, black
+				python = { "ruff" },
 				c = { "forty_two" },
 				cpp = { "forty_two" },
 				java = { "google-java-format" },

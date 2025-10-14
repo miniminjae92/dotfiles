@@ -42,16 +42,19 @@ return {
 		})
 		mason_tool_installer.setup({
 			ensure_installed = {
+				-- formatter
 				"prettier", -- prettier formatter
 				"stylua", -- lua formatter
 				"isort", -- python formatter
 				"black", -- python formatter
 				"clang-format",
-				"pylint", -- python linter
+				-- linter
+				"ruff", -- python linter
 				"eslint_d", -- js linter
 				"cpplint", -- c/c++ linter
 				"codelldb", -- c/c++ debugger
 				"google-java-format",
+				-- etc and debugger
 				"java-debug-adapter",
 				"java-test",
 				"typescript-language-server",
