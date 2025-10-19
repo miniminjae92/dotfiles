@@ -1,34 +1,127 @@
-" You can find a list of commands here: https://jb.gg/h38q75
-" Find more examples here: https://jb.gg/share-ideavimrc
-
 " Source your .vimrc
-source ~/.vimrc
+" source ~/.vimrc
 
-"" Options
+let mapleader=' '
+
+" -- Keymaps
+
+noremap \ "_
+xnoremap p P
+noremap U <C-r>
+noremap <leader>cc :edit ~/.ideavimrc<cr>
+noremap <leader>cs :source ~/.ideavimrc<cr>:nohlsearch<cr>
+nnoremap <leader>h :nohlsearch<cr>
+inoremap jk <ESC>
+nnoremap <leader>gg ggVGy
+
+" -- Options
+
+set clipboard^=unnamed,unnamedplus
+set matchpairs+=<:>
+set ideajoin
+set hlsearch
+set ignorecase
+set smartcase
+set incsearch
+set timeoutlen=500
 
 set scrolloff=5
 
-" Do incremental searching.
-set incsearch
+" -- Actions
 
-" Don't use Ex mode, use Q for formatting.
-map Q gq
+map w [w
+map e ]w
+map b [b
+map ge ]b
 
+map <C-h> <C-w>h
+map <C-j> <C-w>j
+map <C-k> <C-w>k
+map <C-l> <C-w>l
+
+map <leader>k <Action>(MethodUp)
+map <leader>j <Action>(MethodDown)
+" map <leader>] <Action>(NextTab) " use cmd]
+" map <leader>[ <Action>(PreviousTab) " cmd[
+
+map <leader>wv <Action>(SplitVertically)
+map <leader>wh <Action>(SplitHorizontally)
+map <leader>ww <Action>(Unsplit)
+map <leader>wa <Action>(UnsplitAll)
+
+map <leader>fc <Action>(GotoClass)
+map <leader>ff <Action>(GotoFile)
+map <leader>fs <Action>(GotoSymbol)
+map <leader>fa <Action>(GotoAction)
+
+map <leader>lc <Action>(JumpToLastChange)
+map <leader>ll <Action>(RecentLocations)
+map <leader>fr <Action>(RecentFiles)
+
+map <leader>gd <Action>(GotoDeclaration)
+map <leader>gy <Action>(GotoTypeDeclaration)
+map <leader>gi <Action>(GotoImplementation)
+map <leader>gt <Action>(GotoTest)
+map <leader>gm <Action>(GotoSuperMethod)
+map <leader>gl <Action>(GotoLine)
+
+map <leader>ug <Action>(FindUsages)
+map <leader>uu <Action>(ShowUsages)
+map <leader>vs <Action>(ViewSource)
+map <leader>qi <Action>(QuickImplementations)
+map <leader>qt <Action>(QuickTypeDefinition)
+map <leader>et <Action>(ExpressionTypeInfo)
+map <leader>sh <Action>(ShowHoverInfo)
+map <leader>oo <Action>(FileStructurePopup)
+
+map <S-f> <Action>(Find)
+map <S-r> <Action>(Replace)
+map <leader>F <Action>(FindInPath)
+map <leader>R <Action>(ReplaceInPath)
+
+map <leader>rn <Action>(RenameElement)
+map <leader>rm <Action>(ExtractMethod)
+map <leader>rv <Action>(IntroduceVariable)
+map <leader>rf <Action>(IntroduceField)
+map <leader>rs <Action>(ChangeSignature)
+map <leader>rr <Action>(Refactorings.QuickListPopupAction)
+
+map <leader>aa <Action>(ShowIntentionActions)
+map <leader>sw <Action>(SurroundWith)
+map <S-space> <Action>(Generate)
+map <S-k> <Action>(EditorDuplicateLines)
+map <C-;> <Action>(EditorCompleteStatement)
+
+map <leader>en <Action>(GotoNextError)
+map <leader>ep <Action>(GotoToPreviousError)
+map <leader><leader> <Action>(ReformatCode)
+map <leader>oi <Action>(OptimizeImports)
+map <leader>ra <Action>(RearrangeCode)
+
+map <A-j> <Action>(MoveLineDown)
+map <A-k> <Action>(MoveLineUp)
+map <A-S-j> <Action>(MoveStatementDown)
+map <A-S-k> <Action>(MoveStatementUp)
+
+map <leader>ca <Action>(CopyAbsolutePath)
+map <leader>cn <Action>(CopyFileName)
+map <leader>cp <Action>(CopyContentRootPath)
+
+map <leader>nf <Action>(NewFile)
+map <leader>nd <Action>(NewDir)
+map <leader>ns <Action>(NewScratchFile)
+map <leader>re <Action>(RenameFile)
+map <leader>of <Action>(OpenFile)
+
+map <leader>ri <Action>(RestartIde)
+map <leader>qq <Action>(CloseContent)
+map <leader>qa <Action>(CloseAllEditors)
+
+nnoremap <leader>= :action EditorIncreaseFontSizeGlobal<cr>
+nnoremap <leader>- :action EditorDecreaseFontSizeGlobal<cr>
+map <leader>t <Action>(ActivateTerminalToolWindow)
+
+" You can find a list of commands here: https://jb.gg/h38q75
+" Find more examples here: https://jb.gg/share-ideavimrc
 " Plugins, Enable IdeaVim plugins https://jb.gg/ideavim-plugins
-
-" Highlight copied text
-Plug 'machakann/vim-highlightedyank'
-
-" Commentary plugin
-Plug 'tpope/vim-commentary'
-
 "" Map IDE actions to IdeaVim -- https://jb.gg/abva4t
-
-"" Map \r to the Reformat Code action
-"map \r <Action>(ReformatCode)
-
-"" Map <leader>d to start debug
-"map <leader>d <Action>(Debug)
-
-"" Map \b to toggle the breakpoint on the current line
-"map \b <Action>(ToggleLineBreakpoint)
