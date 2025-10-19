@@ -23,7 +23,7 @@ set hlsearch
 set ignorecase
 set smartcase
 set incsearch
-set timeoutlen=500
+set timeoutlen=600
 
 set scrolloff=5
 
@@ -91,6 +91,7 @@ map <leader>sw <Action>(SurroundWith)
 map <S-space> <Action>(Generate)
 map <S-k> <Action>(EditorDuplicateLines)
 map <C-;> <Action>(EditorCompleteStatement)
+noremap <C-;> :action EditorCompleteStatement<cr>
 
 map <leader>en <Action>(GotoNextError)
 map <leader>ep <Action>(GotoToPreviousError)
