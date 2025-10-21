@@ -8,9 +8,9 @@ let mapleader=' '
 noremap \ "_
 xnoremap p P
 noremap U <C-r>
-noremap <leader>cc :edit ~/.ideavimrc<cr>
-noremap <leader>cs :source ~/.ideavimrc<cr>:nohlsearch<cr>
-nnoremap <leader>h :nohlsearch<cr>
+noremap <leader>cc :edit ~/.ideavimrc<CR>
+noremap <leader>cs :source ~/.ideavimrc<CR>:nohlsearch<CR>
+nnoremap <ESC> :nohlsearch<CR>
 inoremap jk <ESC>
 nnoremap <leader>gg ggVGy
 
@@ -23,53 +23,53 @@ set hlsearch
 set ignorecase
 set smartcase
 set incsearch
-set timeoutlen=600
+" set timeoutlen=1000
 
+" -- 이해 부족한 것들
 set scrolloff=5
+map <leader>vs <Action>(ViewSource) " 커서가 위치한 요소의 원본 소스 코드를 보여줍니다.
+map <leader>uu <Action>(ShowUsages) " 클래스, 변수, 함수, 메서드 등 코드 요소가 프로젝트 내에서 어디에서 사용되고 있는지 목록을 보여줍니다.
+map <leader>qt <Action>(QuickTypeDefinition)
+map <leader>ra <Action>(RearrangeCode)
 
 " -- Actions
-
 map w [w
 map e ]w
 map b [b
 map ge ]b
 
+" -- Navigation
 map <C-h> <C-w>h
 map <C-j> <C-w>j
 map <C-k> <C-w>k
 map <C-l> <C-w>l
+map mk <Action>(MethodUp)
+map mj <Action>(MethodDown)
+nnoremap <leader>tn :action NextTab<CR>
+nnoremap <leader>tp :action PreviousTab<CR>
+map <leader>lc <Action>(JumpToLastChange)
 
-map <leader>k <Action>(MethodUp)
-map <leader>j <Action>(MethodDown)
-" map <leader>] <Action>(NextTab) " use cmd]
-" map <leader>[ <Action>(PreviousTab) " cmd[
-
-map <leader>wv <Action>(SplitVertically)
-map <leader>wh <Action>(SplitHorizontally)
-map <leader>ww <Action>(Unsplit)
-map <leader>wa <Action>(UnsplitAll)
+" -- Tab
+map <leader>sv <Action>(SplitVertically)
+map <leader>sh <Action>(SplitHorizontally)
+map <leader>sa <Action>(UnsplitAll)
+map <leader>sm <Action>(ToggleDistractionFreeMode)
 
 map <leader>fc <Action>(GotoClass)
 map <leader>ff <Action>(GotoFile)
 map <leader>fs <Action>(GotoSymbol)
 map <leader>fa <Action>(GotoAction)
-
-map <leader>lc <Action>(JumpToLastChange)
-map <leader>ll <Action>(RecentLocations)
 map <leader>fr <Action>(RecentFiles)
+map <leader>ll <Action>(RecentLocations)
 
-map <leader>gd <Action>(GotoDeclaration)
-map <leader>gy <Action>(GotoTypeDeclaration)
-map <leader>gi <Action>(GotoImplementation)
-map <leader>gt <Action>(GotoTest)
-map <leader>gm <Action>(GotoSuperMethod)
-map <leader>gl <Action>(GotoLine)
+map gd <Action>(GotoDeclaration)
+map gi <Action>(GotoImplementation)
+map gt <Action>(GotoTypeDeclaration)
+map gm <Action>(GotoSuperMethod)
+map <leader>T <Action>(GotoTest)
 
 map <leader>ug <Action>(FindUsages)
-map <leader>uu <Action>(ShowUsages)
-map <leader>vs <Action>(ViewSource)
 map <leader>qi <Action>(QuickImplementations)
-map <leader>qt <Action>(QuickTypeDefinition)
 map <leader>et <Action>(ExpressionTypeInfo)
 map <leader>sh <Action>(ShowHoverInfo)
 map <leader>oo <Action>(FileStructurePopup)
@@ -79,6 +79,7 @@ map <S-r> <Action>(Replace)
 map <leader>F <Action>(FindInPath)
 map <leader>R <Action>(ReplaceInPath)
 
+"-- Refactoring
 map <leader>rn <Action>(RenameElement)
 map <leader>rm <Action>(ExtractMethod)
 map <leader>rv <Action>(IntroduceVariable)
@@ -90,37 +91,43 @@ map <leader>aa <Action>(ShowIntentionActions)
 map <leader>sw <Action>(SurroundWith)
 map <S-space> <Action>(Generate)
 map <S-k> <Action>(EditorDuplicateLines)
-map <C-;> <Action>(EditorCompleteStatement)
-noremap <C-;> :action EditorCompleteStatement<cr>
-
-map <leader>en <Action>(GotoNextError)
-map <leader>ep <Action>(GotoToPreviousError)
-map <leader><leader> <Action>(ReformatCode)
-map <leader>oi <Action>(OptimizeImports)
-map <leader>ra <Action>(RearrangeCode)
-
+nnoremap <C-;> :action EditorCompleteStatement<CR>
+inoremap <C-;> :action EditorCompleteStatement<CR>
 map <A-j> <Action>(MoveLineDown)
 map <A-k> <Action>(MoveLineUp)
 map <A-S-j> <Action>(MoveStatementDown)
 map <A-S-k> <Action>(MoveStatementUp)
 
+map <leader>en <Action>(GotoNextError)
+map <leader>ep <Action>(GotoToPreviousError)
+map <leader><leader> <Action>(ReformatCode)
+map <leader>oi <Action>(OptimizeImports)
+
 map <leader>ca <Action>(CopyAbsolutePath)
 map <leader>cn <Action>(CopyFileName)
 map <leader>cp <Action>(CopyContentRootPath)
-
-map <leader>nf <Action>(NewFile)
-map <leader>nd <Action>(NewDir)
-map <leader>ns <Action>(NewScratchFile)
-map <leader>re <Action>(RenameFile)
-map <leader>of <Action>(OpenFile)
 
 map <leader>ri <Action>(RestartIde)
 map <leader>qq <Action>(CloseContent)
 map <leader>qa <Action>(CloseAllEditors)
 
-nnoremap <leader>= :action EditorIncreaseFontSizeGlobal<cr>
-nnoremap <leader>- :action EditorDecreaseFontSizeGlobal<cr>
-map <leader>t <Action>(ActivateTerminalToolWindow)
+nnoremap <leader>= :action EditorIncreaseFontSizeGlobal<CR>
+nnoremap <leader>- :action EditorDecreaseFontSizeGlobal<CR>
+
+map <leader>1 <Action>(Stop)
+map <leader>2 <Action>(RunClass)
+map <leader>3 <Action>(DebugClass)
+map <leader>4 <Action>(Run)
+map <leader>5 <Action>(Debug)
+
+map <C-t> <Action>(ActivateTerminalToolWindow)
+map <leader>an <Action>(ActivateRunToolWindow)
+map <leader>ah <Action>(HideActiveWindow)
+
+
+" -- Plugins
+
+set NERDTree
 
 " You can find a list of commands here: https://jb.gg/h38q75
 " Find more examples here: https://jb.gg/share-ideavimrc
