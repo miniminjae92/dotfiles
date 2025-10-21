@@ -5,17 +5,14 @@ let mapleader=' '
 
 " -- Keymaps
 
-noremap \ "_
-xnoremap p P
-noremap U <C-r>
-noremap <leader>cc :edit ~/.ideavimrc<CR>
-noremap <leader>cs :source ~/.ideavimrc<CR>:nohlsearch<CR>
-nnoremap <ESC> :nohlsearch<CR>
+nnoremap U <C-r>
+nnoremap <leader>cc :edit ~/.ideavimrc<CR>
+nnoremap <leader>cs :source ~/.ideavimrc<CR>:nohlsearch<CR>
+nnoremap <leader>hh :nohlsearch<CR>
 inoremap jk <ESC>
 nnoremap <leader>gg ggVGy
 
 " -- Options
-
 set clipboard^=unnamed,unnamedplus
 set matchpairs+=<:>
 set ideajoin
@@ -33,20 +30,20 @@ map <leader>qt <Action>(QuickTypeDefinition)
 map <leader>ra <Action>(RearrangeCode)
 
 " -- Actions
-map w [w
-map e ]w
-map b [b
-map ge ]b
+nnoremap w [w
+nnoremap e ]w
+nnoremap b [b
+nnoremap ge ]b
 
 " -- Navigation
-map <C-h> <C-w>h
-map <C-j> <C-w>j
-map <C-k> <C-w>k
-map <C-l> <C-w>l
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+nnoremap <leader>] :action NextTab<CR>
+nnoremap <leader>[ :action PreviousTab<CR>
 map mk <Action>(MethodUp)
 map mj <Action>(MethodDown)
-nnoremap <leader>tn :action NextTab<CR>
-nnoremap <leader>tp :action PreviousTab<CR>
 map <leader>lc <Action>(JumpToLastChange)
 
 " -- Tab
@@ -71,7 +68,7 @@ map <leader>T <Action>(GotoTest)
 map <leader>ug <Action>(FindUsages)
 map <leader>qi <Action>(QuickImplementations)
 map <leader>et <Action>(ExpressionTypeInfo)
-map <leader>sh <Action>(ShowHoverInfo)
+map <leader>hi <Action>(ShowHoverInfo)
 map <leader>oo <Action>(FileStructurePopup)
 
 map <S-f> <Action>(Find)
@@ -120,16 +117,94 @@ map <leader>3 <Action>(DebugClass)
 map <leader>4 <Action>(Run)
 map <leader>5 <Action>(Debug)
 
-map <C-t> <Action>(ActivateTerminalToolWindow)
-map <leader>an <Action>(ActivateRunToolWindow)
-map <leader>ah <Action>(HideActiveWindow)
+map <leader>t <Action>(ActivateTerminalToolWindow)
+map <C-r> <Action>(ActivateRunToolWindow)
+map <C-q> <Action>(HideActiveWindow)
+map <C-t> <Action>(JumpToLastWindow)
 
+nnoremap <leader>zz :action CollapseRegion<cr>
+nnoremap <leader>zo :action ExpandRegion<cr>
 
 " -- Plugins
 
-set NERDTree
+Plug 'easymotion/vim-easymotion'
+map <leader>J <Plug>(easymotion-s)
+map <leader>j <Plug>(easymotion-f)
 
+set which-key
+set notimeout
+let g:WhichKey_FontSize = 13
+
+Plug 'preservim/nerdtree'
+map <leader>ee :NERDTree<cr>
+
+set commentary
+
+Plug 'tpope/vim-surround'
+
+""" multiple-cursors
+" Emulates vim-multiple-cursors
+" Basic Commands:
+" mc start multicursor
+" mc next match
+" mx skip next match
+" mp remove current match and go back to previous one
+" See https://github.com/terryma/vim-multiple-cursors for details
+"""
+Plug 'terryma/vim-multiple-cursors'
+map mc <A-n>
+map mx <A-x>
+map mp <A-p>
+
+" -- Reference
 " You can find a list of commands here: https://jb.gg/h38q75
 " Find more examples here: https://jb.gg/share-ideavimrc
 " Plugins, Enable IdeaVim plugins https://jb.gg/ideavim-plugins
 "" Map IDE actions to IdeaVim -- https://jb.gg/abva4t
+
+""" Nerdtree
+"o	Open files, directories and bookmarks	g:NERDTreeMapActivateNode
+"go	Open selected file, but leave cursor in the NERDTree	g:NERDTreeMapPreview
+"t	Open selected node/bookmark in a new tab	g:NERDTreeMapOpenInTab
+"T	Same as 't' but keep the focus on the current tab	g:NERDTreeMapOpenInTabSilent
+"i	Open selected file in a split window	g:NERDTreeMapOpenSplit
+"gi	Same as i, but leave the cursor on the NERDTree	g:NERDTreeMapPreviewSplit
+"s	Open selected file in a new vsplit	g:NERDTreeMapOpenVSplit
+"gs	Same as s, but leave the cursor on the NERDTree	g:NERDTreeMapPreviewVSplit
+"O	Recursively open the selected directory	g:NERDTreeMapOpenRecursively
+"x	Close the current nodes parent	g:NERDTreeMapCloseDir
+"X	Recursively close all children of the current node	g:NERDTreeMapCloseChildren
+"P	Jump to the root node	g:NERDTreeMapJumpRoot
+"p	Jump to current nodes parent	g:NERDTreeMapJumpParent
+"K	Jump up inside directories at the current tree depth	g:NERDTreeMapJumpFirstChild
+"J	Jump down inside directories at the current tree depth	g:NERDTreeMapJumpLastChild
+"<C-J>	Jump down to next sibling of the current directory	g:NERDTreeMapJumpNextSibling
+"<C-K>	Jump up to previous sibling of the current directory	g:NERDTreeMapJumpPrevSibling
+"r	Recursively refresh the current directory	g:NERDTreeMapRefresh
+"R	Recursively refresh the current root	g:NERDTreeMapRefreshRoot
+"m	Display the NERDTree menu	g:NERDTreeMapMenu
+"q	Close the NERDTree window	g:NERDTreeMapQuit
+"A	Zoom (maximize/minimize) the NERDTree window	g:NERDTreeMapToggleZoom
+"d	Delete file or directory	g:NERDTreeMapDelete
+"n	Create File	g:NERDTreeMapNewFile
+"N	Create Directory	g:NERDTreeMapNewDir
+"""
+""" Surround
+" 1. 추가 (Surround): ys (요소 추가)
+"    - ys + 텍스트객체 + 문자
+"    - 예시: 'hello'를 만들고 싶을 때, 커서를 h에 두고: ys iw '
+"      "hello"를 만들고 싶을 때: ys iw "
+"      <div>hello</div>를 만들고 싶을 때: ys iw <div>
+"
+" 2. 변경 (Change): cs (주변 문자 변경)
+"    - cs + 현재주변문자 + 새주변문자
+"    - 예시: ('hello')를 ['hello']로 변경하고 싶을 때: cs ) ]
+"    - 예시: "hello"를 'hello'로 변경하고 싶을 때: cs " '
+"    - 예시: <div>...</div>를 <span>...</span>로 변경하고 싶을 때: cst span
+"
+" 3. 삭제 (Delete): ds (주변 문자 삭제)
+"    - ds + 현재주변문자
+"    - 예시: [hello]에서 괄호를 지우고 싶을 때: ds ]
+"    - 예시: "hello"에서 따옴표를 지우고 싶을 때: ds "
+"    - 예시: <span>...</span>에서 태그를 지우고 싶을 때: dst
+"""

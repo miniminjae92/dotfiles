@@ -34,7 +34,7 @@ source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zs
 # ---- JAVA ----
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 export PATH="/Applications/IntelliJ IDEA.app/Contents/MacOS:$PATH"
-export JAVA_HOME=$(/usr/libexec/java_home -v21)
+export JAVA_HOME=$(brew --prefix openjdk@21)
 
 # ---- Python ----
 # export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
