@@ -83,6 +83,7 @@ map <leader>rv <Action>(IntroduceVariable)
 map <leader>rf <Action>(IntroduceField)
 map <leader>rs <Action>(ChangeSignature)
 map <leader>rr <Action>(Refactorings.QuickListPopupAction)
+map <leader>rc <Action>(IntroduceConstant)
 
 map <leader>aa <Action>(ShowIntentionActions)
 map <leader>sw <Action>(SurroundWith)
@@ -114,8 +115,23 @@ nnoremap <leader>- :action EditorDecreaseFontSizeGlobal<CR>
 map <leader>1 <Action>(Stop)
 map <leader>2 <Action>(RunClass)
 map <leader>3 <Action>(DebugClass)
-map <leader>4 <Action>(Run)
-map <leader>5 <Action>(Debug)
+"map <leader>4 <Action>(Run)
+"map <leader>5 <Action>(Debug)
+
+"""
+" Debug console에서 탭 이동 cmd+shift+[,]
+"
+"""
+map <leader>db <Action>(ToggleLineBreakpoint)
+map <leader>dn <Action>(StepOver)
+map <leader>ds <Action>(StepInto)
+map <leader>ds <Action>(SmartStepInto)
+map <leader>do <Action>(StepOut)
+map <leader>dc <Action>(Resume)
+map <leader>dR <Action>(Rerun)
+map <leader>dr <Action>(RunToCursor)
+map <leader>ee <Action>(EvaluateExpression)
+
 
 map <leader>t <Action>(ActivateTerminalToolWindow)
 map <C-r> <Action>(ActivateRunToolWindow)
@@ -136,7 +152,6 @@ set notimeout
 let g:WhichKey_FontSize = 13
 
 Plug 'preservim/nerdtree'
-map <leader>ee :NERDTree<cr>
 
 set commentary
 
