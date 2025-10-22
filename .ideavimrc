@@ -123,6 +123,7 @@ map <leader>3 <Action>(DebugClass)
 "
 """
 map <leader>db <Action>(ToggleLineBreakpoint)
+map <leader>dd <Action>(Debugger.RemoveAllBreakpoints)
 map <leader>dn <Action>(StepOver)
 map <leader>ds <Action>(StepInto)
 map <leader>ds <Action>(SmartStepInto)
