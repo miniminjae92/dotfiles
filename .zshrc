@@ -32,9 +32,8 @@ source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 # ---- JAVA ----
-export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
-export PATH="/Applications/IntelliJ IDEA.app/Contents/MacOS:$PATH"
-export JAVA_HOME=$(brew --prefix openjdk@21)
+export JAVA_HOME=$(/usr/libexec/java_home)
+export PATH="$JAVA_HOME/bin:$PATH"
 
 # ---- Python ----
 # export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
@@ -135,6 +134,7 @@ export PATH="$HOME/.local/bin:$PATH"
 alias cl="clear"
 alias vi="nvim"
 alias norm="norminette"
+alias lg="lazygit"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
