@@ -111,8 +111,8 @@ nnoremap <leader>- :action EditorDecreaseFontSizeGlobal<CR>
 map <leader>1 <Action>(Stop)
 map <leader>2 <Action>(RunClass)
 map <leader>3 <Action>(DebugClass)
-"map <leader>4 <Action>(Run)
-"map <leader>5 <Action>(Debug)
+map <leader>4 <Action>(Run)
+map <leader>5 <Action>(Debug)
 
 """
 " Debug console에서 탭 이동 cmd+shift+[,]
@@ -224,4 +224,8 @@ map mp <A-p>
 "    - 예시: [hello]에서 괄호를 지우고 싶을 때: ds ]
 "    - 예시: "hello"에서 따옴표를 지우고 싶을 때: ds "
 "    - 예시: <span>...</span>에서 태그를 지우고 싶을 때: dst
+"""
+
+"""
+" Translation cmd+ctrl+y(select engine),u(toggle translation),o(transform)
 """
