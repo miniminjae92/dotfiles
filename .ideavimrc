@@ -42,6 +42,7 @@ nnoremap <leader>[ :action PreviousTab<CR>
 map mk <Action>(MethodUp)
 map mj <Action>(MethodDown)
 map <leader>lc <Action>(JumpToLastChange)
+map <leader>ee <Action>(ActivateProjectToolWindow)
 
 " -- Tab
 map <leader>sv <Action>(SplitVertically)
@@ -86,8 +87,6 @@ map <leader>aa <Action>(ShowIntentionActions)
 map <leader>sw <Action>(SurroundWith)
 map <S-space> <Action>(Generate)
 map <S-k> <Action>(EditorDuplicateLines)
-nnoremap <C-;> :action EditorCompleteStatement<CR>
-inoremap <C-;> :action EditorCompleteStatement<CR>
 map <A-j> <Action>(MoveLineDown)
 map <A-k> <Action>(MoveLineUp)
 map <A-S-j> <Action>(MoveStatementDown)
@@ -95,7 +94,7 @@ map <A-S-k> <Action>(MoveStatementUp)
 
 map <leader>en <Action>(GotoNextError)
 map <leader>ep <Action>(GotoToPreviousError)
-map <leader><leader> <Action>(ReformatCode)
+nnoremap <leader>L :action ReformatCode<cr>
 map <leader>oi <Action>(OptimizeImports)
 
 map <leader>ca <Action>(CopyAbsolutePath)
@@ -128,8 +127,7 @@ map <leader>do <Action>(StepOut)
 map <leader>dc <Action>(Resume)
 map <leader>dR <Action>(Rerun)
 map <leader>dr <Action>(RunToCursor)
-map <leader>ee <Action>(EvaluateExpression)
-
+map <leader>de <Action>(EvaluateExpression)
 
 map <leader>t <Action>(ActivateTerminalToolWindow)
 map <C-r> <Action>(ActivateRunToolWindow)
@@ -141,6 +139,9 @@ nnoremap <leader>zo :action ExpandRegion<cr>
 
 nnoremap <leader>w :action EditorSelectWord<cr>
 nnoremap <leader>W :action EditorUnSelectWord<cr>
+
+nnoremap <C-;> :action EditorCompleteStatement<CR>
+inoremap <C-;> :action EditorCompleteStatement<CR>
 
 " -- Plugins
 
