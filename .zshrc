@@ -12,9 +12,6 @@ export LANG="en_US.UTF-8"
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-alias reload-zsh="source ~/.zshrc"
-alias edit-zsh="nvim ~/.zshrc"
-
 # history setup
 HISTFILE=$HOME/.zhistory
 SAVEHIST=1000
@@ -127,7 +124,6 @@ alias gcmsg="git commit -m"
 alias gp="git push"
 
 # Created by `pipx` on 2025-05-04 06:36:44
-export PATH="$PATH:/Users/miniminjae/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 
 # User alias
@@ -135,8 +131,6 @@ alias cl="clear"
 alias vi="nvim"
 alias norm="norminette"
 alias lg="lazygit"
-
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # Gemini CLI Settings
 if [ -f "$HOME/.gemini.env" ]; then
