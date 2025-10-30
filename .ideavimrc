@@ -19,6 +19,7 @@ set hlsearch
 set ignorecase
 set smartcase
 set incsearch
+set relativenumber
 " set timeoutlen=1000
 
 " -- 이해 부족한 것들
