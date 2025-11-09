@@ -15,7 +15,11 @@ opt.autoindent = true -- copy indent from current line when starting new one
 -- opt.softtabstop = 2
 
 -- line wrapping
-opt.wrap = false -- disable line wrapping
+opt.wrap = true -- disable line wrapping
+
+-- 단어 단위로 줄 바꿈
+opt.linebreak = true
+opt.showbreak = "↪ "
 
 -- search settings
 opt.ignorecase = true -- ignore case when searching
