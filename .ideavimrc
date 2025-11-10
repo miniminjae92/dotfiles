@@ -147,8 +147,8 @@ inoremap <C-;> :action EditorCompleteStatement<CR>
 " -- Plugins
 
 Plug 'easymotion/vim-easymotion'
-map <leader>J <Plug>(easymotion-s)
-map <leader>j <Plug>(easymotion-f)
+map <leader>K <Plug>(easymotion-s)
+map <leader>J <Plug>(easymotion-f)
 
 set which-key
 set notimeout
