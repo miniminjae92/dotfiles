@@ -144,6 +144,8 @@ nnoremap <leader>W :action EditorUnSelectWord<cr>
 nnoremap <C-;> :action EditorCompleteStatement<CR>
 inoremap <C-;> :action EditorCompleteStatement<CR>
 
+nnoremap <leader>wo :action WebOpenInAction<cr>
+
 " -- Plugins
 
 Plug 'easymotion/vim-easymotion'
