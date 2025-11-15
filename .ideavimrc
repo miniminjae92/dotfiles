@@ -7,11 +7,12 @@ let mapleader=' '
 nnoremap U <C-r>
 nnoremap <leader>cc :edit ~/.ideavimrc<CR>
 nnoremap <leader>cs :source ~/.ideavimrc<CR>:nohlsearch<CR>
-nnoremap <leader>hh :nohlsearch<CR>
+nnoremap <leader>h :nohlsearch<CR>
 inoremap jk <ESC>
 nnoremap <leader>gg ggVGy
 
 " -- Options
+set visualbell
 set clipboard^=unnamed,unnamedplus
 set matchpairs+=<:>
 set ideajoin
@@ -20,7 +21,8 @@ set ignorecase
 set smartcase
 set incsearch
 set relativenumber
-" set timeoutlen=1000
+set notimeout
+" set timeoutlen=300
 
 " -- 이해 부족한 것들
 set scrolloff=5
@@ -38,10 +40,10 @@ nnoremap ge ]b
 " -- Navigation
 nnoremap <C-h> <C-w>h
 nnoremap <C-l> <C-w>l
-nnoremap <leader>] :action NextTab<CR>
-nnoremap <leader>[ :action PreviousTab<CR>
-map mk <Action>(MethodUp)
-map mj <Action>(MethodDown)
+nnoremap <leader>tn :action NextTab<CR>
+nnoremap <leader>tp :action PreviousTab<CR>
+map [[ <Action>(MethodUp)
+map ]] <Action>(MethodDown)
 map <leader>lc <Action>(JumpToLastChange)
 map <leader>ee <Action>(ActivateProjectToolWindow)
 
@@ -62,12 +64,12 @@ map gd <Action>(GotoDeclaration)
 map gi <Action>(GotoImplementation)
 map gt <Action>(GotoTypeDeclaration)
 map gm <Action>(GotoSuperMethod)
-map <leader>T <Action>(GotoTest)
+map <leader>tg <Action>(GotoTest)
 
 map <leader>ug <Action>(FindUsages)
 map <leader>qi <Action>(QuickImplementations)
 map <leader>et <Action>(ExpressionTypeInfo)
-map <leader>hi <Action>(ShowHoverInfo)
+map <leader>K <Action>(ShowHoverInfo)
 map <leader>oo <Action>(FileStructurePopup)
 
 map <S-f> <Action>(Find)
@@ -149,11 +151,10 @@ nnoremap <leader>wo :action WebOpenInAction<cr>
 " -- Plugins
 
 Plug 'easymotion/vim-easymotion'
-map <leader>K <Plug>(easymotion-s)
-map <leader>J <Plug>(easymotion-f)
+map <leader>gk <Plug>(easymotion-s)
+map <leader>gj <Plug>(easymotion-f)
 
 set which-key
-set notimeout
 let g:WhichKey_FontSize = 13
 
 Plug 'preservim/nerdtree'
