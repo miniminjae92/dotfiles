@@ -24,8 +24,9 @@ return {
 				},
 			},
 		})
+
 		mason_lspconfig.setup({
-			-- list of servers for mason to install
+			-- LSP 서버 자동 설치 목록
 			ensure_installed = {
 				"html",
 				"cssls",
@@ -34,30 +35,29 @@ return {
 				"lua_ls",
 				"graphql",
 				"emmet_ls",
-				"prismals",
 				"pyright",
-				"clangd", -- C/C++ LSP server
+				"ts_ls",
 				"jdtls",
+				"clangd", -- C/C++ LSP server
 			},
 		})
+
 		mason_tool_installer.setup({
 			ensure_installed = {
-				-- formatter
-				"prettier", -- prettier formatter
-				"stylua", -- lua formatter
-				"isort", -- python formatter
-				"black", -- python formatter
-				"clang-format",
-				-- linter
-				"ruff", -- python linter
-				"eslint_d", -- js linter
-				"cpplint", -- c/c++ linter
-				"codelldb", -- c/c++ debugger
+				-- 포매터
+				"prettierd",
+				"stylua",
 				"google-java-format",
-				-- etc and debugger
+
+				-- 린터 & 포매터 통합 (Python)
+				"ruff",
+
+				-- FE 린터
+				"eslint_d",
+
+				-- 디버거
 				"java-debug-adapter",
 				"java-test",
-				"typescript-language-server",
 			},
 		})
 	end,

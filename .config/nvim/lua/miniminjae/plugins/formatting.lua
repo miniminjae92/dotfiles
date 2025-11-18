@@ -7,35 +7,23 @@ return {
 
 		conform.setup({
 			formatters_by_ft = {
-				javascript = { "prettier" },
-				typescript = { "prettier" },
-				javascriptreact = { "prettier" },
-				typescriptreact = { "prettier" },
-				svelte = { "prettier" },
-				css = { "prettier" },
-				html = { "prettier" },
-				json = { "prettier" },
-				yaml = { "prettier" },
-				markdown = { "prettier" },
-				graphql = { "prettier" },
-				liquid = { "prettier" },
+				javascript = { "prettierd", "prettier" },
+				typescript = { "prettierd", "prettier" },
+				javascriptreact = { "prettierd", "prettier" },
+				typescriptreact = { "prettierd", "prettier" },
+				svelte = { "prettierd", "prettier" },
+				css = { "prettierd", "prettier" },
+				html = { "prettierd", "prettier" },
+				json = { "prettierd", "prettier" },
+				yaml = { "prettierd", "prettier" },
+				markdown = { "prettierd", "prettier" },
+				graphql = { "prettierd", "prettier" },
+
 				lua = { "stylua" },
-				-- remove isort, black
-				python = { "ruff" },
-				c = { "forty_two" },
-				cpp = { "forty_two" },
+
+				python = { "ruff_organize_imports", "ruff_format" },
+
 				java = { "google-java-format" },
-			},
-			formatters = {
-				forty_two = {
-					command = vim.fn.expand("~/.local/bin/c_formatter_42"),
-					args = { "$FILENAME" },
-					stdin = false,
-				},
-				black = {
-					command = vim.fn.expand("~/.local/share/nvim/mason/bin/black"),
-					stdin = false,
-				},
 			},
 			format_on_save = {
 				lsp_fallback = true,
@@ -44,7 +32,7 @@ return {
 			},
 		})
 
-		vim.keymap.set({ "n", "v" }, "<leader>mp", function()
+		vim.keymap.set({ "n", "v" }, "<leader>cf", function()
 			conform.format({
 				lsp_fallback = true,
 				async = false,

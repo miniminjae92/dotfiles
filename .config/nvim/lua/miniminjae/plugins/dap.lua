@@ -1,4 +1,4 @@
--- plugins/dap.lua
+-- lua/miniminjae/plugins/dap.lua
 return {
 	"mfussenegger/nvim-dap",
 	dependencies = {
@@ -12,34 +12,6 @@ return {
 		local dapui = require("dapui")
 		local dap_virtual_text = require("nvim-dap-virtual-text")
 
-		-- codelldb 설정
-		dap.adapters.codelldb = {
-			type = "server",
-			port = "${port}",
-			executable = {
-				command = vim.fn.stdpath("data") .. "/mason/bin/codelldb",
-				args = { "--port", "${port}" },
-			},
-		}
-
-		dap.configurations.cpp = {
-			{
-				name = "Launch file",
-				type = "codelldb",
-				request = "launch",
-				program = function()
-					return vim.fn.input("Path to executable: ", vim.fn.getcwd() .. "/", "file")
-				end,
-				cwd = "${workspaceFolder}",
-				stopOnEntry = false,
-				args = {},
-			},
-		}
-
-		-- C 설정도 C++와 동일하게 사용
-		dap.configurations.c = dap.configurations.cpp
-
-		-- DAP UI 설정
 		dapui.setup({
 			layouts = {
 				{
@@ -63,10 +35,10 @@ return {
 			},
 		})
 
-		-- 가상 텍스트 설정
+		-- 가상 텍스트 (변수 옆에 값 보여주기)
 		dap_virtual_text.setup()
 
-		-- 자동으로 UI 열기/닫기
+		-- 디버깅 시작/종료 시 UI 자동으로 열고 닫기
 		dap.listeners.after.event_initialized["dapui_config"] = function()
 			dapui.open()
 		end
@@ -77,46 +49,37 @@ return {
 			dapui.close()
 		end
 
-		-- 키맵 설정
 		local keymap = vim.keymap
 
-		-- 기본 디버깅 키맵
-		keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Toggle Breakpoint" })
-		keymap.set("n", "<leader>dc", dap.continue, { desc = "Continue" })
-		keymap.set("n", "<leader>di", dap.step_into, { desc = "Step Into" })
-		keymap.set("n", "<leader>do", dap.step_over, { desc = "Step Over" })
-		keymap.set("n", "<leader>dr", dap.repl.toggle, { desc = "Toggle REPL" })
-		keymap.set("n", "<leader>dl", dap.run_last, { desc = "Run Last" })
-		keymap.set("n", "<leader>du", dapui.toggle, { desc = "Toggle UI" })
-		keymap.set("n", "<leader>dx", dap.terminate, { desc = "Terminate" })
-		keymap.set("n", "<leader>dC", function()
-			dap.clear_breakpoints()
-			require("notify")("Breakpoints cleared", "warn")
-		end, { desc = "Clear Breakpoints" })
+		keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
+		keymap.set("n", "<leader>dc", dap.continue, { desc = "Debug: Continue" })
+		keymap.set("n", "<leader>di", dap.step_into, { desc = "Debug: Step Into" })
+		keymap.set("n", "<leader>do", dap.step_over, { desc = "Debug: Step Over" })
+		keymap.set("n", "<leader>dO", dap.step_out, { desc = "Debug: Step Out" })
+		keymap.set("n", "<leader>dr", dap.repl.toggle, { desc = "Debug: Toggle REPL" })
+		keymap.set("n", "<leader>dl", dap.run_last, { desc = "Debug: Run Last" })
+		keymap.set("n", "<leader>du", dapui.toggle, { desc = "Debug: Toggle UI" })
+		keymap.set("n", "<leader>dx", dap.terminate, { desc = "Debug: Terminate" })
 
-		-- CLion 스타일 추가 키맵
-		keymap.set("n", "<F5>", dap.continue, { desc = "Debug: Start/Continue" })
-		keymap.set("n", "<F10>", dap.step_over, { desc = "Debug: Step Over" })
-		keymap.set("n", "<F11>", dap.step_into, { desc = "Debug: Step Into" })
-		keymap.set("n", "<S-F11>", dap.step_out, { desc = "Debug: Step Out" })
-		keymap.set("n", "<F9>", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
-		keymap.set("n", "<leader>dB", function()
-			dap.set_breakpoint(vim.fn.input("Breakpoint condition: "))
-		end, { desc = "Debug: Set Conditional Breakpoint" })
-		keymap.set("n", "<leader>dp", function()
-			dap.set_breakpoint(nil, nil, vim.fn.input("Log point message: "))
-		end, { desc = "Debug: Set Log Point" })
-		keymap.set("n", "<leader>dE", function()
-			dapui.eval(vim.fn.input("Expression: "))
-		end, { desc = "Debug: Evaluate Expression" })
-		keymap.set("n", "<leader>dS", function()
-			dapui.float_element("scopes", { enter = true })
-		end, { desc = "Debug: Show Scopes" })
-		keymap.set("n", "<leader>dh", function()
-			dapui.float_element("hover", { enter = true })
-		end, { desc = "Debug: Hover Variables" })
-		keymap.set("v", "<leader>dh", function()
-			dapui.eval()
-		end, { desc = "Debug: Evaluate Selection" })
+		-- [IntelliJ 스타일] 펑션키 조합
+		-- F9: Resume Program (다음 브레이크포인트까지 실행)
+		keymap.set("n", "<F9>", dap.continue, { desc = "Debug: Resume (IntelliJ F9)" })
+
+		-- F8: Step Over (함수 건너뛰고 다음 줄)
+		keymap.set("n", "<F8>", dap.step_over, { desc = "Debug: Step Over (IntelliJ F8)" })
+
+		-- F7: Step Into (함수 안으로)
+		keymap.set("n", "<F7>", dap.step_into, { desc = "Debug: Step Into (IntelliJ F7)" })
+
+		-- Shift + F8: Step Out (함수 밖으로)
+		keymap.set("n", "<S-F8>", dap.step_out, { desc = "Debug: Step Out (IntelliJ Shift+F8)" })
+
+		-- Ctrl + F8: Breakpoint Toggle (맥 OS 단축키와 겹칠 수 있음 주의)
+		keymap.set("n", "<C-F8>", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
+
+		-- 평가(Evaluate) 관련
+		keymap.set("n", "<leader>de", function()
+			dapui.eval(nil, { enter = true })
+		end, { desc = "Debug: Evaluate (Cursor)" })
 	end,
 }

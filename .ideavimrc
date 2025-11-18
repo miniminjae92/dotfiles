@@ -97,7 +97,7 @@ map <A-S-k> <Action>(MoveStatementUp)
 
 map <leader>en <Action>(GotoNextError)
 map <leader>ep <Action>(GotoToPreviousError)
-nnoremap <leader>L :action ReformatCode<cr>
+nnoremap <leader>cf :action ReformatCode<cr>
 map <leader>oi <Action>(OptimizeImports)
 
 map <leader>ca <Action>(CopyAbsolutePath)
@@ -140,8 +140,9 @@ map <C-t> <Action>(JumpToLastWindow)
 nnoremap <leader>zz :action CollapseRegion<cr>
 nnoremap <leader>zo :action ExpandRegion<cr>
 
-nnoremap <leader>w :action EditorSelectWord<cr>
-nnoremap <leader>W :action EditorUnSelectWord<cr>
+nmap <CR> <Action>(EditorSelectWord)
+vmap <CR> <Action>(EditorSelectWord)
+vmap <BS> <Action>(EditorUnSelectWord)
 
 nnoremap <C-;> :action EditorCompleteStatement<CR>
 inoremap <C-;> :action EditorCompleteStatement<CR>

@@ -4,8 +4,6 @@ return {
 	config = function()
 		local alpha = require("alpha")
 		local dashboard = require("alpha.themes.dashboard")
-		-- TODO: change alpha image
-		-- Set header
 		dashboard.section.header.val = {
 			"⣿⣿⣿⣿⣿⠿⠟⣋⣥⣴⣾⣿⣿⣿⣿⣯⣽⣟⣛⣋⠛⣷⣶⣨⣥⣬⣙⡻⠟⠿⣿⣿⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣷⣿⣿⣿⣿⣿⣦⡙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿",
 			"⣿⠟⣋⣩⣥⣾⣿⣿⣿⣿⣿⣿⣿⡿⢟⣿⣿⣿⣿⣿⠿⠟⠛⠿⢿⣿⣿⣿⣿⣷⣤⣻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣿⣆⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿",
