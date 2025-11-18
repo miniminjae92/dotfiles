@@ -1,5 +1,4 @@
 {
-  "42-header.nvim": { "branch": "main", "commit": "4303be09d9615e9169661b3e5d5a98c3eecee0ff" },
   "Comment.nvim": { "branch": "master", "commit": "e30b7f2008e52442154b66f7c519bfd2f1e32acb" },
   "LuaSnip": { "branch": "master", "commit": "5a1e39223db9a0498024a77b8441169d260c8c25" },
   "alpha-nvim": { "branch": "main", "commit": "3979b01cb05734331c7873049001d3f2bb8477f4" },
@@ -28,6 +27,7 @@
   "nvim-dap": { "branch": "master", "commit": "5860c7c501eb428d3137ee22c522828d20cca0b3" },
   "nvim-dap-ui": { "branch": "master", "commit": "cf91d5e2d07c72903d052f5207511bf7ecdb7122" },
   "nvim-dap-virtual-text": { "branch": "master", "commit": "fbdb48c2ed45f4a8293d0d483f7730d24467ccb6" },
+  "nvim-highlight-colors": { "branch": "main", "commit": "e0c4a58ec8c3ca7c92d3ee4eb3bc1dd0f7be317e" },
   "nvim-jdtls": { "branch": "master", "commit": "38d265ee4d45da73a083ca83e41de7d37567be5c" },
   "nvim-lint": { "branch": "master", "commit": "baf7c91c2b868b12446df511d4cdddc98e9bf66e" },
   "nvim-lsp-file-operations": { "branch": "master", "commit": "9744b738183a5adca0f916527922078a965515ed" },
