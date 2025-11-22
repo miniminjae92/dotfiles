@@ -89,6 +89,14 @@ return {
 						capabilities = capabilities,
 					})
 				end,
+
+				["marksman"] = function()
+					lspconfig["marksman"].setup({
+						filetypes = { "markdown", "mdx" },
+						root_markers = { ".marksman.toml", ".git" },
+					})
+				end,
+
 				["mdx_analyzer"] = function()
 					lspconfig["mdx_analyzer"].setup({
 						capabilities = capabilities,

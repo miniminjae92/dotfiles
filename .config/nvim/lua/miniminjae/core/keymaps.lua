@@ -35,3 +35,28 @@ keymap.set("n", "<leader>tx", "<cmd>tabclose<CR>", { desc = "Close current tab" 
 keymap.set("n", "<leader>tn", "<cmd>tabn<CR>", { desc = "Go to next tab" }) --  go to next tab
 keymap.set("n", "<leader>tp", "<cmd>tabp<CR>", { desc = "Go to previous tab" }) --  go to previous tab
 keymap.set("n", "<leader>tf", "<cmd>tabnew %<CR>", { desc = "Open current buffer in new tab" }) --  move current buffer to new tab
+
+vim.keymap.set({ "n", "i" }, "<leader>;", function()
+	-- 1. cosco 플러그인 함수 호출 (세미콜론 or 콤마 자동 부착)
+	-- (플러그인이 로드 안 됐을 경우를 대비해 pcall 사용)
+	local status, _ = pcall(vim.fn["cosco#commaOrSemiColon"])
+
+	if not status then
+		-- 혹시 cosco가 없으면 그냥 기본적인 세미콜론 붙이기 시도 (비상용)
+		vim.cmd("normal! A;")
+	end
+
+	-- 2. 저장하고 다음 줄로 개행 (인텔리제이처럼)
+	-- <Esc>로 노멀모드 -> o로 다음 줄 생성
+	local keys = vim.api.nvim_replace_termcodes("<Esc>o", true, false, true)
+	vim.api.nvim_feedkeys(keys, "n", false)
+end, { desc = "Complete Statement (Cosco + Newline)" })
+
+-- [Smart New Line]
+-- 인텔리제이의 Shift + Enter 기능 (세미콜론 없이 다음 줄로 개행)
+-- Insert 모드에서 커서가 문장 중간에 있어도, 글자를 자르지 않고 아래에 새 줄을 만듭니다.
+vim.keymap.set({ "i" }, "<leader>o", function()
+	-- <Esc>로 노멀 모드로 갔다가 -> o (아래에 줄 삽입 및 Insert 모드 진입)
+	local keys = vim.api.nvim_replace_termcodes("<Esc>o", true, false, true)
+	vim.api.nvim_feedkeys(keys, "n", false)
+end, { desc = "Smart New Line (No Semicolon)" })

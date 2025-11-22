@@ -20,6 +20,17 @@ return {
 			-- enable autotagging (w/ nvim-ts-autotag plugin)
 			autotag = {
 				enable = true,
+				filetypes = {
+					"html",
+					"javascript",
+					"javascriptreact",
+					"typescript",
+					"typescriptreact",
+					"tsx",
+					"jsx",
+					"markdown",
+					"mdx",
+				},
 			},
 			-- ensure these language parsers are installed
 			ensure_installed = {

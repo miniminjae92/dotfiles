@@ -40,6 +40,7 @@ return {
 				"jdtls",
 				"clangd", -- C/C++ LSP server
 				"mdx_analyzer",
+				"marksman",
 			},
 		})
 
