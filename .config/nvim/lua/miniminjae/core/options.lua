@@ -57,3 +57,11 @@ opt.swapfile = false
 opt.encoding = "UTF-8"
 opt.scrolloff = 10
 -- opt.mouse:append("a")
+
+vim.filetype.add({
+	extension = {
+		mdx = "mdx",
+	},
+})
+
+vim.treesitter.language.register("markdown", "mdx")

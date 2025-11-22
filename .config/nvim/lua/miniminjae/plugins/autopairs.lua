@@ -9,6 +9,8 @@ return {
 		-- import nvim-autopairs
 		local autopairs = require("nvim-autopairs")
 
+		local Rule = require("nvim-autopairs.rule")
+
 		-- configure autopairs
 		autopairs.setup({
 			check_ts = true, -- enable treesitter
@@ -17,6 +19,10 @@ return {
 				javascript = { "template_string" }, -- don't add pairs in javscript template_string treesitter nodes
 				java = false, -- don't check treesitter on java
 			},
+		})
+
+		autopairs.add_rules({
+			Rule("```", "```", { "markdown", "mdx" }),
 		})
 
 		-- import nvim-autopairs completion functionality

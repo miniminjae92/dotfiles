@@ -39,6 +39,7 @@ return {
 				"ts_ls",
 				"jdtls",
 				"clangd", -- C/C++ LSP server
+				"mdx_analyzer",
 			},
 		})
 

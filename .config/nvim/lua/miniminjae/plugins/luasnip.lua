@@ -6,5 +6,9 @@ return {
 		require("luasnip.loaders.from_lua").load({
 			paths = vim.fn.stdpath("config") .. "/snippets",
 		})
+
+		require("luasnip").filetype_extend("mdx", { "markdown" })
+
+		require("luasnip").filetype_extend("mdx", { "html" })
 	end,
 }

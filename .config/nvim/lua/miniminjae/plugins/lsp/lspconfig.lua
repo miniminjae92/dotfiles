@@ -89,6 +89,35 @@ return {
 						capabilities = capabilities,
 					})
 				end,
+				["mdx_analyzer"] = function()
+					lspconfig["mdx_analyzer"].setup({
+						capabilities = capabilities,
+						filetypes = { "mdx" },
+						init_options = {
+							typescript = {
+								enabled = true, -- TS 검사 활성화
+							},
+						},
+					})
+				end,
+				["tailwindcss"] = function()
+					lspconfig["tailwindcss"].setup({
+						capabilities = capabilities,
+						filetypes = {
+							"html",
+							"css",
+							"scss",
+							"javascript",
+							"typescript",
+							"react",
+							"javascriptreact",
+							"typescriptreact",
+							"svelte",
+							"markdown",
+							"mdx",
+						},
+					})
+				end,
 				-- configure cpp server
 				["clangd"] = function()
 					lspconfig["clangd"].setup({
@@ -132,6 +161,7 @@ return {
 							"scss",
 							"less",
 							"svelte",
+							"mdx",
 						},
 					})
 				end,
