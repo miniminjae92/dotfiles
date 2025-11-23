@@ -61,4 +61,15 @@ tags:
 			}
 		)
 	),
+	s(
+		{ trig = "sp", desc = "MDX Vertical Spacer" },
+		fmt(
+			[[
+<Spacer y={{ {} }} />
+]],
+			{
+				i(1, "4"),
+			}
+		)
+	),
 }
