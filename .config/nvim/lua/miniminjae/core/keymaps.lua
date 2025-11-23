@@ -67,7 +67,7 @@ end, { desc = "Complete Statement (Cosco + Newline)" })
 -- [Smart New Line]
 -- 인텔리제이의 Shift + Enter 기능 (세미콜론 없이 다음 줄로 개행)
 -- Insert 모드에서 커서가 문장 중간에 있어도, 글자를 자르지 않고 아래에 새 줄을 만듭니다.
-keymap.set({ "i" }, "<leader>o", function()
+keymap.set({ "n", "i" }, "<leader>:", function()
 	-- <Esc>로 노멀 모드로 갔다가 -> o (아래에 줄 삽입 및 Insert 모드 진입)
 	local keys = vim.api.nvim_replace_termcodes("<Esc>o", true, false, true)
 	vim.api.nvim_feedkeys(keys, "n", false)
