@@ -38,7 +38,7 @@ tags:
 		{ trig = "dimg", desc = "이미지 중앙 정렬 Div" },
 		fmt(
 			[[
-<div class="mx-auto max-w-sm">
+<div className="mx-auto max-w-sm">
   ![{}]({})
 </div>
 ]],
@@ -52,8 +52,8 @@ tags:
 		{ trig = "dvideo", desc = "MP4를 GIF처럼 자동재생 (Video 태그)" },
 		fmt(
 			[[
-<div class="mx-auto max-w-sm">
-  <video src="{}" autoplay loop muted playsinline class="w-full rounded-lg"></video>
+<div className="mx-auto max-w-sm">
+  <video src="{}" autoPlay loop muted playsInline className="w-full rounded-lg"></video>
 </div>
 ]],
 			{
