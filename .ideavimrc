@@ -86,7 +86,7 @@ map <leader>rs <Action>(ChangeSignature)
 map <leader>rr <Action>(Refactorings.QuickListPopupAction)
 map <leader>rc <Action>(IntroduceConstant)
 
-map <leader>aa <Action>(ShowIntentionActions)
+map <leader>ca <Action>(ShowIntentionActions)
 map <leader>sw <Action>(SurroundWith)
 map <S-space> <Action>(Generate)
 map <S-k> <Action>(EditorDuplicateLines)
@@ -100,7 +100,7 @@ map <leader>ep <Action>(GotoToPreviousError)
 nnoremap <leader>cf :action ReformatCode<cr>
 map <leader>oi <Action>(OptimizeImports)
 
-map <leader>ca <Action>(CopyAbsolutePath)
+map <leader>cP <Action>(CopyAbsolutePath)
 map <leader>cn <Action>(CopyFileName)
 map <leader>cp <Action>(CopyContentRootPath)
 
