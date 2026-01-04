@@ -128,14 +128,14 @@ map <leader>ds <Action>(StepInto)
 map <leader>ds <Action>(SmartStepInto)
 map <leader>do <Action>(StepOut)
 map <leader>dc <Action>(Resume)
-map <leader>dR <Action>(Rerun)
-map <leader>dr <Action>(RunToCursor)
+map <leader>dr <Action>(Rerun)
+map <leader>dR <Action>(RunToCursor)
 map <leader>de <Action>(EvaluateExpression)
 
 map <leader>tt <Action>(ActivateTerminalToolWindow)
-map <C-r> <Action>(ActivateRunToolWindow)
 map <C-q> <Action>(HideActiveWindow)
-map <C-t> <Action>(JumpToLastWindow)
+" map <C-r> <Action>(ActivateRunToolWindow)
+" map <C-t> <Action>(JumpToLastWindow)
 
 nnoremap <leader>zz :action CollapseRegion<cr>
 nnoremap <leader>zo :action ExpandRegion<cr>
@@ -174,7 +174,7 @@ Plug 'tpope/vim-surround'
 " See https://github.com/terryma/vim-multiple-cursors for details
 """
 Plug 'terryma/vim-multiple-cursors'
-map mc <A-n>
+map mm <A-n>
 map mx <A-x>
 map mp <A-p>
 
