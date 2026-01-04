@@ -32,10 +32,10 @@ map <leader>qt <Action>(QuickTypeDefinition)
 map <leader>ra <Action>(RearrangeCode)
 
 " -- Actions
-nnoremap w [w
-nnoremap e ]w
-nnoremap b [b
-nnoremap ge ]b
+" nnoremap w [w
+" nnoremap e ]w
+" nnoremap b [b
+" nnoremap ge ]b
 
 " -- Navigation
 nnoremap <C-h> <C-w>h
@@ -132,7 +132,7 @@ map <leader>dR <Action>(Rerun)
 map <leader>dr <Action>(RunToCursor)
 map <leader>de <Action>(EvaluateExpression)
 
-map <leader>t <Action>(ActivateTerminalToolWindow)
+map <leader>tt <Action>(ActivateTerminalToolWindow)
 map <C-r> <Action>(ActivateRunToolWindow)
 map <C-q> <Action>(HideActiveWindow)
 map <C-t> <Action>(JumpToLastWindow)
