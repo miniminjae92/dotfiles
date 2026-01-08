@@ -8,7 +8,7 @@ nnoremap U <C-r>
 nnoremap <leader>cc :edit ~/.ideavimrc<CR>
 nnoremap <leader>cs :source ~/.ideavimrc<CR>:nohlsearch<CR>
 nnoremap <leader>h :nohlsearch<CR>
-inoremap jk <ESC>
+" inoremap jk <ESC>
 nnoremap <leader>gg ggVGy
 
 " -- Options
@@ -62,7 +62,7 @@ map <leader>ll <Action>(RecentLocations)
 
 map gd <Action>(GotoDeclaration)
 map gi <Action>(GotoImplementation)
-map gt <Action>(GotoTypeDeclaration)
+map gy <Action>(GotoTypeDeclaration)
 map gm <Action>(GotoSuperMethod)
 map <leader>tg <Action>(GotoTest)
 
@@ -133,6 +133,7 @@ map <leader>dR <Action>(RunToCursor)
 map <leader>de <Action>(EvaluateExpression)
 
 map <leader>tt <Action>(ActivateTerminalToolWindow)
+map <C-t> <Action>(ActivateTerminalToolWindow)
 map <C-q> <Action>(HideActiveWindow)
 " map <C-r> <Action>(ActivateRunToolWindow)
 " map <C-t> <Action>(JumpToLastWindow)
