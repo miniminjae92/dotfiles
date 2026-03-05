@@ -155,8 +155,8 @@ nnoremap <leader>wo :action WebOpenInAction<cr>
 " -- Plugins
 
 Plug 'easymotion/vim-easymotion'
-map gf <Plug>(easymotion-s)
-map gj <Plug>(easymotion-f)
+map <leader>ge <Plug>(easymotion-s)
+map <leader>gj <Plug>(easymotion-f)
 
 set which-key
 let g:WhichKey_FontSize = 13
