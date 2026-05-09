@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/angular.md}"
+MAX_DIFF_CHARS="${LAZYGIT_AI_COMMIT_MAX_DIFF_CHARS:-18000}"
+PROVIDER="${LAZYGIT_AI_COMMIT_PROVIDER:-}"
+OLLAMA_MODEL="${LAZYGIT_AI_COMMIT_OLLAMA_MODEL:-qwen2.5-coder:7b}"
+GEMINI_MODEL="${LAZYGIT_AI_COMMIT_GEMINI_MODEL:-gemini-2.5-flash}"
+CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-}"
+OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+has() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+need git
+need pbcopy
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "run this inside a git repository"
+
+if git diff --cached --quiet --exit-code -- .; then
+  die "no staged changes found. Stage files or hunks in lazygit first"
+fi
+
+DIFF="$(git diff --cached --no-ext-diff -- .)"
+if [ "${#DIFF}" -gt "$MAX_DIFF_CHARS" ]; then
+  DIFF="${DIFF:0:$MAX_DIFF_CHARS}
+
+[diff truncated at ${MAX_DIFF_CHARS} characters]"
+fi
+
+CONVENTION="$(cat "$CONVENTION_FILE" 2>/dev/null || true)"
+[ -n "$CONVENTION" ] || die "convention file not found: $CONVENTION_FILE"
+
+choose_provider() {
+  [ -n "$PROVIDER" ] && {
+    printf '%s\n' "$PROVIDER"
+    return
+  }
+
+  local choices=""
+  has gemini && choices="${choices}gemini	Gemini CLI: fast cloud model, best default for this task
+"
+  has codex && choices="${choices}codex	Codex CLI: high quality, slower and heavier for a one-line message
+"
+  has ollama && choices="${choices}ollama	Ollama local model: private, but slower cold start and weaker formatting
+"
+
+  [ -n "$choices" ] || die "no provider found. Install gemini, codex, or ollama"
+
+  if has fzf && [ -t 1 ]; then
+    printf '%s' "$choices" |
+      fzf --with-nth=1,2 --delimiter='\t' --prompt='commit message provider> ' --height=40% --border |
+      cut -f1
+  else
+    printf '%s' "$choices" | awk 'NR == 1 {print $1}'
+  fi
+}
+
+PROVIDER="$(choose_provider)"
+[ -n "$PROVIDER" ] || die "provider selection cancelled"
+
+PROMPT="$(cat <<EOF
+You write git commit messages from staged diffs.
+
+Rules:
+- Return exactly one commit message.
+- Return plain text only.
+- Do not wrap the answer in Markdown.
+- Do not explain the diff.
+- Do not return JSON.
+- The first line must match this pattern:
+  <type>(<scope>): <subject>
+- Use AngularJS commit message convention.
+
+Convention:
+$CONVENTION
+
+Staged diff:
+$DIFF
+EOF
+)"
+
+run_ollama() {
+  need curl
+  need jq
+
+  if ! curl -fsS "$OLLAMA_HOST/api/tags" >/dev/null 2>&1; then
+    printf 'Starting Ollama server...\n' >&2
+    (ollama serve >/tmp/lazygit-ai-commit-ollama.log 2>&1 &)
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 0.5
+      curl -fsS "$OLLAMA_HOST/api/tags" >/dev/null 2>&1 && break
+    done
+  fi
+
+  curl -fsS "$OLLAMA_HOST/api/tags" >/dev/null 2>&1 || die "Ollama is not running. Try: ollama serve"
+  if ! curl -fsS "$OLLAMA_HOST/api/tags" | jq -e --arg model "$OLLAMA_MODEL" '.models[]?.name == $model' >/dev/null; then
+    die "model '$OLLAMA_MODEL' is not installed. Try: ollama pull $OLLAMA_MODEL"
+  fi
+
+  jq -n \
+    --arg model "$OLLAMA_MODEL" \
+    --arg prompt "$PROMPT" \
+    '{
+      model: $model,
+      stream: false,
+      options: { temperature: 0.1, top_p: 0.9, num_predict: 220 },
+      messages: [
+        {role: "user", content: $prompt}
+      ]
+    }' |
+    curl -fsS "$OLLAMA_HOST/api/chat" -H 'Content-Type: application/json' -d @- |
+    jq -r '.message.content // empty'
+}
+
+run_gemini() {
+  need gemini
+  printf '%s' "$PROMPT" |
+    gemini -m "$GEMINI_MODEL" -p "Generate the commit message from stdin. Return only the commit message."
+}
+
+run_codex() {
+  need codex
+  local out
+  out="$(mktemp "${TMPDIR:-/tmp}/lazygit-ai-commit-codex.XXXXXX")"
+  if [ -n "$CODEX_MODEL" ]; then
+    printf '%s' "$PROMPT" |
+      codex exec --sandbox read-only --color never --output-last-message "$out" -m "$CODEX_MODEL" -
+  else
+    printf '%s' "$PROMPT" |
+      codex exec --sandbox read-only --color never --output-last-message "$out" -
+  fi >/dev/null
+  cat "$out"
+  rm -f "$out"
+}
+
+case "$PROVIDER" in
+  gemini) RAW_MESSAGE="$(run_gemini)" ;;
+  codex) RAW_MESSAGE="$(run_codex)" ;;
+  ollama) RAW_MESSAGE="$(run_ollama)" ;;
+  *) die "unknown provider: $PROVIDER" ;;
+esac
+
+MESSAGE="$(printf '%s\n' "$RAW_MESSAGE" |
+  sed -e 's/^```[a-zA-Z]*$//' -e 's/^```$//' |
+  sed '/^[[:space:]]*$/{$d;}')"
+
+if printf '%s' "$MESSAGE" | jq -e . >/dev/null 2>&1; then
+  MESSAGE="$(printf '%s' "$MESSAGE" | jq -r '.message // .response // .content // empty')"
+fi
+
+FIRST_LINE="$(printf '%s\n' "$MESSAGE" | sed -n '1p')"
+if ! printf '%s' "$FIRST_LINE" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: .+'; then
+  printf 'Provider returned an invalid commit message:\n\n%s\n' "$RAW_MESSAGE" >&2
+  die "not copied. Try another provider or edit the prompt/convention"
+fi
+
+printf '%s\n' "$MESSAGE" | pbcopy
+
+printf '\nCopied commit message to clipboard:\n\n%s\n\n' "$MESSAGE"
+printf 'Next: open lazygit commit prompt and paste it.\n'

@@ -1,0 +1,418 @@
+#!/usr/bin/env python3
+"""Export GitHub PR review feedback to Obsidian-friendly JSON and Markdown."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+
+DEFAULT_VAULT = (
+    Path.home()
+    / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil"
+)
+DEFAULT_OUT = DEFAULT_VAULT / "3. Resource/GitHub/PR Feedback"
+
+
+QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $threadsCursor: String, $commentsCursor: String, $reviewsCursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      id
+      number
+      title
+      url
+      state
+      isDraft
+      createdAt
+      updatedAt
+      author { login url }
+      baseRefName
+      headRefName
+      reviewDecision
+      comments(first: 100, after: $commentsCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          url
+          body
+          createdAt
+          updatedAt
+          author { login url }
+        }
+      }
+      reviews(first: 100, after: $reviewsCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          url
+          body
+          state
+          submittedAt
+          author { login url }
+        }
+      }
+      reviewThreads(first: 100, after: $threadsCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          originalLine
+          startLine
+          originalStartLine
+          diffSide
+          comments(first: 100) {
+            nodes {
+              id
+              url
+              body
+              createdAt
+              updatedAt
+              path
+              line
+              originalLine
+              diffHunk
+              author { login url }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def run_gh_graphql(repo: str, pr: int, cursors: dict[str, str | None]) -> dict[str, Any]:
+    owner, name = repo.split("/", 1)
+    cmd = [
+        "gh",
+        "api",
+        "graphql",
+        "-f",
+        f"query={QUERY}",
+        "-F",
+        f"owner={owner}",
+        "-F",
+        f"name={name}",
+        "-F",
+        f"number={pr}",
+    ]
+    for key, value in cursors.items():
+        if value:
+            cmd.extend(["-F", f"{key}={value}"])
+
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except FileNotFoundError:
+        raise SystemExit("gh is not installed. Install it with: brew install gh")
+    except subprocess.CalledProcessError as exc:
+        message = exc.stderr.strip() or exc.stdout.strip()
+        raise SystemExit(f"gh graphql request failed:\n{message}") from exc
+
+    return json.loads(result.stdout)
+
+
+def fetch_pr(repo: str, pr: int) -> dict[str, Any]:
+    threads: list[dict[str, Any]] = []
+    comments: list[dict[str, Any]] = []
+    reviews: list[dict[str, Any]] = []
+    cursors = {
+        "threadsCursor": None,
+        "commentsCursor": None,
+        "reviewsCursor": None,
+    }
+    pr_data: dict[str, Any] | None = None
+
+    while True:
+        payload = run_gh_graphql(repo, pr, cursors)
+        pull_request = payload["data"]["repository"]["pullRequest"]
+        if pull_request is None:
+            raise SystemExit(f"PR not found: {repo}#{pr}")
+
+        if pr_data is None:
+            pr_data = {
+                key: value
+                for key, value in pull_request.items()
+                if key not in {"reviewThreads", "comments", "reviews"}
+            }
+
+        thread_conn = pull_request["reviewThreads"]
+        comment_conn = pull_request["comments"]
+        review_conn = pull_request["reviews"]
+        threads.extend(thread_conn["nodes"])
+        comments.extend(comment_conn["nodes"])
+        reviews.extend(review_conn["nodes"])
+
+        cursors["threadsCursor"] = thread_conn["pageInfo"]["endCursor"]
+        cursors["commentsCursor"] = comment_conn["pageInfo"]["endCursor"]
+        cursors["reviewsCursor"] = review_conn["pageInfo"]["endCursor"]
+
+        if not (
+            thread_conn["pageInfo"]["hasNextPage"]
+            or comment_conn["pageInfo"]["hasNextPage"]
+            or review_conn["pageInfo"]["hasNextPage"]
+        ):
+            break
+
+    assert pr_data is not None
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "repo": repo,
+        "pr": pr_data,
+        "review_threads": threads,
+        "conversation_comments": comments,
+        "reviews": reviews,
+    }
+
+
+def author_login(item: dict[str, Any]) -> str:
+    author = item.get("author")
+    return author["login"] if author else "unknown"
+
+
+def clean_filename(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-")
+
+
+def quote_markdown(body: str) -> str:
+    if not body.strip():
+        return "> _(empty)_"
+    return "\n".join(f"> {line}" if line else ">" for line in body.splitlines())
+
+
+def thread_status(thread: dict[str, Any]) -> str:
+    if thread["isOutdated"]:
+        return "outdated"
+    if thread["isResolved"]:
+        return "resolved"
+    return "unresolved"
+
+
+def thread_anchor(thread: dict[str, Any]) -> str:
+    path = thread.get("path") or "unknown path"
+    line = thread.get("line") or thread.get("originalLine")
+    if line:
+        return f"`{path}:{line}`"
+    return f"`{path}`"
+
+
+def render_thread(thread: dict[str, Any], index: int) -> list[str]:
+    comments = thread["comments"]["nodes"]
+    first = comments[0] if comments else {}
+    lines = [
+        f"### {index}. {thread_anchor(thread)}",
+        "",
+        f"- Status: `{thread_status(thread)}`",
+        f"- Author: `{author_login(first)}`",
+    ]
+    if first.get("url"):
+        lines.append(f"- Link: {first['url']}")
+    lines.append("")
+
+    for comment in comments:
+        lines.extend(
+            [
+                f"#### {author_login(comment)} at {comment.get('createdAt', '')}",
+                "",
+                quote_markdown(comment.get("body", "")),
+                "",
+            ]
+        )
+    return lines
+
+
+def render_comment(comment: dict[str, Any], index: int) -> list[str]:
+    return [
+        f"### {index}. {author_login(comment)} at {comment.get('createdAt', '')}",
+        "",
+        f"- Link: {comment.get('url', '')}",
+        "",
+        quote_markdown(comment.get("body", "")),
+        "",
+    ]
+
+
+def render_review(review: dict[str, Any], index: int) -> list[str]:
+    body = review.get("body") or ""
+    return [
+        f"### {index}. {review.get('state', 'UNKNOWN')} by {author_login(review)}",
+        "",
+        f"- Submitted: {review.get('submittedAt') or ''}",
+        f"- Link: {review.get('url') or ''}",
+        "",
+        quote_markdown(body),
+        "",
+    ]
+
+
+def render_markdown(data: dict[str, Any]) -> str:
+    pr = data["pr"]
+    repo = data["repo"]
+    number = pr["number"]
+    threads = data["review_threads"]
+    comments = data["conversation_comments"]
+    reviews = data["reviews"]
+    by_status = {
+        "unresolved": [thread for thread in threads if thread_status(thread) == "unresolved"],
+        "resolved": [thread for thread in threads if thread_status(thread) == "resolved"],
+        "outdated": [thread for thread in threads if thread_status(thread) == "outdated"],
+    }
+
+    lines = [
+        "---",
+        "type: github-pr-feedback",
+        f"repo: {repo}",
+        f"pr: {number}",
+        f"state: {pr.get('state')}",
+        f"review_decision: {pr.get('reviewDecision')}",
+        f"generated_at: {data['generated_at']}",
+        "tags:",
+        "  - github/pr-feedback",
+        "---",
+        "",
+        f"# {repo} PR #{number} Feedback",
+        "",
+        f"[{pr['title']}]({pr['url']})",
+        "",
+        "## Summary",
+        "",
+        f"- State: `{pr.get('state')}`",
+        f"- Review decision: `{pr.get('reviewDecision')}`",
+        f"- Draft: `{pr.get('isDraft')}`",
+        f"- Author: `{author_login(pr)}`",
+        f"- Branch: `{pr.get('headRefName')}` -> `{pr.get('baseRefName')}`",
+        f"- Review threads: `{len(threads)}`",
+        f"- Unresolved threads: `{len(by_status['unresolved'])}`",
+        f"- Resolved threads: `{len(by_status['resolved'])}`",
+        f"- Outdated threads: `{len(by_status['outdated'])}`",
+        f"- Conversation comments: `{len(comments)}`",
+        f"- Reviews: `{len(reviews)}`",
+        "",
+    ]
+
+    sections = [
+        ("Unresolved Threads", by_status["unresolved"]),
+        ("Resolved Threads", by_status["resolved"]),
+        ("Outdated Threads", by_status["outdated"]),
+    ]
+    for title, section_threads in sections:
+        lines.extend([f"## {title}", ""])
+        if not section_threads:
+            lines.extend(["_None._", ""])
+            continue
+        for index, thread in enumerate(section_threads, start=1):
+            lines.extend(render_thread(thread, index))
+
+    lines.extend(["## Reviews", ""])
+    if reviews:
+        for index, review in enumerate(reviews, start=1):
+            lines.extend(render_review(review, index))
+    else:
+        lines.extend(["_None._", ""])
+
+    lines.extend(["## Conversation Comments", ""])
+    if comments:
+        for index, comment in enumerate(comments, start=1):
+            lines.extend(render_comment(comment, index))
+    else:
+        lines.extend(["_None._", ""])
+
+    lines.extend(["## Links", "", f"- PR: {pr['url']}", ""])
+    return "\n".join(lines)
+
+
+def write_outputs(data: dict[str, Any], out_root: Path) -> tuple[Path, Path]:
+    owner, repo_name = data["repo"].split("/", 1)
+    pr_number = data["pr"]["number"]
+    out_dir = out_root / clean_filename(owner) / clean_filename(repo_name) / f"PR-{pr_number}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = out_dir / "feedback.json"
+    md_path = out_dir / "feedback.md"
+    json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text(render_markdown(data), encoding="utf-8")
+    return json_path, md_path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Export GitHub PR comments, reviews, and review threads."
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help="Pull request URL or owner/name#123, e.g. https://github.com/owner/name/pull/123",
+    )
+    parser.add_argument("--repo", help="GitHub repository, e.g. owner/name")
+    parser.add_argument("--pr", type=int, help="Pull request number")
+    parser.add_argument(
+        "--out",
+        default=os.environ.get("PRFB_OUT", str(DEFAULT_OUT)),
+        help=f"Output root directory. Defaults to {DEFAULT_OUT}",
+    )
+    return parser.parse_args()
+
+
+def parse_target(target: str) -> tuple[str, int]:
+    target = target.strip()
+    if not target:
+        raise SystemExit("target cannot be empty")
+
+    url = urlparse(target)
+    if url.scheme and url.netloc:
+        parts = [part for part in url.path.split("/") if part]
+        if url.netloc.lower() != "github.com" or len(parts) < 4 or parts[2] != "pull":
+            raise SystemExit(
+                "PR URL must look like https://github.com/owner/repo/pull/123"
+            )
+        return f"{parts[0]}/{parts[1]}", int(parts[3])
+
+    match = re.fullmatch(r"([^/\s#]+/[^/\s#]+)#(\d+)", target)
+    if match:
+        return match.group(1), int(match.group(2))
+
+    match = re.fullmatch(r"([^/\s#]+/[^/\s#]+)/pull/(\d+)", target)
+    if match:
+        return match.group(1), int(match.group(2))
+
+    raise SystemExit(
+        "target must be a PR URL, owner/name#123, or owner/name/pull/123"
+    )
+
+
+def main() -> int:
+    args = parse_args()
+
+    if args.target:
+        repo, pr = parse_target(args.target)
+        if args.repo or args.pr:
+            raise SystemExit("use either a target URL or --repo/--pr, not both")
+    else:
+        if not args.repo or args.pr is None:
+            raise SystemExit("pass a PR URL or both --repo and --pr")
+        repo, pr = args.repo, args.pr
+
+    if "/" not in repo:
+        raise SystemExit("--repo must look like owner/name")
+
+    data = fetch_pr(repo, pr)
+    json_path, md_path = write_outputs(data, Path(args.out).expanduser())
+    print(f"Wrote {md_path}")
+    print(f"Wrote {json_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

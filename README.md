@@ -18,7 +18,12 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `eza` as a modern `ls` replacement (with icons).
     * `bat` for file viewing with syntax highlighting (replaces `cat`).
     * `fzf` with `fd` for fast and efficient file and directory searching.
+    * `gh` for GitHub CLI workflows.
     * `thefuck` to correct command typos.
+* **Local Scripts**:
+    * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
+    * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
+    * `bin/lazygit-ai-commit` generates AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
@@ -53,6 +58,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ln -s ~/.dotfiles/.tmux.conf ~/.tmux.conf
     ln -sf ~/.dotfiles/.gitignore ~/.gitignore_global
     git config --global core.excludesFile ~/.gitignore_global
+    mkdir -p ~/.config/commit-message-conventions ~/.config/lazygit "$HOME/Library/Application Support/lazygit"
+    ln -sf ~/.dotfiles/.config/commit-message-conventions/angular.md ~/.config/commit-message-conventions/angular.md
+    ln -sf ~/.dotfiles/.config/lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"
     ```
 
 4.  **Install Oh My Zsh and Plugins**
@@ -76,8 +84,15 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     * **Install Other CLI Tools (via Homebrew):**
         ```bash
-        brew install eza bat fzf fd thefuck zoxide pyenv
+        brew install eza bat fzf fd gh thefuck zoxide pyenv lazygit ollama jq
         ```
+
+    * **Install an optional local commit-message model:**
+        ```bash
+        ollama serve
+        ollama pull qwen2.5-coder:7b
+        ```
+        In `lazygit`, stage files or hunks, then press `<C-g>` to choose an AI provider and copy an AngularJS-style commit message candidate. Paste it into the lazygit commit prompt and review it before committing.
 
 5.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).

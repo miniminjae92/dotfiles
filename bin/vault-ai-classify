@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+
+DEFAULT_VAULT = (
+    Path.home()
+    / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil"
+)
+DEFAULT_MODEL = "qwen2.5-coder:7b"
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+REPORT_DIR = Path("3. Resource/Obsidian/AI Classification Reports")
+
+
+@dataclass
+class Note:
+    path: Path
+    rel: str
+    title: str
+    modified: datetime
+    words: int
+    preview: str
+
+
+def die(message: str) -> None:
+    print(f"error: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create a read-only AI classification report for an Obsidian vault."
+    )
+    parser.add_argument(
+        "--vault",
+        default=os.environ.get("VAULT_AI_PATH", str(DEFAULT_VAULT)),
+        help=f"Obsidian vault path. Defaults to {DEFAULT_VAULT}",
+    )
+    parser.add_argument(
+        "--recent",
+        type=int,
+        default=7,
+        help="Scan notes modified within N days. Defaults to 7.",
+    )
+    parser.add_argument(
+        "--inbox",
+        action="store_true",
+        help="Scan only 0. Inbox instead of recent notes.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=25,
+        help="Maximum notes to include in the AI prompt. Defaults to 25.",
+    )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("VAULT_AI_MODEL", DEFAULT_MODEL),
+        help=f"Ollama model. Defaults to {DEFAULT_MODEL}",
+    )
+    parser.add_argument(
+        "--no-ai",
+        action="store_true",
+        help="Generate only the deterministic audit section.",
+    )
+    return parser.parse_args()
+
+
+def should_skip(path: Path, vault: Path) -> bool:
+    rel_parts = path.relative_to(vault).parts
+    if not rel_parts:
+        return True
+    ignored_roots = {".git", ".obsidian", "attachments", "Excalidraw"}
+    return rel_parts[0] in ignored_roots or any(part.startswith(".") for part in rel_parts)
+
+
+def read_note(path: Path, vault: Path) -> Note:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    preview = "\n".join(line.rstrip() for line in text.splitlines()[:80]).strip()
+    if len(preview) > 2500:
+        preview = preview[:2500] + "\n[truncated]"
+
+    stat = path.stat()
+    rel = path.relative_to(vault).as_posix()
+    return Note(
+        path=path,
+        rel=rel,
+        title=path.stem,
+        modified=datetime.fromtimestamp(stat.st_mtime),
+        words=len(text.split()),
+        preview=preview,
+    )
+
+
+def collect_notes(vault: Path, recent_days: int, inbox_only: bool, limit: int) -> list[Note]:
+    if inbox_only:
+        roots = [vault / "0. Inbox"]
+    else:
+        roots = [vault]
+
+    cutoff = datetime.now() - timedelta(days=recent_days)
+    notes: list[Note] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*.md"):
+            if should_skip(path, vault):
+                continue
+            if not inbox_only and datetime.fromtimestamp(path.stat().st_mtime) < cutoff:
+                continue
+            notes.append(read_note(path, vault))
+
+    notes.sort(key=lambda note: note.modified, reverse=True)
+    return notes[:limit]
+
+
+def ollama_available() -> bool:
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_HOST}/api/tags", timeout=1.5) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def start_ollama() -> None:
+    if ollama_available():
+        return
+    if not shutil_which("ollama"):
+        return
+    subprocess.Popen(
+        ["ollama", "serve"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(12):
+        time.sleep(0.5)
+        if ollama_available():
+            return
+
+
+def shutil_which(command: str) -> str | None:
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(directory) / command
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def build_prompt(notes: list[Note], vault: Path) -> str:
+    note_blocks = []
+    for index, note in enumerate(notes, start=1):
+        note_blocks.append(
+            f"""## NOTE {index}
+path: {note.rel}
+title: {note.title}
+modified: {note.modified.strftime('%Y-%m-%d %H:%M')}
+words: {note.words}
+
+content preview:
+{note.preview}
+"""
+        )
+
+    return f"""You are helping organize an Obsidian vault.
+
+Vault root:
+{vault}
+
+Rules:
+- Do not suggest deleting files.
+- Do not pretend you moved files.
+- Return Markdown only.
+- Use Korean.
+- Prefer conservative organization.
+- For each note, suggest:
+  - recommended_folder
+  - tags
+  - related_notes_or_topics
+  - reason
+  - confidence: high, medium, or low
+- Also list duplicate/merge candidates if obvious.
+- Also list notes that should not be moved if uncertain.
+
+Current rough PARA-like structure:
+- 0. Inbox
+- 0. Permanents
+- 1. Project
+- 2. Area
+- 3. Resource
+- 4. Archive
+
+Notes:
+{chr(10).join(note_blocks)}
+"""
+
+
+def call_ollama(model: str, prompt: str) -> str:
+    payload = {
+        "model": model,
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "num_predict": 2500,
+        },
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    request = urllib.request.Request(
+        f"{OLLAMA_HOST}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(exc.read().decode("utf-8", errors="replace")) from exc
+    return data.get("message", {}).get("content", "").strip()
+
+
+def render_report(notes: list[Note], ai_report: str | None, args: argparse.Namespace) -> str:
+    generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    scope = "0. Inbox" if args.inbox else f"recent {args.recent} days"
+    lines = [
+        "---",
+        "type: ai-classification-report",
+        f"created_at: {generated}",
+        f"scope: {scope}",
+        f"model: {args.model if ai_report else 'none'}",
+        "tags:",
+        "  - ai/classification-report",
+        "  - obsidian/vault",
+        "---",
+        "",
+        f"# AI Classification Report - {generated}",
+        "",
+        "## Summary",
+        "",
+        f"- Scope: `{scope}`",
+        f"- Notes scanned: `{len(notes)}`",
+        f"- AI model: `{args.model if ai_report else 'not used'}`",
+        "- Mode: `read-only report`",
+        "",
+        "## Scanned Notes",
+        "",
+    ]
+
+    if notes:
+        lines.extend(["| File | Modified | Words |", "| --- | --- | --- |"])
+        for note in notes:
+            lines.append(f"| `{note.rel}` | {note.modified.strftime('%Y-%m-%d %H:%M')} | {note.words} |")
+    else:
+        lines.append("_No notes found for this scope._")
+
+    lines.extend(["", "## AI Suggestions", ""])
+    if ai_report:
+        lines.append(ai_report)
+    else:
+        lines.append("_AI suggestions were not generated. Run without `--no-ai` and make sure Ollama is available._")
+
+    lines.extend(
+        [
+            "",
+            "## Safety",
+            "",
+            "이 보고서는 파일을 이동, 삭제, 변경하지 않는다.",
+            "실제 정리는 별도 적용 단계에서 승인 후 진행한다.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def write_report(vault: Path, report: str) -> Path:
+    out_dir = vault / REPORT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = datetime.now().strftime("%Y-%m-%d %H%M AI Classification Report.md")
+    path = out_dir / filename
+    path.write_text(report, encoding="utf-8")
+    return path
+
+
+def main() -> int:
+    args = parse_args()
+    vault = Path(args.vault).expanduser()
+    if not vault.exists():
+        die(f"vault not found: {vault}")
+
+    notes = collect_notes(vault, args.recent, args.inbox, args.limit)
+    ai_report = None
+    if notes and not args.no_ai:
+        start_ollama()
+        if ollama_available():
+            ai_report = call_ollama(args.model, build_prompt(notes, vault))
+        else:
+            print("warning: Ollama is not available; writing audit-only report", file=sys.stderr)
+
+    report = render_report(notes, ai_report, args)
+    path = write_report(vault, report)
+    print(f"Wrote {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
