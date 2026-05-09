@@ -82,7 +82,17 @@ def should_skip(path: Path, vault: Path) -> bool:
     if not rel_parts:
         return True
     ignored_roots = {".git", ".obsidian", "attachments", "Excalidraw"}
-    return rel_parts[0] in ignored_roots or any(part.startswith(".") for part in rel_parts)
+    rel = path.relative_to(vault).as_posix()
+    ignored_prefixes = (
+        "3. Resource/Obsidian/AI Classification Reports/",
+        "3. Resource/Obsidian/Vault Audit Reports/",
+        "3. Resource/GitHub/PR Feedback/",
+    )
+    return (
+        rel_parts[0] in ignored_roots
+        or any(part.startswith(".") for part in rel_parts)
+        or rel.startswith(ignored_prefixes)
+    )
 
 
 def read_note(path: Path, vault: Path) -> Note:
@@ -181,6 +191,7 @@ Rules:
 - Do not suggest deleting files.
 - Do not pretend you moved files.
 - Return Markdown only.
+- Do not wrap the whole response in a Markdown code fence.
 - Use Korean.
 - Prefer conservative organization.
 - For each note, suggest:
@@ -227,7 +238,14 @@ def call_ollama(model: str, prompt: str) -> str:
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raise RuntimeError(exc.read().decode("utf-8", errors="replace")) from exc
-    return data.get("message", {}).get("content", "").strip()
+    return strip_code_fence(data.get("message", {}).get("content", "").strip())
+
+
+def strip_code_fence(text: str) -> str:
+    lines = text.splitlines()
+    if len(lines) >= 2 and lines[0].strip() in {"```", "```markdown", "```md"} and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
 
 
 def render_report(notes: list[Note], ai_report: str | None, args: argparse.Namespace) -> str:

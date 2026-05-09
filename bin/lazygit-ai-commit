@@ -9,6 +9,33 @@ GEMINI_MODEL="${LAZYGIT_AI_COMMIT_GEMINI_MODEL:-gemini-2.5-flash}"
 CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 
+case "${1:-}" in
+  gemini|codex|ollama)
+    PROVIDER="$1"
+    shift
+    ;;
+  -h|--help)
+    cat <<'EOF'
+Usage:
+  git cm-ai [gemini|codex|ollama]
+
+Generate an AngularJS-style commit message from staged changes and copy it to
+the clipboard. Stage files or hunks before running this command.
+
+Examples:
+  git cm-ai codex
+  git cm-ai ollama
+  git cm-ai gemini
+EOF
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    die "unknown provider '$1'. Use: gemini, codex, or ollama"
+    ;;
+esac
+
 die() {
   printf 'error: %s\n' "$*" >&2
   exit 1
@@ -28,7 +55,10 @@ need pbcopy
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "run this inside a git repository"
 
 if git diff --cached --quiet --exit-code -- .; then
-  die "no staged changes found. Stage files or hunks in lazygit first"
+  if ! git diff --quiet --exit-code -- .; then
+    die "no staged changes found. You have unstaged changes; run git add -p, git add <file>, or stage hunks in lazygit first"
+  fi
+  die "no staged changes found"
 fi
 
 DIFF="$(git diff --cached --no-ext-diff -- .)"
@@ -57,12 +87,12 @@ choose_provider() {
 
   [ -n "$choices" ] || die "no provider found. Install gemini, codex, or ollama"
 
-  if has fzf && [ -t 1 ]; then
+  if has fzf && [ -t 0 ] && [ -t 1 ]; then
     printf '%s' "$choices" |
       fzf --with-nth=1,2 --delimiter='\t' --prompt='commit message provider> ' --height=40% --border |
       cut -f1
   else
-    printf '%s' "$choices" | awk 'NR == 1 {print $1}'
+    die "provider picker needs a TTY. Run: git cm-ai codex, git cm-ai ollama, or git cm-ai gemini"
   fi
 }
 
@@ -125,8 +155,7 @@ run_ollama() {
 
 run_gemini() {
   need gemini
-  printf '%s' "$PROMPT" |
-    gemini -m "$GEMINI_MODEL" -p "Generate the commit message from stdin. Return only the commit message."
+  gemini -m "$GEMINI_MODEL" -p "$PROMPT"
 }
 
 run_codex() {
@@ -168,4 +197,4 @@ fi
 printf '%s\n' "$MESSAGE" | pbcopy
 
 printf '\nCopied commit message to clipboard:\n\n%s\n\n' "$MESSAGE"
-printf 'Next: open lazygit commit prompt and paste it.\n'
+printf 'Next: paste it into git commit, lazygit, or another commit UI.\n'

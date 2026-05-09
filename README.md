@@ -23,7 +23,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
-    * `bin/lazygit-ai-commit` generates AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard.
+    * `bin/git-cm-ai` generates AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard. It can be run as `git cm-ai`.
+    * `bin/lazygit-ai-commit` is the underlying script used by `git-cm-ai` and lazygit.
+    * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
@@ -92,7 +94,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         ollama serve
         ollama pull qwen2.5-coder:7b
         ```
-        In `lazygit`, stage files or hunks, then press `<C-g>` to choose an AI provider and copy an AngularJS-style commit message candidate. Paste it into the lazygit commit prompt and review it before committing.
+        Stage files or hunks, then run `git cm-ai` to choose an AI provider and copy an AngularJS-style commit message candidate. Paste it into your commit prompt and review it before committing.
 
 5.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).
