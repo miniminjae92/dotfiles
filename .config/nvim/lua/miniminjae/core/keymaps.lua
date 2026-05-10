@@ -19,7 +19,7 @@ keymap.set("n", "<leader>aa", "GVgg", { desc = "Duplicate line below" })
 keymap.set("i", "jk", "<ESC>", { desc = "Exit insert mode with jk" })
 
 -- clear search highlights
-keymap.set("n", "<leader>h", ":nohl<CR>", { desc = "Clear search highlights" })
+keymap.set("n", "<leader>hh", ":nohl<CR>", { desc = "Clear search highlights" })
 
 -- delete single character without copying into register
 -- keymap.set("n", "x", '"_x')
