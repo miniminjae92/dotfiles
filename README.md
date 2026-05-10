@@ -26,6 +26,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/git-cm-ai` generates AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard. It can be run as `git cm-ai`.
     * `bin/lazygit-ai-commit` is the underlying script used by `git-cm-ai` and lazygit.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
+    * `~/.dotfiles/bin` is added to `PATH` by `.zshrc`, so these scripts do not need per-command symlinks in `~/.local/bin`.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
@@ -52,17 +53,13 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 3.  **Create symbolic links**
     ```bash
-    ln -s ~/.dotfiles/.gitconfig ~/.gitconfig
-    ln -s ~/.dotfiles/.gitignore ~/.gitignore
-    ln -s ~/.dotfiles/.vimrc ~/.vimrc
-    ln -s ~/.dotfiles/.zshrc ~/.zshrc
-    ln -s ~/.dotfiles/.config/nvim ~/.config/nvim
-    ln -s ~/.dotfiles/.tmux.conf ~/.tmux.conf
-    ln -sf ~/.dotfiles/.gitignore ~/.gitignore_global
-    git config --global core.excludesFile ~/.gitignore_global
-    mkdir -p ~/.config/commit-message-conventions ~/.config/lazygit "$HOME/Library/Application Support/lazygit"
-    ln -sf ~/.dotfiles/.config/commit-message-conventions/angular.md ~/.config/commit-message-conventions/angular.md
-    ln -sf ~/.dotfiles/.config/lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"
+    ~/.dotfiles/install.sh
+    ```
+    `.zshrc` adds `~/.dotfiles/bin` to `PATH`, so local scripts are available directly after opening a new shell:
+    ```bash
+    command -v git-cm-ai
+    command -v prfb
+    command -v prfbo
     ```
 
 4.  **Install Oh My Zsh and Plugins**

@@ -134,6 +134,10 @@ alias gp="git push"
 
 # Created by `pipx` on 2025-05-04 06:36:44
 export PATH="$HOME/.local/bin:$PATH"
+
+# Local scripts from this dotfiles repo.
+# This makes commands like `git cm-ai`, `prfb`, and `prfbo` work without
+# per-script symlinks in ~/.local/bin.
 export PATH="$HOME/.dotfiles/bin:$PATH"
 
 # User alias
