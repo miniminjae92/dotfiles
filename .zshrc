@@ -161,7 +161,6 @@ export PATH="$HOME/.dotfiles/bin:$PATH"
 # User alias
 alias cl="clear"
 alias vi="nvim"
-alias norm="norminette"
 alias lg="lazygit"
 
 # ---- PR Feedback ----
