@@ -162,6 +162,8 @@ export PATH="$HOME/.dotfiles/bin:$PATH"
 alias cl="clear"
 alias vi="nvim"
 alias lg="lazygit"
+alias gcalw="gcalcli calw"
+alias gcala="gcalcli agenda"
 
 # ---- PR Feedback ----
 export PRFB_OUT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil/3. Resource/GitHub/PR Feedback"
