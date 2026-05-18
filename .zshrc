@@ -36,10 +36,28 @@ setopt hist_verify
 # completion using arrow keys (based on history)
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
+bindkey -v
+
+# Keep a couple of familiar Emacs bindings available while using vi mode.
+bindkey '^A' beginning-of-line
+bindkey '^E' end-of-line
 
 # ---- JAVA ----
-export JAVA_HOME=$(/usr/libexec/java_home)
+# Default Java version.
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 export PATH="$JAVA_HOME/bin:$PATH"
+
+# Switch Java versions with `j <version>` or list installed versions with `j`.
+j() {
+  if [ -n "$1" ]; then
+    export JAVA_HOME=$(/usr/libexec/java_home -v "$1")
+    export PATH="$JAVA_HOME/bin:$PATH"
+    echo "Switched to Java $1"
+    java -version
+  else
+    /usr/libexec/java_home -V
+  fi
+}
 
 # ---- Python ----
 # export PATH="/opt/homebrew/opt/python@3.13/libexec/bin:$PATH"
@@ -158,6 +176,14 @@ fi
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# pnpm
+export PNPM_HOME="$HOME/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
 
 # Added by Antigravity
 export PATH="/Users/miniminjae/.antigravity/antigravity/bin:$PATH"
