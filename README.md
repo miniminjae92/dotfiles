@@ -55,11 +55,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ```bash
     ~/.dotfiles/install.sh
     ```
-    If a target already exists as a regular file, the installer leaves it alone and reports it.
-    To back up those files and restore the symlinks intentionally, run:
-    ```bash
-    ~/.dotfiles/install.sh --replace
-    ```
     `.zshrc` adds `~/.dotfiles/bin` to `PATH`, so local scripts are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
