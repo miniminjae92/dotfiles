@@ -164,6 +164,7 @@ alias vi="nvim"
 alias lg="lazygit"
 alias gcalw="gcalcli calw"
 alias gcala="gcalcli agenda"
+alias pc="pbcopy"
 
 # ---- PR Feedback ----
 export PRFB_OUT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil/3. Resource/GitHub/PR Feedback"
