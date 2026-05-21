@@ -17,6 +17,9 @@ __pycache__/
 # 터미널 관련 파일 (zsh history)
 .zsh_history
 
+# Codex per-project workflow notes
+.codex/work/
+
 # SSH 설정 (보안 이슈)
 .ssh/
 

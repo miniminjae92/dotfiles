@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/angular.md}"
+CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/korean-angularjs.md}"
 MAX_DIFF_CHARS="${LAZYGIT_AI_COMMIT_MAX_DIFF_CHARS:-18000}"
 PROVIDER="${LAZYGIT_AI_COMMIT_PROVIDER:-}"
 OLLAMA_MODEL="${LAZYGIT_AI_COMMIT_OLLAMA_MODEL:-qwen2.5-coder:7b}"
@@ -19,7 +19,7 @@ case "${1:-}" in
 Usage:
   git cm-ai [gemini|codex|ollama]
 
-Generate an AngularJS-style commit message from staged changes and copy it to
+Generate a Korean AngularJS-style commit message from staged changes and copy it to
 the clipboard. Stage files or hunks before running this command.
 
 Examples:
@@ -110,7 +110,7 @@ Rules:
 - Do not return JSON.
 - The first line must match this pattern:
   <type>(<scope>): <subject>
-- Use AngularJS commit message convention.
+- Use Korean AngularJS commit message convention.
 
 Convention:
 $CONVENTION

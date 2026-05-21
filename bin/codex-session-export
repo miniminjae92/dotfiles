@@ -1,0 +1,78 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "fileutils"
+
+def usage
+  warn "usage: codex-session-export <latest|resume-code|session.jsonl> <output.md>"
+  exit 2
+end
+
+source = ARGV[0]
+output = ARGV[1]
+usage unless source && output
+
+unless File.file?(source)
+  pattern = File.expand_path("~/.codex/sessions/**/*.jsonl")
+  sessions = Dir.glob(pattern)
+
+  source =
+    if source == "latest"
+      sessions.max_by { |path| File.mtime(path) }
+    else
+      sessions.select { |path| File.basename(path).include?(source) }
+              .max_by { |path| File.mtime(path) }
+    end
+
+  abort "No Codex session found for: #{ARGV[0]}" unless source
+end
+
+abort "Session file not found: #{source}" unless File.file?(source)
+
+messages = []
+
+File.foreach(source) do |line|
+  record = JSON.parse(line)
+  next unless record["type"] == "response_item"
+
+  payload = record["payload"]
+  next unless payload && payload["type"] == "message"
+
+  role = payload["role"]
+  next unless %w[user assistant].include?(role)
+
+  text = Array(payload["content"]).map do |part|
+    part["text"] if %w[input_text output_text].include?(part["type"])
+  end.compact.join("\n\n").strip
+
+  next if text.empty?
+  next if text.start_with?("<environment_context>")
+
+  messages << [role, text]
+rescue JSON::ParserError
+  next
+end
+
+FileUtils.mkdir_p(File.dirname(output))
+
+title = File.basename(output, ".md").split("-").map(&:capitalize).join(" ")
+
+File.open(output, "w") do |file|
+  file.puts "# #{title}"
+  file.puts
+  file.puts "Source: `#{source}`"
+  file.puts
+  file.puts "## Raw Conversation"
+  file.puts
+
+  messages.each do |role, text|
+    heading = role == "user" ? "User" : "Assistant"
+    file.puts "### #{heading}"
+    file.puts
+    file.puts text
+    file.puts
+  end
+end
+
+puts output

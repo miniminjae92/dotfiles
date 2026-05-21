@@ -42,10 +42,21 @@ link_file "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 link_file "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
 link_file "$DOTFILES_DIR/.ideavimrc" "$HOME/.ideavimrc"
 link_file "$DOTFILES_DIR/.config/nvim" "$HOME/.config/nvim"
+link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
+  for skill_dir in "$DOTFILES_DIR"/.codex/skills/*; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    link_file "$skill_dir" "$HOME/.codex/skills/$skill_name"
+  done
+fi
 link_file "$DOTFILES_DIR/.gitignore" "$HOME/.gitignore_global"
 link_file \
-  "$DOTFILES_DIR/.config/commit-message-conventions/angular.md" \
+  "$DOTFILES_DIR/conventions/commit-message/angular.md" \
   "$HOME/.config/commit-message-conventions/angular.md"
+link_file \
+  "$DOTFILES_DIR/conventions/commit-message/korean-angularjs.md" \
+  "$HOME/.config/commit-message-conventions/korean-angularjs.md"
 link_file \
   "$DOTFILES_DIR/.config/lazygit/config.yml" \
   "$HOME/Library/Application Support/lazygit/config.yml"

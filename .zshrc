@@ -166,6 +166,89 @@ alias gcalw="gcalcli calw"
 alias gcala="gcalcli agenda"
 alias pc="pbcopy"
 
+# ---- Codex workflows ----
+work() {
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  local work_dir="$root/.codex/work"
+  local template_dir="$HOME/.dotfiles/.codex/templates/work"
+  local editor_cmd="${EDITOR:-nvim}"
+  mkdir -p "$work_dir"
+
+  if [ ! -f "$work_dir/TASK.md" ]; then
+    cp "$template_dir/TASK.md" "$work_dir/TASK.md"
+  fi
+
+  if [ ! -f "$work_dir/DECISIONS.md" ]; then
+    cp "$template_dir/DECISIONS.md" "$work_dir/DECISIONS.md"
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    "$editor_cmd" "$work_dir/TASK.md"
+  fi
+
+  codex --cd "$root" "\$work
+
+Use the full work workflow.
+
+Read:
+- .codex/work/TASK.md
+- .codex/work/DECISIONS.md
+
+Task:
+$*"
+}
+
+arc() {
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  local conversation_dir="$root/docs/conversation"
+  local session_ref="${1:-latest}"
+  local source_file=""
+
+  mkdir -p "$conversation_dir"
+
+  if [ -f "$session_ref" ]; then
+    source_file="$session_ref"
+  else
+    local date_prefix
+    local safe_ref
+    date_prefix="$(date +%Y-%m-%d)"
+    safe_ref="${session_ref//[^A-Za-z0-9_-]/-}"
+    if [ "$safe_ref" = "latest" ]; then
+      source_file="$conversation_dir/${date_prefix}-agent-session.md"
+    else
+      source_file="$conversation_dir/${date_prefix}-agent-session-${safe_ref}.md"
+    fi
+
+    local base="${source_file%.md}"
+    local counter=2
+    while [ -e "$source_file" ]; do
+      source_file="${base}-${counter}.md"
+      counter=$((counter + 1))
+    done
+
+    codex-session-export "$session_ref" "$source_file"
+  fi
+
+  codex --cd "$root" "\$archive-session
+
+Archive this CLI agent conversation into documentation assets.
+
+Source file:
+$source_file
+
+Output files:
+- docs/conversation/raw.md
+- docs/conversation/keywords.md
+- docs/conversation/structured.md
+- docs/conversation/final-notes.md"
+}
+
+archive-session() {
+  arc "$@"
+}
+
 # ---- PR Feedback ----
 export PRFB_OUT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil/3. Resource/GitHub/PR Feedback"
 
