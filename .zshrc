@@ -202,9 +202,17 @@ $*"
 arc() {
   local root
   root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  local conversation_dir="$root/docs/conversation"
+  local conversation_dir
+  if [ -d "$root/docs" ]; then
+    conversation_dir="$root/docs/conversation"
+  else
+    conversation_dir="$root/conversation"
+  fi
+
   local session_ref="${1:-latest}"
   local source_file=""
+  local output_slug=""
+  local output_dir=""
 
   mkdir -p "$conversation_dir"
 
@@ -231,6 +239,10 @@ arc() {
     codex-session-export "$session_ref" "$source_file"
   fi
 
+  output_slug="$(basename "${source_file%.md}")"
+  output_dir="$conversation_dir/$output_slug"
+  mkdir -p "$output_dir"
+
   codex --cd "$root" "\$archive-session
 
 Archive this CLI agent conversation into documentation assets.
@@ -239,10 +251,10 @@ Source file:
 $source_file
 
 Output files:
-- docs/conversation/raw.md
-- docs/conversation/keywords.md
-- docs/conversation/structured.md
-- docs/conversation/final-notes.md"
+- $output_dir/raw.md
+- $output_dir/keywords.md
+- $output_dir/structured.md
+- $output_dir/final-notes.md"
 }
 
 archive-session() {
