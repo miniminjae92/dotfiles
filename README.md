@@ -26,7 +26,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/git-cm-ai` generates Korean AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard. It can be run as `git cm-ai`.
     * `bin/lazygit-ai-commit` is the underlying script used by `git-cm-ai` and lazygit.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
-    * `~/.dotfiles/bin` is added to `PATH` by `.zshrc`, so these scripts do not need per-command symlinks in `~/.local/bin`.
+    * Local scripts are linked into `~/.local/bin` by `install.sh`.
 * **Conventions**: Commit-message conventions are stored under `conventions/` and linked into `~/.config/commit-message-conventions/`. Korean AngularJS is the default, and the original English AngularJS convention is kept as an alternative.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
@@ -57,7 +57,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ```bash
     ~/.dotfiles/install.sh
     ```
-    `.zshrc` adds `~/.dotfiles/bin` to `PATH`, so local scripts are available directly after opening a new shell:
+    `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
     command -v prfb

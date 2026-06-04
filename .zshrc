@@ -153,11 +153,6 @@ alias gp="git push"
 # Created by `pipx` on 2025-05-04 06:36:44
 export PATH="$HOME/.local/bin:$PATH"
 
-# Local scripts from this dotfiles repo.
-# This makes commands like `git cm-ai`, `prfb`, and `prfbo` work without
-# per-script symlinks in ~/.local/bin.
-export PATH="$HOME/.dotfiles/bin:$PATH"
-
 # User alias
 alias cl="clear"
 alias vi="nvim"
@@ -262,7 +257,7 @@ archive-session() {
 }
 
 # ---- PR Feedback ----
-export PRFB_OUT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil/3. Resource/GitHub/PR Feedback"
+export PRFB_OUT="$HOME/.obsidian/yggdrasil/3. Resource/GitHub/PR Feedback"
 
 # Gemini CLI Settings
 if [ -f "$HOME/.gemini.env" ]; then

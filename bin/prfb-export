@@ -15,10 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 
-DEFAULT_VAULT = (
-    Path.home()
-    / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil"
-)
+DEFAULT_VAULT = Path.home() / ".obsidian/yggdrasil"
 DEFAULT_OUT = DEFAULT_VAULT / "3. Resource/GitHub/PR Feedback"
 
 

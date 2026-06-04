@@ -1,2 +1,3 @@
 #!/bin/sh
-exec "$HOME/.dotfiles/bin/prfb-export" "$@"
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$script_dir/prfb-export" "$@"

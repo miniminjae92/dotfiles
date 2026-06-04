@@ -1,5 +1,5 @@
 #!/bin/sh
-root="${PRFB_OUT:-$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil/3. Resource/GitHub/PR Feedback}"
+root="${PRFB_OUT:-$HOME/.obsidian/yggdrasil/3. Resource/GitHub/PR Feedback}"
 selected=$(
   find "$root" -name feedback.md -type f 2>/dev/null |
     fzf --preview 'bat -n --color=always --line-range :200 {}'

@@ -14,10 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 
-DEFAULT_VAULT = (
-    Path.home()
-    / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Yggdrasil"
-)
+DEFAULT_VAULT = Path.home() / ".obsidian/yggdrasil"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
 REPORT_DIR = Path("3. Resource/Obsidian/AI Classification Reports")

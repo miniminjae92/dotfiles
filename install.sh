@@ -51,6 +51,13 @@ if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
   done
 fi
 link_file "$DOTFILES_DIR/.gitignore" "$HOME/.gitignore_global"
+if [ -d "$DOTFILES_DIR/bin" ]; then
+  for script_path in "$DOTFILES_DIR"/bin/*; do
+    [ -f "$script_path" ] || continue
+    script_name="$(basename "$script_path")"
+    link_file "$script_path" "$HOME/.local/bin/$script_name"
+  done
+fi
 link_file \
   "$DOTFILES_DIR/conventions/commit-message/angular.md" \
   "$HOME/.config/commit-message-conventions/angular.md"
