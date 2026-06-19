@@ -144,4 +144,5 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `|`: Split vertically
     * `-`: Split horizontally
 * **Resizing Panes**: Use prefix + `h`, `j`, `k`, `l` to resize panes. `m` to maximize/minimize.
+* **Clipboard Cleanup**: Use prefix + `T` to trim leading/trailing whitespace from each clipboard line with `scripts/cleanclip trim`.
 * **Vim Integration**: `<C-h>`, `<C-j>`, `<C-k>`, `<C-l>` to navigate between Vim/Neovim splits and tmux panes.

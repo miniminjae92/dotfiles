@@ -279,3 +279,4 @@ esac
 
 # Added by Antigravity
 export PATH="/Users/miniminjae/.antigravity/antigravity/bin:$PATH"
+export PATH="$HOME/.dotfiles/scripts:$PATH"
