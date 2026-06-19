@@ -30,6 +30,11 @@ These guidelines bias toward caution over speed. For trivial tasks, use judgment
 - For dotfiles changes, check `install.sh`, `README.md`, and existing symlink patterns before editing.
 - Prefer official documentation for OpenAI/Codex behavior and cite it when answering setup questions.
 
+## Personal Paths
+
+- When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/yggdrasil`.
+- AI-generated reports and handoff notes should go under `/Users/miniminjae/.obsidian/yggdrasil/3. Resource/AI Work Reports` unless the user asks for a different location.
+
 ## Skills
 
 - When the user explicitly invokes a workflow skill, follow that skill instead of the default lightweight workflow.

@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+SESSIONS_DIR="$CODEX_HOME/sessions"
+MODE="${1:-summary}"
+
+usage() {
+  cat <<'USAGE'
+Usage: latest-codex-session [summary|id|path|open|json]
+
+Print information for the most recently modified Codex session file.
+
+  summary  show id, path, modified time, and resume hint
+  id       print only the session id
+  path     print only the jsonl file path
+  open     open the latest session jsonl with $EDITOR or nvim
+  json     print a small JSON object
+USAGE
+}
+
+latest_session_path() {
+  if [ ! -d "$SESSIONS_DIR" ]; then
+    printf 'Codex sessions directory not found: %s\n' "$SESSIONS_DIR" >&2
+    return 1
+  fi
+
+  find "$SESSIONS_DIR" -type f -name 'rollout-*.jsonl' -print0 |
+    xargs -0 stat -f '%m %N' 2>/dev/null |
+    sort -nr |
+    sed -n '1s/^[0-9][0-9]* //p'
+}
+
+session_id_from_path() {
+  local path="$1"
+  basename "$path" |
+    sed -E 's/^rollout-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}-//; s/\.jsonl$//'
+}
+
+session_meta_id() {
+  local path="$1"
+  sed -n '1p' "$path" |
+    perl -ne 'print "$1\n" if /"id":"([^"]+)"/'
+}
+
+json_escape() {
+  perl -MJSON::PP -0777 -ne 'print JSON::PP->new->ascii->encode($_)'
+}
+
+path="$(latest_session_path)"
+if [ -z "$path" ]; then
+  printf 'No Codex session files found under: %s\n' "$SESSIONS_DIR" >&2
+  exit 1
+fi
+
+id="$(session_meta_id "$path")"
+if [ -z "$id" ]; then
+  id="$(session_id_from_path "$path")"
+fi
+
+case "$MODE" in
+  summary)
+    printf 'id: %s\n' "$id"
+    printf 'path: %s\n' "$path"
+    printf 'modified: %s\n' "$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$path")"
+    printf 'resume hint: codex resume %s\n' "$id"
+    ;;
+  id)
+    printf '%s\n' "$id"
+    ;;
+  path)
+    printf '%s\n' "$path"
+    ;;
+  open)
+    "${EDITOR:-nvim}" "$path"
+    ;;
+  json)
+    printf '{"id":'
+    printf '%s' "$id" | json_escape
+    printf ',"path":'
+    printf '%s' "$path" | json_escape
+    printf ',"modified":'
+    printf '%s' "$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$path")" | json_escape
+    printf '}\n'
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
