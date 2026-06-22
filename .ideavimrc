@@ -52,6 +52,7 @@ map <leader>sv <Action>(SplitVertically)
 map <leader>sh <Action>(SplitHorizontally)
 map <leader>sa <Action>(UnsplitAll)
 map <leader>sm <Action>(ToggleDistractionFreeMode)
+map <leader>sc <Action>(CloseAllEditorsButActive)
 
 map <leader>fc <Action>(GotoClass)
 map <leader>ff <Action>(GotoFile)
