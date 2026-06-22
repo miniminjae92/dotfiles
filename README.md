@@ -26,6 +26,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/git-cm-ai` generates Korean AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard. It can be run as `git cm-ai`.
     * `bin/lazygit-ai-commit` is the underlying script used by `git-cm-ai` and lazygit.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
+    * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
 * **Conventions**: Commit-message conventions are stored under `conventions/` and linked into `~/.config/commit-message-conventions/`. Korean AngularJS is the default, and the original English AngularJS convention is kept as an alternative.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.

@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  zmv [mv-options] SOURCE... ZOXIDE_QUERY
+
+Move SOURCE files into a directory selected with `zoxide query -i`.
+
+Examples:
+  zmv report.pdf level2
+  zmv notes ww
+EOF
+}
+
+if [ "$#" -lt 2 ]; then
+  usage >&2
+  exit 2
+fi
+
+if ! command -v zoxide >/dev/null 2>&1; then
+  echo "zmv: zoxide is not installed or not in PATH" >&2
+  exit 127
+fi
+
+query="${!#}"
+sources=("${@:1:$#-1}")
+
+target="$(zoxide query -i -- "$query")"
+
+if [ -z "$target" ]; then
+  echo "zmv: no target selected" >&2
+  exit 1
+fi
+
+if [ ! -d "$target" ]; then
+  echo "zmv: target is not a directory: $target" >&2
+  exit 1
+fi
+
+printf 'move to: %s\n' "$target"
+mv -i "${sources[@]}" "$target/"

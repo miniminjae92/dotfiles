@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  zcp [cp-options] SOURCE... ZOXIDE_QUERY
+
+Copy SOURCE files into a directory selected with `zoxide query -i`.
+
+Examples:
+  zcp report.pdf level2
+  zcp -R notes ww
+EOF
+}
+
+if [ "$#" -lt 2 ]; then
+  usage >&2
+  exit 2
+fi
+
+if ! command -v zoxide >/dev/null 2>&1; then
+  echo "zcp: zoxide is not installed or not in PATH" >&2
+  exit 127
+fi
+
+query="${!#}"
+sources=("${@:1:$#-1}")
+
+target="$(zoxide query -i -- "$query")"
+
+if [ -z "$target" ]; then
+  echo "zcp: no target selected" >&2
+  exit 1
+fi
+
+if [ ! -d "$target" ]; then
+  echo "zcp: target is not a directory: $target" >&2
+  exit 1
+fi
+
+printf 'copy to: %s\n' "$target"
+cp -i "${sources[@]}" "$target/"
