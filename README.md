@@ -16,7 +16,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Command Line Tools**:
     * `zoxide` for smarter directory navigation (`z` replaces `cd`).
     * `eza` as a modern `ls` replacement (with icons).
-    * `bat` for file viewing with syntax highlighting (replaces `cat`).
+    * `bat` for file viewing with syntax highlighting (replaces `cat`), including the `tokyonight_night` theme.
     * `fzf` with `fd` for fast and efficient file and directory searching.
     * `gh` for GitHub CLI workflows.
     * `thefuck` to correct command typos.
@@ -65,6 +65,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v prfbo
     ```
     The install script links only stable Codex instructions and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
+    It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
     Codex helper commands become available after opening a new shell:
     ```bash
     work "implement the requested change"
@@ -104,7 +105,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         ollama serve
         ollama pull qwen2.5-coder:7b
         ```
-        Stage files or hunks, then run `git cm-ai` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. Paste it into your commit prompt and review it before committing.
+        Stage files or hunks, then run `git cm-ai` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. `git cm-ai codex` uses `gpt-5.4-mini` with a compact diff prompt by default; pass `--full` or set `LAZYGIT_AI_COMMIT_CODEX_MODEL=gpt-5.5` for harder changes. Paste the result into your commit prompt and review it before committing.
 
 5.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).

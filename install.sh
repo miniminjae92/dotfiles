@@ -42,6 +42,9 @@ link_file "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 link_file "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
 link_file "$DOTFILES_DIR/.ideavimrc" "$HOME/.ideavimrc"
 link_file "$DOTFILES_DIR/.config/nvim" "$HOME/.config/nvim"
+link_file \
+  "$DOTFILES_DIR/.config/bat/themes/tokyonight_night.tmTheme" \
+  "$HOME/.config/bat/themes/tokyonight_night.tmTheme"
 link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
   for skill_dir in "$DOTFILES_DIR"/.codex/skills/*; do
@@ -69,6 +72,10 @@ link_file \
   "$HOME/Library/Application Support/lazygit/config.yml"
 
 git config --global core.excludesFile "$HOME/.gitignore_global"
+
+if command -v bat >/dev/null 2>&1; then
+  bat cache --build
+fi
 
 printf 'Installed dotfile links.\n'
 printf 'Open a new shell or run: exec zsh\n'

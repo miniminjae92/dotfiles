@@ -3,38 +3,18 @@ set -euo pipefail
 
 CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/korean-angularjs.md}"
 MAX_DIFF_CHARS="${LAZYGIT_AI_COMMIT_MAX_DIFF_CHARS:-18000}"
+COMPACT_DIFF_CHARS="${LAZYGIT_AI_COMMIT_COMPACT_DIFF_CHARS:-6000}"
+COMPACT="${LAZYGIT_AI_COMMIT_COMPACT:-0}"
+if [ "${LAZYGIT_AI_COMMIT_COMPACT+x}" = "x" ]; then
+  COMPACT_SET=1
+else
+  COMPACT_SET=0
+fi
 PROVIDER="${LAZYGIT_AI_COMMIT_PROVIDER:-}"
 OLLAMA_MODEL="${LAZYGIT_AI_COMMIT_OLLAMA_MODEL:-qwen2.5-coder:7b}"
 GEMINI_MODEL="${LAZYGIT_AI_COMMIT_GEMINI_MODEL:-gemini-2.5-flash}"
-CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-}"
+CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-gpt-5.4-mini}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
-
-case "${1:-}" in
-  gemini|codex|ollama)
-    PROVIDER="$1"
-    shift
-    ;;
-  -h|--help)
-    cat <<'EOF'
-Usage:
-  git cm-ai [gemini|codex|ollama]
-
-Generate a Korean AngularJS-style commit message from staged changes and copy it to
-the clipboard. Stage files or hunks before running this command.
-
-Examples:
-  git cm-ai codex
-  git cm-ai ollama
-  git cm-ai gemini
-EOF
-    exit 0
-    ;;
-  "")
-    ;;
-  *)
-    die "unknown provider '$1'. Use: gemini, codex, or ollama"
-    ;;
-esac
 
 die() {
   printf 'error: %s\n' "$*" >&2
@@ -49,27 +29,49 @@ has() {
   command -v "$1" >/dev/null 2>&1
 }
 
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    gemini|codex|ollama)
+      [ -z "$PROVIDER" ] || die "provider already selected: $PROVIDER"
+      PROVIDER="$1"
+      ;;
+    -c|--compact)
+      COMPACT=1
+      COMPACT_SET=1
+      ;;
+    --full)
+      COMPACT=0
+      COMPACT_SET=1
+      ;;
+    -h|--help)
+      cat <<'EOF'
+Usage:
+  git cm-ai [gemini|codex|ollama] [--compact|--full]
+
+Generate a Korean AngularJS-style commit message from staged changes and copy it to
+the clipboard. Stage files or hunks before running this command.
+
+Options:
+  -c, --compact  Use a shorter prompt with diff stats and a smaller diff excerpt (default for codex)
+  --full         Use the full convention and full diff limit
+
+Examples:
+  git cm-ai codex
+  git cm-ai codex --full
+  git cm-ai ollama
+  git cm-ai gemini
+EOF
+      exit 0
+      ;;
+    *)
+      die "unknown argument '$1'. Use: gemini, codex, ollama, --compact, or --full"
+      ;;
+  esac
+  shift
+done
+
 need git
 need pbcopy
-
-git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "run this inside a git repository"
-
-if git diff --cached --quiet --exit-code -- .; then
-  if ! git diff --quiet --exit-code -- .; then
-    die "no staged changes found. You have unstaged changes; run git add -p, git add <file>, or stage hunks in lazygit first"
-  fi
-  die "no staged changes found"
-fi
-
-DIFF="$(git diff --cached --no-ext-diff -- .)"
-if [ "${#DIFF}" -gt "$MAX_DIFF_CHARS" ]; then
-  DIFF="${DIFF:0:$MAX_DIFF_CHARS}
-
-[diff truncated at ${MAX_DIFF_CHARS} characters]"
-fi
-
-CONVENTION="$(cat "$CONVENTION_FILE" 2>/dev/null || true)"
-[ -n "$CONVENTION" ] || die "convention file not found: $CONVENTION_FILE"
 
 choose_provider() {
   [ -n "$PROVIDER" ] && {
@@ -80,7 +82,7 @@ choose_provider() {
   local choices=""
   has gemini && choices="${choices}gemini	Gemini CLI: fast cloud model, best default for this task
 "
-  has codex && choices="${choices}codex	Codex CLI: high quality, slower and heavier for a one-line message
+  has codex && choices="${choices}codex	Codex CLI: uses gpt-5.4-mini and compact diff by default
 "
   has ollama && choices="${choices}ollama	Ollama local model: private, but slower cold start and weaker formatting
 "
@@ -96,10 +98,65 @@ choose_provider() {
   fi
 }
 
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "run this inside a git repository"
+
+if git diff --cached --quiet --exit-code -- .; then
+  if ! git diff --quiet --exit-code -- .; then
+    die "no staged changes found. You have unstaged changes; run git add -p, git add <file>, or stage hunks in lazygit first"
+  fi
+  die "no staged changes found"
+fi
+
 PROVIDER="$(choose_provider)"
 [ -n "$PROVIDER" ] || die "provider selection cancelled"
 
-PROMPT="$(cat <<EOF
+if [ "$PROVIDER" = "codex" ] && [ "$COMPACT_SET" = "0" ]; then
+  COMPACT=1
+fi
+
+if [ "$COMPACT" = "1" ]; then
+  MAX_DIFF_CHARS="$COMPACT_DIFF_CHARS"
+fi
+
+DIFF="$(git diff --cached --no-ext-diff -- .)"
+if [ "${#DIFF}" -gt "$MAX_DIFF_CHARS" ]; then
+  DIFF="${DIFF:0:$MAX_DIFF_CHARS}
+
+[diff truncated at ${MAX_DIFF_CHARS} characters]"
+fi
+
+if [ "$COMPACT" = "1" ]; then
+  DIFF_STAT="$(git diff --cached --stat -- .)"
+  NAME_STATUS="$(git diff --cached --name-status -- .)"
+else
+  CONVENTION="$(cat "$CONVENTION_FILE" 2>/dev/null || true)"
+  [ -n "$CONVENTION" ] || die "convention file not found: $CONVENTION_FILE"
+fi
+
+if [ "$COMPACT" = "1" ]; then
+  PROMPT="$(cat <<EOF
+Write one git commit message for the staged changes.
+
+Rules:
+- Output plain text only. No Markdown, JSON, or explanation.
+- Format first line as: <type>(<scope>): <Korean noun-phrase subject>
+- Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+- Include scope when clear from file paths.
+- Keep subject concise, no sentence ending, no final period.
+- Add a short Korean body only if it prevents ambiguity.
+
+Staged summary:
+$DIFF_STAT
+
+Changed files:
+$NAME_STATUS
+
+Diff excerpt:
+$DIFF
+EOF
+)"
+else
+  PROMPT="$(cat <<EOF
 You write git commit messages from staged diffs.
 
 Rules:
@@ -119,6 +176,7 @@ Staged diff:
 $DIFF
 EOF
 )"
+fi
 
 run_ollama() {
   need curl
