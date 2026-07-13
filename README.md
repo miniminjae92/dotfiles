@@ -13,6 +13,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * **Theming**: Uses `solarized-osaka.nvim` for a clean, dark color scheme.
     * **Keymaps**: A consistent keybinding system with `<leader>` set to `space`, for easy navigation, window management, and text manipulation.
     * **LSP & Completion**: Integrates `mason.nvim` and `nvim-lspconfig` for language server protocol (LSP) support for languages like C, C++, Java, Svelte, and Python. Autocompletion is handled by `nvim-cmp` with `LuaSnip`.
+    * **Configuration Context**: See `.config/nvim/README.md` before changing the Neovim setup; update it whenever the structure, plugins, keymaps, or tooling instructions change.
 * **Command Line Tools**:
     * `zoxide` for smarter directory navigation (`z` replaces `cd`).
     * `eza` as a modern `ls` replacement (with icons).
