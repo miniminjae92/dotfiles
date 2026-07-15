@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.miniminjae.agent-os-vault-snapshot</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/miniminjae/.local/bin/agent-os-vault-snapshot</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/miniminjae/.local/state/agent-os/vault-snapshot.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/miniminjae/.local/state/agent-os/vault-snapshot.error.log</string>
+</dict>
+</plist>

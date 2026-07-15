@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "time"
+
+TOKEN_FIELDS = %w[
+  input_tokens
+  cached_input_tokens
+  output_tokens
+  reasoning_output_tokens
+  total_tokens
+].freeze
+
+def state_root
+  return ENV["AGENT_OS_STATE_DIR"] unless ENV["AGENT_OS_STATE_DIR"].to_s.empty?
+
+  xdg_state_home = ENV["XDG_STATE_HOME"]
+  xdg_state_home = File.expand_path("~/.local/state") if xdg_state_home.to_s.empty?
+  File.join(xdg_state_home, "agent-os")
+end
+
+def load_events
+  pattern = File.join(state_root, "events", "*.jsonl")
+  Dir.glob(pattern).sort.each_with_object([]) do |path, events|
+    File.foreach(path) do |line|
+      begin
+        event = JSON.parse(line)
+        events << event if event.dig("usage", "session_total")
+      rescue JSON::ParserError
+        next
+      end
+    end
+  end
+end
+
+def token_delta(current, previous)
+  return unless previous
+
+  TOKEN_FIELDS.to_h do |field|
+    delta = current.fetch(field, 0) - previous.fetch(field, 0)
+    [field, delta.negative? ? nil : delta]
+  end
+end
+
+events = load_events
+session_filter = ARGV.first
+events.select! { |event| event["session_id"].include?(session_filter) } if session_filter
+
+if events.empty?
+  warn "agent-os-usage: no captured token events"
+  exit 1
+end
+
+latest_session_id = events.max_by { |event| event["recorded_at"] }["session_id"]
+session_events = events.select { |event| event["session_id"] == latest_session_id }
+session_events.sort_by! { |event| Time.iso8601(event["recorded_at"]) }
+
+latest = session_events.last
+current = latest.dig("usage", "session_total")
+previous = session_events[-2]&.dig("usage", "session_total")
+delta = token_delta(current, previous)
+
+puts "session: #{latest_session_id}"
+puts "model: #{latest["model"] || "unknown"}"
+puts "reasoning_effort: #{latest["reasoning_effort"] || "unknown"}"
+puts "captured_stops: #{session_events.length}"
+puts "session_total: #{TOKEN_FIELDS.map { |field| "#{field}=#{current[field]}" }.join(" ")}"
+if delta
+  puts "since_previous_stop: #{TOKEN_FIELDS.map { |field| "#{field}=#{delta[field] || "unknown"}" }.join(" ")}"
+else
+  puts "since_previous_stop: unavailable"
+end
+puts "note: token activity is not ChatGPT credit usage or API cost"

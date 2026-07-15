@@ -46,6 +46,14 @@ link_file \
   "$DOTFILES_DIR/.config/bat/themes/tokyonight_night.tmTheme" \
   "$HOME/.config/bat/themes/tokyonight_night.tmTheme"
 link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+link_file "$DOTFILES_DIR/agent-os/hooks.json" "$HOME/.codex/hooks.json"
+if [ -d "$DOTFILES_DIR/.codex/agents" ]; then
+  for agent_path in "$DOTFILES_DIR"/.codex/agents/*.toml; do
+    [ -f "$agent_path" ] || continue
+    agent_name="$(basename "$agent_path")"
+    link_file "$agent_path" "$HOME/.codex/agents/$agent_name"
+  done
+fi
 if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
   for skill_dir in "$DOTFILES_DIR"/.codex/skills/*; do
     [ -d "$skill_dir" ] || continue
@@ -70,6 +78,16 @@ link_file \
 link_file \
   "$DOTFILES_DIR/.config/lazygit/config.yml" \
   "$HOME/Library/Application Support/lazygit/config.yml"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  snapshot_plist="$HOME/Library/LaunchAgents/com.miniminjae.agent-os-vault-snapshot.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-os-vault-snapshot.plist" \
+    "$snapshot_plist"
+  mkdir -p "$HOME/.local/state/agent-os"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$snapshot_plist"
+fi
 
 git config --global core.excludesFile "$HOME/.gitignore_global"
 

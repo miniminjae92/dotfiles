@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "time"
+
+vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/developer-os"))
+run_threshold = Integer(ENV.fetch("AGENT_OS_REVIEW_RUNS", "5"))
+day_threshold = Integer(ENV.fetch("AGENT_OS_REVIEW_DAYS", "7"))
+
+runs = Dir.glob(File.join(vault, "40 Reviews", "Runs", "*.md"))
+          .reject { |path| File.basename(path) == "README.md" }
+reviews = Dir.glob(File.join(vault, "40 Reviews", "Periodic", "*.md"))
+             .reject { |path| File.basename(path) == "README.md" }
+
+last_review_at = reviews.map { |path| File.mtime(path) }.max
+unreviewed = runs.select { |path| last_review_at.nil? || File.mtime(path) > last_review_at }
+oldest_unreviewed_at = unreviewed.map { |path| File.mtime(path) }.min
+days_open = oldest_unreviewed_at ? ((Time.now - oldest_unreviewed_at) / 86_400).floor : 0
+
+immediate_runs = unreviewed.select do |path|
+  text = File.read(path, encoding: "UTF-8")
+  text.match?(/^accepted_success:\s*false\s*$/) ||
+    text.match?(/^budget_status:\s*exceeded\s*$/) ||
+    text.match?(/^safety_incident:\s*true\s*$/)
+end
+
+reasons = []
+reasons << "run_threshold" if unreviewed.length >= run_threshold
+reasons << "time_threshold" if unreviewed.any? && days_open >= day_threshold
+reasons << "immediate_incident" if immediate_runs.any?
+
+puts JSON.pretty_generate(
+  due: reasons.any?,
+  reasons: reasons,
+  unreviewed_runs: unreviewed.length,
+  days_open: days_open,
+  immediate_runs: immediate_runs.map { |path| File.basename(path) },
+  thresholds: { runs: run_threshold, days: day_threshold }
+)

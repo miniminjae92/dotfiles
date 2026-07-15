@@ -1,0 +1,24 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'type == "review" || type == "proposal"'
+properties:
+  file.name:
+    displayName: Review
+  type:
+    displayName: Type
+  status:
+    displayName: Status
+  created:
+    displayName: Created
+  experiment_status:
+    displayName: Experiment
+views:
+  - type: table
+    name: Reviews and proposals
+    order:
+      - file.name
+      - type
+      - status
+      - created
+      - experiment_status

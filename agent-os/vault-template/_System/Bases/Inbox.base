@@ -1,0 +1,24 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'status == "inbox" || status == "candidate"'
+properties:
+  file.name:
+    displayName: Note
+  type:
+    displayName: Type
+  status:
+    displayName: Status
+  origin:
+    displayName: Origin
+  created:
+    displayName: Created
+views:
+  - type: table
+    name: Inbox
+    order:
+      - file.name
+      - type
+      - status
+      - origin
+      - created

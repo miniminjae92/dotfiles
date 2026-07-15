@@ -34,7 +34,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
 * **VSCode**: Configuration files to make VSCode feel more like Neovim.
-* **Codex**: Global Codex instructions and custom skills are managed through `~/.codex/AGENTS.md` and skill symlinks. `~/.codex/config.toml` stays local because it contains machine-specific project trust state.
+* **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The global Agent OS hook source lives at `agent-os/hooks.json` so it is not loaded again as a project-local hook while working in this repository. The Agent OS `Stop` hook records metadata-only turn events under `~/.local/state/agent-os/events/`; it does not copy transcript contents.
 
 ---
 
@@ -65,17 +65,19 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v prfb
     command -v prfbo
     ```
-    The install script links only stable Codex instructions and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
+    The install script links only stable Codex instructions, hooks, custom agents, and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
     It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
     Codex helper commands become available after opening a new shell:
     ```bash
     work "implement the requested change"
     work
     arc
+    agent-os-usage
     arc 019e4830
     arc docs/conversation/2026-05-21-agent-session.md
     ```
     `arc` without an argument exports the latest Codex session from `~/.codex/sessions` into `docs/conversation/YYYY-MM-DD-agent-session.md`, then runs the archive workflow. Pass a resume code or session id fragment to archive a specific session.
+    `agent-os-usage` reports the latest captured session token totals and the delta since the previous Stop event. These token counts are not ChatGPT credits or API cost.
 
 4.  **Install Oh My Zsh and Plugins**
 

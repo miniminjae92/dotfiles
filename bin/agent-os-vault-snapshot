@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+vault="${DEVELOPER_OS_VAULT:-$HOME/.obsidian/developer-os}"
+
+if ! git -C "$vault" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  printf 'agent-os-vault-snapshot: not a Git repository: %s\n' "$vault" >&2
+  exit 0
+fi
+
+git -C "$vault" add --all
+
+if git -C "$vault" diff --cached --quiet; then
+  exit 0
+fi
+
+git -C "$vault" commit -m "docs: Developer OS snapshot $(date '+%Y-%m-%d %H:%M')"

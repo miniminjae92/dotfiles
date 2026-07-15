@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/agent-os-capture-event\"",
+            "timeout": 5,
+            "statusMessage": "Recording Agent OS event"
+          }
+        ]
+      }
+    ]
+  }
+}

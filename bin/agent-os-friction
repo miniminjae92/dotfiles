@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "fileutils"
+require "time"
+
+origin = "user"
+if ARGV.first&.start_with?("--origin=")
+  origin = ARGV.shift.split("=", 2).last
+elsif ARGV.first == "--origin"
+  ARGV.shift
+  origin = ARGV.shift.to_s
+end
+
+abort "usage: agent-os-friction [--origin user|agent] <message>" unless %w[user agent].include?(origin)
+
+message = ARGV.join(" ").gsub(/\s+/, " ").strip.gsub("|", "\\|")
+abort "usage: agent-os-friction [--origin user|agent] <message>" if message.empty?
+
+vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/developer-os"))
+path = File.join(vault, "00 Inbox", "생산성 불편일기.md")
+abort "friction note not found: #{path}" unless File.file?(path)
+
+content = File.read(path, encoding: "UTF-8")
+marker = "## 미처리\n"
+abort "unprocessed section not found: #{path}" unless content.include?(marker)
+
+entry = "- [ ] #{Time.now.iso8601} | origin:#{origin} | #{message}"
+updated = content.sub(marker, "#{marker}\n#{entry}\n")
+
+temp_path = "#{path}.tmp.#{Process.pid}"
+File.write(temp_path, updated, mode: "w", encoding: "UTF-8")
+File.chmod(File.stat(path).mode, temp_path)
+File.rename(temp_path, path)
+
+puts entry

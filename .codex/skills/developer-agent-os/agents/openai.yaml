@@ -1,0 +1,4 @@
+interface:
+  display_name: "Developer Agent OS"
+  short_description: "Plan, build, learn, and record with measured cost"
+  default_prompt: "Use $developer-agent-os to complete this development task and record the important decisions."

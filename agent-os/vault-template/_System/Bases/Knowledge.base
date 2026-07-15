@@ -1,0 +1,25 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'type == "decision" || type == "concept" || type == "insight" || type == "learning"'
+    - 'status == "active" || status == "verified"'
+properties:
+  file.name:
+    displayName: Knowledge
+  type:
+    displayName: Type
+  status:
+    displayName: Status
+  origin:
+    displayName: Origin
+  confidence:
+    displayName: Confidence
+views:
+  - type: table
+    name: Knowledge
+    order:
+      - file.name
+      - type
+      - status
+      - origin
+      - confidence

@@ -1,0 +1,30 @@
+filters:
+  and:
+    - 'file.ext == "md"'
+    - 'type == "run"'
+properties:
+  file.name:
+    displayName: Run
+  accepted_success:
+    displayName: Success
+  tier:
+    displayName: Tier
+  model:
+    displayName: Model
+  reasoning_effort:
+    displayName: Reasoning
+  tokens_observed:
+    displayName: Tokens
+  elapsed_minutes:
+    displayName: Minutes
+views:
+  - type: table
+    name: Runs
+    order:
+      - file.name
+      - accepted_success
+      - tier
+      - model
+      - reasoning_effort
+      - tokens_observed
+      - elapsed_minutes

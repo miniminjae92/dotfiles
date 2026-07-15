@@ -22,6 +22,7 @@ Use this skill only when the user explicitly invokes `$work` or asks for the ful
 11. Summarize changed files and why they changed.
 12. Summarize the final result from `git diff`.
 13. Suggest a commit message.
+14. For a T1 or T2 task, create the configured Developer Agent OS Run record and include observable usage without inferring credits or cost.
 
 ## Rules
 
