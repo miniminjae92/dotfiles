@@ -40,6 +40,7 @@ These guidelines bias toward caution over speed. For trivial tasks, use judgment
 - Use `fast_worker` only for independent, bounded, low-risk scanning, classification, summarization, or mechanical work when delegation is expected to save more context than it consumes.
 - Use `critical_reviewer` only for high-impact architecture, security, data-loss risk, difficult debugging after a failed standard attempt, or an independent final review.
 - Do not delegate trivial single-step work or tightly coupled edits. Subagents add context and coordination cost.
+- When many mixed Git changes need commit grouping, prefer the read-only `git ai-commit` command to delegate compact classification to a Gemini model through `agy` and validate its output as a proposal. Use `git ai-commit apply` only after the user authorizes staging and commits, and never infer authorization to push. Use `--full` only when the compact plan lacks context. The older `git plan-ai` and `git cm-ai` commands are compatibility entry points.
 - Do not use high reasoning merely because a task is large. Use it when ambiguity, risk, or complex interactions justify the extra tokens.
 - Record the model, reasoning effort, and delegated-agent count when producing a T1 or T2 Run record.
 

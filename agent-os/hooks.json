@@ -8,6 +8,12 @@
             "command": "\"$HOME/.local/bin/agent-os-capture-event\"",
             "timeout": 5,
             "statusMessage": "Recording Agent OS event"
+          },
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-notify\" ]; then \"$HOME/.local/bin/agent-notify\" codex-hook; else \"$HOME/.dotfiles/bin/agent-notify\" codex-hook; fi",
+            "timeout": 5,
+            "statusMessage": "Sending completion notification"
           }
         ]
       }

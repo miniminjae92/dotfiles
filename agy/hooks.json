@@ -1,0 +1,11 @@
+{
+  "macos-notification": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "\"$HOME/.local/bin/agent-notify\" agy",
+        "timeout": 5
+      }
+    ]
+  }
+}
