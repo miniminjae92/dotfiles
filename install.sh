@@ -45,8 +45,12 @@ link_file "$DOTFILES_DIR/.config/nvim" "$HOME/.config/nvim"
 link_file \
   "$DOTFILES_DIR/.config/bat/themes/tokyonight_night.tmTheme" \
   "$HOME/.config/bat/themes/tokyonight_night.tmTheme"
+link_file \
+  "$DOTFILES_DIR/.config/agent-notify/config.json" \
+  "$HOME/.config/agent-notify/config.json"
 link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
 link_file "$DOTFILES_DIR/agent-os/hooks.json" "$HOME/.codex/hooks.json"
+link_file "$DOTFILES_DIR/agy/hooks.json" "$HOME/.gemini/config/hooks.json"
 if [ -d "$DOTFILES_DIR/.codex/agents" ]; then
   for agent_path in "$DOTFILES_DIR"/.codex/agents/*.toml; do
     [ -f "$agent_path" ] || continue
@@ -76,15 +80,24 @@ link_file \
   "$DOTFILES_DIR/conventions/commit-message/korean-angularjs.md" \
   "$HOME/.config/commit-message-conventions/korean-angularjs.md"
 link_file \
+  "$DOTFILES_DIR/ai-tools/models.json" \
+  "$HOME/.config/ai-tools/models.json"
+link_file \
   "$DOTFILES_DIR/.config/lazygit/config.yml" \
   "$HOME/Library/Application Support/lazygit/config.yml"
 
 if [ "$(uname -s)" = "Darwin" ]; then
+  notification_plist="$HOME/Library/LaunchAgents/com.miniminjae.agent-notify-sweep.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-notify-sweep.plist" \
+    "$notification_plist"
   snapshot_plist="$HOME/Library/LaunchAgents/com.miniminjae.agent-os-vault-snapshot.plist"
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-os-vault-snapshot.plist" \
     "$snapshot_plist"
-  mkdir -p "$HOME/.local/state/agent-os"
+  mkdir -p "$HOME/.local/state/agent-notify" "$HOME/.local/state/agent-os"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$notification_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$snapshot_plist"
 fi

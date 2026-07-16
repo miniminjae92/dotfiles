@@ -24,8 +24,13 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
-    * `bin/git-cm-ai` generates Korean AngularJS-style commit message candidates from staged diffs, validates the format, and copies the result to the clipboard. It can be run as `git cm-ai`.
-    * `bin/lazygit-ai-commit` is the underlying script used by `git-cm-ai` and lazygit.
+    * `bin/git-ai-commit` is the unified entry point for AI-assisted commit planning, applying a cached plan, and staged-change message generation. It can be run as `git ai-commit`.
+    * `bin/git-cm-ai` and `bin/git-plan-ai` remain available as compatibility commands for message-only and plan-only workflows.
+    * `bin/agent-notify` provides provider-neutral, metadata-only completion alerts for agent CLIs. Codex and `agy` adapters are included, and future CLIs can emit normalized events without changing the notification or Slack logic.
+    * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
+    * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
+    * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
+    * `bin/video-summary` saves a YouTube video's dynamically sized Korean summary with timestamp links as an Obsidian Markdown note. It reuses unchanged summaries to avoid duplicate model calls.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
@@ -34,7 +39,8 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
 * **VSCode**: Configuration files to make VSCode feel more like Neovim.
-* **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The global Agent OS hook source lives at `agent-os/hooks.json` so it is not loaded again as a project-local hook while working in this repository. The Agent OS `Stop` hook records metadata-only turn events under `~/.local/state/agent-os/events/`; it does not copy transcript contents.
+* **Agent CLI notifications**: Global Codex and `agy` `Stop` hooks call `agent-notify`, so completion notifications do not depend on terminal or tmux focus. With `alerter`, notifications stay available for acknowledgement or tmux navigation. Unacknowledged events can be escalated through a Keychain-backed Slack Incoming Webhook. Prompts, responses, model names, and detailed errors are excluded from notification state.
+* **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The global Agent OS hook source lives at `agent-os/hooks.json` so it is not loaded again as a project-local hook while working in this repository.
 
 ---
 
@@ -62,9 +68,27 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
+    command -v git-plan-ai
+    command -v git-ai-commit
+    command -v agent-notify
+    command -v ai-model-status
+    command -v kman
     command -v prfb
     command -v prfbo
+    command -v video-summary
     ```
+    Codex and `agy` completion notifications are enabled by the global hook links installed by this script. The provider-neutral entry point for another CLI is:
+    ```bash
+    agent-notify event --source future-agent --status complete --project example
+    ```
+    Inspect and handle pending events with:
+    ```bash
+    agent-notify status
+    agent-notify ack <event-id>
+    agent-notify ack --all
+    agent-notify open <event-id>
+    ```
+    Verify the basic macOS notification path with `agent-notify test`; macOS may ask for notification permission the first time.
     The install script links only stable Codex instructions, hooks, custom agents, and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
     It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
     Codex helper commands become available after opening a new shell:
@@ -78,6 +102,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ```
     `arc` without an argument exports the latest Codex session from `~/.codex/sessions` into `docs/conversation/YYYY-MM-DD-agent-session.md`, then runs the archive workflow. Pass a resume code or session id fragment to archive a specific session.
     `agent-os-usage` reports the latest captured session token totals and the delta since the previous Stop event. These token counts are not ChatGPT credits or API cost.
+    AI model names are managed in `ai-tools/models.json`, linked to `~/.config/ai-tools/models.json`. The registry contains task assignments and model names only, never credentials. Existing model environment variables remain temporary overrides, and `ai-model-status` reports the effective override when one is set.
 
 4.  **Install Oh My Zsh and Plugins**
 
@@ -100,15 +125,26 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     * **Install Other CLI Tools (via Homebrew):**
         ```bash
-        brew install eza bat fzf fd gh thefuck zoxide pyenv lazygit ollama jq
-        ```
+        brew install eza bat fzf fd gh thefuck zoxide pyenv lazygit ollama jq yt-dlp
+        brew install vjeantet/tap/alerter
+    ```
+
+    `alerter` enables persistent notifications, acknowledgement actions, per-status sounds, and automatic timeout after Slack escalation is configured. The fallback remains AppleScript when `alerter` is unavailable.
+
+    To enable Slack escalation, create an Incoming Webhook and enter it directly into the macOS Keychain prompt. The URL is never stored in dotfiles or printed by `agent-notify`:
+    ```bash
+    agent-notify slack configure
+    agent-notify slack status
+    agent-notify slack test
+    ```
+    Normal completions escalate after 10 minutes without acknowledgement; attention and error events escalate after 3 minutes. Disable external delivery without deleting the Keychain item with `agent-notify slack disable`.
 
     * **Install an optional local commit-message model:**
         ```bash
         ollama serve
         ollama pull qwen2.5-coder:7b
         ```
-        Stage files or hunks, then run `git cm-ai` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. `git cm-ai codex` uses `gpt-5.4-mini` with a compact diff prompt by default; pass `--full` or set `LAZYGIT_AI_COMMIT_CODEX_MODEL=gpt-5.5` for harder changes. Paste the result into your commit prompt and review it before committing.
+        Stage files or hunks, then run `git ai-commit message` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. Every provider uses a compact diff prompt by default; pass `--full` for more context or set `LAZYGIT_AI_COMMIT_CODEX_MODEL=gpt-5.5` for harder Codex changes. The older `git cm-ai` entry point remains compatible.
 
 5.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).
@@ -123,6 +159,139 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 7.  **Setup VSCode (Optional)**
     * Follow the instructions in the `vscode/README.md` to create symbolic links for your VSCode settings and keybindings.
+
+---
+
+### Korean Man Pages
+
+`kman` keeps the normal `man` command as the English source of truth and creates a
+versioned Korean cache using Apple's on-device Translation framework:
+
+```bash
+man tmux          # English original
+kman tmux         # Korean translation
+kman 1 tmux       # Explicit man section
+```
+
+The first translation builds a small local Swift helper and can take longer. It
+requires macOS 26.4 or later, installed Command Line Tools, and downloaded English
+and Korean languages under System Settings > General > Language & Region >
+Translation Languages. Later calls reuse the source-hash cache under
+`~/Library/Caches/kman/` and make no API calls.
+
+Viewer-only changes reuse the newest completed local translation and never start a
+new translation automatically. `--refresh` is the explicit opt-in for rebuilding a
+translation. Refreshes use the low-latency on-device strategy and save each
+successful paragraph immediately, so an interrupted run resumes only unfinished
+paragraphs. A paragraph whose protected command token cannot be restored stays in
+English instead of failing the whole page.
+
+The translated body contains no inserted acronym explanations. Reviewed common
+terms live in `kman/glossary/common.json`; command-specific reviewed terms can be
+added under `kman/glossary/commands/`. Unknown abbreviations remain local review
+candidates:
+
+```bash
+kman --terms tmux       # Reviewed terms used by this page
+kman --new-terms tmux   # Unknown acronym candidates only
+kman --refresh tmux     # Rebuild after a glossary or translator change
+```
+
+The interactive viewer uses terminal display-width wrapping, highlighted section
+and option labels, and a `less` progress prompt. Use `/text` to search, `n`/`N`
+for the next/previous match, `g`/`G` for the start/end, and `q` to quit. Pass
+`--no-pager` when plain output is needed for a pipe or file.
+
+For permissively licensed pages, create a review-first Markdown artifact for a
+future blog pipeline. The export is marked `reviewed: false` and includes the
+detected source license notice:
+
+```bash
+kman --export ./tmux.1.ko.md tmux
+```
+
+Pages with unknown or unsupported redistribution terms remain local and are not
+exported.
+
+---
+
+### YouTube Video Summaries
+
+`video-summary` uses `yt-dlp` for Korean or English subtitles and the authenticated Codex CLI for structured summarization. Check the transcript size and planned strategy without spending model tokens:
+
+```bash
+video-summary 'https://www.youtube.com/watch?v=VIDEO_ID' --dry-run
+```
+
+Create the summary:
+
+```bash
+video-summary 'https://www.youtube.com/watch?v=VIDEO_ID'
+```
+
+After reloading `.zshrc`, the shorter `vsummary` alias runs the same command.
+
+By default, notes are saved under `~/.obsidian/yggdrasil/3. Resource/Video Summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
+
+---
+
+### AI-assisted Git Commits
+
+Use one command namespace for the complete workflow. With no subcommand it generates a read-only plan, saves it inside `.git/ai-commit-plan.json`, and sends at most 6,000 tracked-diff characters to the Gemini model selected in `agy`. Untracked file contents are never sent:
+
+```bash
+git ai-commit
+```
+
+Use more tracked diff only when the compact plan lacks context:
+
+```bash
+git ai-commit --full
+```
+
+Preview the saved plan without changing Git state, then explicitly apply it:
+
+```bash
+git ai-commit apply --dry-run
+git ai-commit apply
+```
+
+`apply` verifies that the repository and working-tree fingerprint still match the saved plan, checks the exact staged paths before every commit, and never pushes. `apply --dry-run` prints the cached commit list and warnings without a model call or Git write. Plans containing warnings stop by default; after human or agent review, confirm the review explicitly with `git ai-commit apply --reviewed`.
+
+Git handles a top-level `--help` as a man-page request before an external command runs. Use either of these forms for the built-in workflow help:
+
+```bash
+git ai-commit -h
+git ai-commit help
+git ai-commit apply --help
+```
+
+The dotfiles `MANPATH` includes the bundled `git-ai-commit(1)` page, so after opening a new shell the standard `git ai-commit --help` form works as well.
+
+The plan assigns every changed path exactly once. Sensitive-looking paths such as `.env`, private keys, and credential JSON files stop cloud delegation before `agy` is called. Existing staged paths are accepted only when all of them belong to the first planned commit.
+
+For a manually staged change, generate only a commit message. Compact mode is also the default here:
+
+```bash
+git ai-commit message agy
+git ai-commit message agy --full
+```
+
+The existing `git plan-ai` and `git cm-ai` commands remain available for compatibility.
+
+Configured model names and non-inference provider status:
+
+```bash
+ai-model-status
+ai-model-status --json
+```
+
+Run minimal live inference only when model availability must be verified. This uses a small amount of the selected provider's model tokens or credits:
+
+```bash
+ai-model-status --probe agy
+ai-model-status --probe codex
+```
 
 ---
 
