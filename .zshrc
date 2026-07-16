@@ -152,6 +152,7 @@ alias gp="git push"
 
 # Created by `pipx` on 2025-05-04 06:36:44
 export PATH="$HOME/.local/bin:$PATH"
+export MANPATH="$HOME/.dotfiles/man:${MANPATH:-}"
 
 # User alias
 alias cl="clear"
@@ -160,6 +161,7 @@ alias lg="lazygit"
 alias gcalw="gcalcli calw"
 alias gcala="gcalcli agenda"
 alias pc="pbcopy"
+alias vsummary="video-summary"
 
 # ---- Codex workflows ----
 work() {
