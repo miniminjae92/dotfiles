@@ -1,0 +1,22 @@
+{
+  "models": {
+    "agy_gemini_fast": "Gemini 3.5 Flash (Low)",
+    "codex_compact": "gpt-5.4-mini",
+    "ollama_local": "qwen2.5-coder:7b"
+  },
+  "tasks": {
+    "git_plan": {
+      "provider": "agy",
+      "model_ref": "agy_gemini_fast"
+    },
+    "commit_message": {
+      "agy": "agy_gemini_fast",
+      "codex": "codex_compact",
+      "ollama": "ollama_local"
+    },
+    "video_summary": {
+      "provider": "codex",
+      "model_ref": null
+    }
+  }
+}

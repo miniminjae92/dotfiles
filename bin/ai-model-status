@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+"""Show configured AI models and optionally probe live inference."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any, NamedTuple
+
+
+PROVIDERS = ("agy", "codex", "ollama")
+
+
+class ModelStatusError(RuntimeError):
+    pass
+
+
+class Binding(NamedTuple):
+    task: str
+    provider: str
+    model_ref: str | None
+    model: str | None
+
+
+def default_registry_path() -> Path:
+    configured = os.environ.get("AI_MODEL_REGISTRY")
+    if configured:
+        return Path(configured).expanduser()
+    installed = Path.home() / ".config/ai-tools/models.json"
+    if installed.is_file():
+        return installed
+    return Path.home() / ".dotfiles/ai-tools/models.json"
+
+
+def load_registry(path: Path) -> dict[str, Any]:
+    try:
+        registry = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise ModelStatusError(f"모델 레지스트리를 읽지 못했습니다: {path}") from error
+    except json.JSONDecodeError as error:
+        raise ModelStatusError(f"모델 레지스트리가 올바른 JSON이 아닙니다: {path}") from error
+    if not isinstance(registry.get("models"), dict) or not isinstance(
+        registry.get("tasks"), dict
+    ):
+        raise ModelStatusError("모델 레지스트리에 models 또는 tasks가 없습니다.")
+    return registry
+
+
+def collect_bindings(registry: dict[str, Any]) -> list[Binding]:
+    models = registry["models"]
+    bindings: list[Binding] = []
+    for task_name, task in registry["tasks"].items():
+        if not isinstance(task, dict):
+            raise ModelStatusError(f"잘못된 task 설정입니다: {task_name}")
+        if "provider" in task:
+            pairs = [(task.get("provider"), task.get("model_ref"))]
+        else:
+            pairs = list(task.items())
+        for provider, model_ref in pairs:
+            if provider not in PROVIDERS:
+                raise ModelStatusError(f"지원하지 않는 provider입니다: {provider}")
+            if model_ref is not None and model_ref not in models:
+                raise ModelStatusError(f"존재하지 않는 model_ref입니다: {model_ref}")
+            model = models.get(model_ref) if model_ref is not None else None
+            if model is not None and not isinstance(model, str):
+                raise ModelStatusError(f"잘못된 모델 이름입니다: {model_ref}")
+            bindings.append(Binding(task_name, provider, model_ref, model))
+    return bindings
+
+
+def effective_bindings(bindings: list[Binding]) -> list[Binding]:
+    result: list[Binding] = []
+    for binding in bindings:
+        override_names: tuple[str, ...] = ()
+        if binding.task == "git_plan" and binding.provider == "agy":
+            override_names = (
+                "GIT_PLAN_AI_AGY_MODEL",
+                "LAZYGIT_AI_COMMIT_AGY_MODEL",
+            )
+        elif binding.task == "commit_message":
+            override_names = (
+                f"LAZYGIT_AI_COMMIT_{binding.provider.upper()}_MODEL",
+            )
+        elif binding.task == "video_summary" and binding.provider == "codex":
+            override_names = ("VIDEO_SUMMARY_MODEL",)
+
+        override_name = next(
+            (name for name in override_names if os.environ.get(name)),
+            None,
+        )
+        if override_name:
+            result.append(
+                Binding(
+                    binding.task,
+                    binding.provider,
+                    f"env:{override_name}",
+                    os.environ[override_name],
+                )
+            )
+        else:
+            result.append(binding)
+    return result
+
+
+def run_command(
+    command: list[str],
+    *,
+    cwd: str | Path | None = None,
+    input_text: str | None = None,
+    timeout: int = 30,
+) -> subprocess.CompletedProcess[str]:
+    environment = dict(os.environ)
+    environment["NO_COLOR"] = "1"
+    environment["CI"] = "1"
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        input=input_text,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+def output_line(result: subprocess.CompletedProcess[str]) -> str:
+    lines = (result.stdout or result.stderr).strip().splitlines()
+    return lines[-1] if lines else ""
+
+
+def static_provider_status(
+    provider: str,
+    models: tuple[str | None, ...],
+) -> dict[str, Any]:
+    executable = shutil.which(provider)
+    status: dict[str, Any] = {
+        "installed": executable is not None,
+        "version": None,
+        "auth": "not checked",
+        "models": {},
+    }
+    if not executable:
+        status["auth"] = "CLI not installed"
+        for model in models:
+            status["models"][model or "provider-default"] = "unavailable"
+        return status
+
+    try:
+        version = run_command([provider, "--version"])
+        status["version"] = output_line(version) if version.returncode == 0 else "unknown"
+        if provider == "codex":
+            auth = run_command(["codex", "login", "status"])
+            status["auth"] = output_line(auth) if auth.returncode == 0 else "not logged in"
+            for model in models:
+                status["models"][model or "provider-default"] = "not probed"
+        elif provider == "agy":
+            listing = run_command(["agy", "models"])
+            if listing.returncode != 0:
+                status["auth"] = "model listing failed"
+                for model in models:
+                    status["models"][model or "provider-default"] = "unknown"
+            else:
+                status["auth"] = "CLI session available; live auth not probed"
+                for model in models:
+                    key = model or "provider-default"
+                    status["models"][key] = (
+                        "available" if model and model in listing.stdout else "not listed"
+                    )
+        elif provider == "ollama":
+            listing = run_command(["ollama", "list"])
+            if listing.returncode != 0:
+                status["auth"] = "local server unavailable"
+                for model in models:
+                    status["models"][model or "provider-default"] = "unavailable"
+            else:
+                status["auth"] = "local server available"
+                installed_names = {
+                    line.split()[0]
+                    for line in listing.stdout.splitlines()[1:]
+                    if line.split()
+                }
+                for model in models:
+                    key = model or "provider-default"
+                    status["models"][key] = (
+                        "installed" if model in installed_names else "not installed"
+                    )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        status["auth"] = f"check failed: {error}"
+        for model in models:
+            status["models"][model or "provider-default"] = "unknown"
+    return status
+
+
+def probe_model(provider: str, model: str | None) -> dict[str, str]:
+    if not shutil.which(provider):
+        return {"status": "failed", "detail": "CLI not installed"}
+
+    prompt = "Respond with exactly OK and nothing else."
+    with tempfile.TemporaryDirectory(prefix="ai-model-probe-") as temp_dir:
+        if provider == "agy":
+            if not model:
+                return {"status": "failed", "detail": "model is not configured"}
+            command = [
+                "agy",
+                "--model",
+                model,
+                "--mode",
+                "plan",
+                "--sandbox",
+                "--print-timeout",
+                "120s",
+                "-p",
+                prompt,
+            ]
+            input_text = None
+        elif provider == "codex":
+            command = [
+                "codex",
+                "exec",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+                "--sandbox",
+                "read-only",
+                "--skip-git-repo-check",
+                "--color",
+                "never",
+                "--cd",
+                temp_dir,
+            ]
+            if model:
+                command.extend(["--model", model])
+            command.append("-")
+            input_text = prompt
+        elif provider == "ollama":
+            if not model:
+                return {"status": "failed", "detail": "model is not configured"}
+            command = ["ollama", "run", model, prompt]
+            input_text = None
+        else:
+            return {"status": "failed", "detail": "unsupported provider"}
+
+        try:
+            result = run_command(
+                command,
+                cwd=temp_dir,
+                input_text=input_text,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return {"status": "failed", "detail": str(error)}
+    if result.returncode != 0:
+        return {"status": "failed", "detail": output_line(result) or "probe failed"}
+    response = result.stdout.strip()
+    if "OK" not in response.upper():
+        return {"status": "failed", "detail": f"unexpected response: {response[:120]}"}
+    return {"status": "ok", "detail": "live inference succeeded"}
+
+
+def unique_models(bindings: list[Binding], provider: str) -> tuple[str | None, ...]:
+    values: list[str | None] = []
+    for binding in bindings:
+        if binding.provider == provider and binding.model not in values:
+            values.append(binding.model)
+    return tuple(values)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="중앙 모델 설정과 CLI·로그인·선택적 실추론 상태를 확인합니다."
+    )
+    parser.add_argument(
+        "--probe",
+        nargs="?",
+        const="all",
+        choices=["all", *PROVIDERS],
+        help="선택한 provider에 최소 실추론 실행 (소량의 토큰/크레딧 사용)",
+    )
+    parser.add_argument("--json", action="store_true", help="JSON으로 출력")
+    parser.add_argument(
+        "--registry",
+        type=Path,
+        default=default_registry_path(),
+        help="모델 레지스트리 경로",
+    )
+    return parser
+
+
+def render_text(result: dict[str, Any]) -> str:
+    lines = [f"Model registry: {result['registry']}", "", "Tasks:"]
+    for binding in result["bindings"]:
+        model = binding["model"] or "provider default"
+        lines.append(f"- {binding['task']}: {binding['provider']} / {model}")
+    lines.extend(["", "Provider status:"])
+    for provider, status in result["providers"].items():
+        version = status["version"] or "-"
+        installed = "yes" if status["installed"] else "no"
+        lines.append(
+            f"- {provider}: installed={installed}, version={version}, auth={status['auth']}"
+        )
+        for model, model_status in status["models"].items():
+            lines.append(f"  - {model}: {model_status}")
+    if result["probes"]:
+        lines.extend(["", "Live probes (model tokens/credits may be used):"])
+        for key, probe in result["probes"].items():
+            lines.append(f"- {key}: {probe['status']} ({probe['detail']})")
+    else:
+        lines.extend(
+            [
+                "",
+                "Live inference was not run; no model tokens or credits were used.",
+                "Run: ai-model-status --probe agy",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        registry_path = args.registry.expanduser().resolve()
+        registry = load_registry(registry_path)
+        bindings = effective_bindings(collect_bindings(registry))
+        provider_statuses = {
+            provider: static_provider_status(provider, unique_models(bindings, provider))
+            for provider in PROVIDERS
+            if any(binding.provider == provider for binding in bindings)
+        }
+        probes: dict[str, dict[str, str]] = {}
+        if args.probe:
+            selected = PROVIDERS if args.probe == "all" else (args.probe,)
+            for provider in selected:
+                for model in unique_models(bindings, provider):
+                    key = f"{provider}/{model or 'provider-default'}"
+                    probes[key] = probe_model(provider, model)
+
+        result = {
+            "registry": str(registry_path),
+            "bindings": [
+                {
+                    "task": binding.task,
+                    "provider": binding.provider,
+                    "model_ref": binding.model_ref,
+                    "model": binding.model,
+                }
+                for binding in bindings
+            ],
+            "providers": provider_statuses,
+            "probes": probes,
+        }
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(render_text(result))
+
+        if args.probe:
+            return 0 if all(probe["status"] == "ok" for probe in probes.values()) else 1
+        return 0 if all(status["installed"] for status in provider_statuses.values()) else 1
+    except ModelStatusError as error:
+        print(f"ai-model-status: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
