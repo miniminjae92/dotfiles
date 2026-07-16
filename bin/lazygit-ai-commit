@@ -2,18 +2,31 @@
 set -euo pipefail
 
 CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/korean-angularjs.md}"
+MODEL_REGISTRY="${AI_MODEL_REGISTRY:-$HOME/.config/ai-tools/models.json}"
+if [ ! -r "$MODEL_REGISTRY" ] && [ -r "$HOME/.dotfiles/ai-tools/models.json" ]; then
+  MODEL_REGISTRY="$HOME/.dotfiles/ai-tools/models.json"
+fi
 MAX_DIFF_CHARS="${LAZYGIT_AI_COMMIT_MAX_DIFF_CHARS:-18000}"
 COMPACT_DIFF_CHARS="${LAZYGIT_AI_COMMIT_COMPACT_DIFF_CHARS:-6000}"
-COMPACT="${LAZYGIT_AI_COMMIT_COMPACT:-0}"
-if [ "${LAZYGIT_AI_COMMIT_COMPACT+x}" = "x" ]; then
-  COMPACT_SET=1
-else
-  COMPACT_SET=0
-fi
+COMPACT="${LAZYGIT_AI_COMMIT_COMPACT:-1}"
 PROVIDER="${LAZYGIT_AI_COMMIT_PROVIDER:-}"
-OLLAMA_MODEL="${LAZYGIT_AI_COMMIT_OLLAMA_MODEL:-qwen2.5-coder:7b}"
-GEMINI_MODEL="${LAZYGIT_AI_COMMIT_GEMINI_MODEL:-gemini-2.5-flash}"
-CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-gpt-5.4-mini}"
+
+registry_model() {
+  local provider="$1"
+  [ -r "$MODEL_REGISTRY" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r --arg provider "$provider" '
+    .tasks.commit_message[$provider] as $ref
+    | .models[$ref] // empty
+  ' "$MODEL_REGISTRY" 2>/dev/null
+}
+
+OLLAMA_MODEL="${LAZYGIT_AI_COMMIT_OLLAMA_MODEL:-$(registry_model ollama)}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:7b}"
+AGY_MODEL="${LAZYGIT_AI_COMMIT_AGY_MODEL:-$(registry_model agy)}"
+AGY_MODEL="${AGY_MODEL:-Gemini 3.5 Flash (Low)}"
+CODEX_MODEL="${LAZYGIT_AI_COMMIT_CODEX_MODEL:-$(registry_model codex)}"
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.4-mini}"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 
 die() {
@@ -31,40 +44,34 @@ has() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    gemini|codex|ollama)
+    agy|codex|ollama)
       [ -z "$PROVIDER" ] || die "provider already selected: $PROVIDER"
       PROVIDER="$1"
       ;;
-    -c|--compact)
-      COMPACT=1
-      COMPACT_SET=1
-      ;;
     --full)
       COMPACT=0
-      COMPACT_SET=1
       ;;
     -h|--help)
       cat <<'EOF'
 Usage:
-  git cm-ai [gemini|codex|ollama] [--compact|--full]
+  git cm-ai [agy|codex|ollama] [--full]
 
 Generate a Korean AngularJS-style commit message from staged changes and copy it to
 the clipboard. Stage files or hunks before running this command.
 
 Options:
-  -c, --compact  Use a shorter prompt with diff stats and a smaller diff excerpt (default for codex)
-  --full         Use the full convention and full diff limit
+  --full  Use the full convention and an 18,000-character diff limit instead of the compact default
 
 Examples:
   git cm-ai codex
-  git cm-ai codex --full
   git cm-ai ollama
-  git cm-ai gemini
+  git cm-ai agy
+  git cm-ai agy --full
 EOF
       exit 0
       ;;
     *)
-      die "unknown argument '$1'. Use: gemini, codex, ollama, --compact, or --full"
+      die "unknown argument '$1'. Use: agy, codex, ollama, or --full"
       ;;
   esac
   shift
@@ -80,21 +87,21 @@ choose_provider() {
   }
 
   local choices=""
-  has gemini && choices="${choices}gemini	Gemini CLI: fast cloud model, best default for this task
+  has agy && choices="${choices}agy	Antigravity CLI: Gemini fast cloud model, best default for this task
 "
   has codex && choices="${choices}codex	Codex CLI: uses gpt-5.4-mini and compact diff by default
 "
   has ollama && choices="${choices}ollama	Ollama local model: private, but slower cold start and weaker formatting
 "
 
-  [ -n "$choices" ] || die "no provider found. Install gemini, codex, or ollama"
+  [ -n "$choices" ] || die "no provider found. Install agy, codex, or ollama"
 
   if has fzf && [ -t 0 ] && [ -t 1 ]; then
     printf '%s' "$choices" |
       fzf --with-nth=1,2 --delimiter='\t' --prompt='commit message provider> ' --height=40% --border |
       cut -f1
   else
-    die "provider picker needs a TTY. Run: git cm-ai codex, git cm-ai ollama, or git cm-ai gemini"
+    die "provider picker needs a TTY. Run: git cm-ai codex, git cm-ai ollama, or git cm-ai agy"
   fi
 }
 
@@ -109,10 +116,6 @@ fi
 
 PROVIDER="$(choose_provider)"
 [ -n "$PROVIDER" ] || die "provider selection cancelled"
-
-if [ "$PROVIDER" = "codex" ] && [ "$COMPACT_SET" = "0" ]; then
-  COMPACT=1
-fi
 
 if [ "$COMPACT" = "1" ]; then
   MAX_DIFF_CHARS="$COMPACT_DIFF_CHARS"
@@ -211,9 +214,14 @@ run_ollama() {
     jq -r '.message.content // empty'
 }
 
-run_gemini() {
-  need gemini
-  gemini -m "$GEMINI_MODEL" -p "$PROMPT"
+run_agy() {
+  need agy
+  agy \
+    --model "$AGY_MODEL" \
+    --mode plan \
+    --sandbox \
+    --print-timeout 120s \
+    -p "$PROMPT"
 }
 
 run_codex() {
@@ -232,7 +240,7 @@ run_codex() {
 }
 
 case "$PROVIDER" in
-  gemini) RAW_MESSAGE="$(run_gemini)" ;;
+  agy) RAW_MESSAGE="$(run_agy)" ;;
   codex) RAW_MESSAGE="$(run_codex)" ;;
   ollama) RAW_MESSAGE="$(run_ollama)" ;;
   *) die "unknown provider: $PROVIDER" ;;

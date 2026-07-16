@@ -1,0 +1,58 @@
+.TH GIT-AI-COMMIT 1 "July 2026" "git-ai-commit" "Git Manual"
+.SH NAME
+git-ai-commit \- AI-assisted Git commit planning and application
+.SH SYNOPSIS
+.B git ai-commit
+.RB [ --full ]
+.br
+.B git ai-commit apply
+.RB [ --dry-run ]
+.RB [ --reviewed ]
+.br
+.B git ai-commit message
+.RI [ provider ]
+.RB [ --full ]
+.SH DESCRIPTION
+With no subcommand,
+.B git ai-commit
+asks the configured AI model for a read-only commit plan and stores it inside
+.IR .git/ai-commit-plan.json .
+It does not stage, commit, or push.
+.PP
+.B git ai-commit apply
+verifies the saved repository fingerprint and exact staged paths before creating
+each local commit. It never pushes.
+.SH WORKFLOW
+.TP
+.B git ai-commit
+Generate and save a compact plan. This calls the configured model.
+.TP
+.B git ai-commit apply --dry-run
+Show the saved commits and warnings without a model call or Git write.
+.TP
+.B git ai-commit apply
+Apply a warning-free saved plan.
+.TP
+.B git ai-commit apply --reviewed
+Apply a saved plan after its displayed warnings have been reviewed.
+.TP
+.B git ai-commit message agy
+Generate only a message for the currently staged change.
+.SH OPTIONS
+.TP
+.B --full
+Send more tracked diff context to the model.
+.TP
+.B --dry-run
+Validate and display the cached plan and warnings without staging or committing.
+.TP
+.B --reviewed
+Confirm that the displayed warnings were reviewed before applying the plan.
+.SH SAFETY
+Plans with warnings are blocked unless
+.B --reviewed
+is specified. A changed worktree fingerprint, an unexpected staged path, or a
+commit failure stops execution. Push is always a separate user action.
+.SH SEE ALSO
+.BR git (1),
+.BR git-commit (1)

@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+"""Plan, validate, and apply AI-assisted Git commits."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+SCHEMA_VERSION = 1
+CACHE_NAME = "ai-commit-plan.json"
+
+
+class AiCommitError(RuntimeError):
+    pass
+
+
+def run_git(
+    repo: Path,
+    arguments: list[str],
+    *,
+    binary: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd=repo,
+        capture_output=True,
+        text=not binary,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        stderr = result.stderr.decode(errors="replace") if binary else result.stderr
+        detail = stderr.strip().splitlines()[-1] if stderr.strip() else "Git 명령 실패"
+        raise AiCommitError(detail)
+    return result
+
+
+def repository_root(cwd: Path) -> Path:
+    result = run_git(cwd, ["rev-parse", "--show-toplevel"])
+    return Path(str(result.stdout).strip()).resolve()
+
+
+def nul_paths(value: bytes) -> set[str]:
+    return {
+        item.decode("utf-8", errors="surrogateescape")
+        for item in value.split(b"\0")
+        if item
+    }
+
+
+def git_paths(repo: Path, arguments: list[str]) -> set[str]:
+    result = run_git(repo, arguments, binary=True)
+    return nul_paths(bytes(result.stdout))
+
+
+def changed_paths(repo: Path) -> set[str]:
+    staged = git_paths(
+        repo, ["diff", "--cached", "--name-only", "--no-renames", "-z", "--"]
+    )
+    unstaged = git_paths(
+        repo, ["diff", "--name-only", "--no-renames", "-z", "--"]
+    )
+    untracked = git_paths(
+        repo, ["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    )
+    return staged | unstaged | untracked
+
+
+def staged_paths(repo: Path) -> set[str]:
+    return git_paths(
+        repo, ["diff", "--cached", "--name-only", "--no-renames", "-z", "--"]
+    )
+
+
+def hash_file(digest: Any, path: Path) -> None:
+    try:
+        stat = path.lstat()
+        digest.update(f"{stat.st_mode}:{stat.st_size}".encode())
+        if path.is_symlink():
+            digest.update(os.readlink(path).encode("utf-8", errors="surrogateescape"))
+        elif path.is_file():
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    digest.update(chunk)
+    except OSError as error:
+        raise AiCommitError(f"작업 트리 해시 계산 중 파일을 읽지 못했습니다: {path}") from error
+
+
+def worktree_fingerprint(repo: Path) -> str:
+    digest = hashlib.sha256()
+    for arguments in (
+        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        ["diff", "--cached", "--binary", "--no-ext-diff", "--"],
+        ["diff", "--binary", "--no-ext-diff", "--"],
+    ):
+        result = run_git(repo, arguments, binary=True)
+        digest.update(bytes(result.stdout))
+
+    for relative in sorted(
+        git_paths(repo, ["ls-files", "--others", "--exclude-standard", "-z", "--"])
+    ):
+        digest.update(relative.encode("utf-8", errors="surrogateescape"))
+        hash_file(digest, repo / relative)
+    return digest.hexdigest()
+
+
+def cache_path(repo: Path) -> Path:
+    result = run_git(repo, ["rev-parse", "--git-path", CACHE_NAME])
+    path = Path(str(result.stdout).strip())
+    return path if path.is_absolute() else repo / path
+
+
+def save_cache(repo: Path, plan: dict[str, Any], fingerprint: str) -> Path:
+    target = cache_path(repo)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "repository": str(repo),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "fingerprint": fingerprint,
+        "plan": plan,
+    }
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    temporary.replace(target)
+    return target
+
+
+def load_cache(repo: Path) -> tuple[Path, dict[str, Any]]:
+    path = cache_path(repo)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise AiCommitError("저장된 계획이 없습니다. 먼저 `git ai-commit`을 실행하세요.") from error
+    except (OSError, json.JSONDecodeError) as error:
+        raise AiCommitError(f"저장된 계획을 읽지 못했습니다: {path}") from error
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        raise AiCommitError("저장된 계획 형식이 현재 버전과 맞지 않습니다. 계획을 다시 생성하세요.")
+    if payload.get("repository") != str(repo):
+        raise AiCommitError("저장된 계획의 저장소가 현재 저장소와 다릅니다.")
+    if not isinstance(payload.get("plan"), dict):
+        raise AiCommitError("저장된 계획에 유효한 plan이 없습니다.")
+    return path, payload
+
+
+def executable(name: str) -> Path:
+    path = Path(__file__).resolve().parent / name
+    if not path.is_file():
+        raise AiCommitError(f"필요한 도구를 찾지 못했습니다: {path}")
+    return path
+
+
+def create_plan(repo: Path, *, full: bool) -> int:
+    before = worktree_fingerprint(repo)
+    command = [str(executable("git-plan-ai"))]
+    if full:
+        command.append("--full")
+    result = subprocess.run(
+        command,
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, end="")
+    if result.returncode != 0:
+        if result.stdout:
+            print(result.stdout, end="")
+        return result.returncode
+    try:
+        plan = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise AiCommitError("git plan-ai가 유효한 JSON을 반환하지 않았습니다.") from error
+    after = worktree_fingerprint(repo)
+    if before != after:
+        raise AiCommitError("계획 생성 중 작업 트리가 변경되어 결과를 저장하지 않았습니다.")
+    path = save_cache(repo, plan, after)
+    print(json.dumps(plan, ensure_ascii=False, indent=2))
+    print(f"\n계획 저장: {path}", file=sys.stderr)
+    print("검토 후 실행: git ai-commit apply", file=sys.stderr)
+    return 0
+
+
+def validated_commits(plan: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
+    commits = plan.get("commits")
+    if not isinstance(commits, list) or not commits:
+        raise AiCommitError("저장된 계획에 commits가 없습니다.")
+    assigned: set[str] = set()
+    for commit in commits:
+        if not isinstance(commit, dict):
+            raise AiCommitError("저장된 커밋 항목의 형식이 올바르지 않습니다.")
+        files = commit.get("files")
+        message = commit.get("message")
+        if not isinstance(files, list) or not files or not all(
+            isinstance(path, str) and path for path in files
+        ):
+            raise AiCommitError("저장된 커밋의 파일 목록이 올바르지 않습니다.")
+        if not isinstance(message, str) or not message.strip() or "\n" in message:
+            raise AiCommitError("저장된 커밋 메시지가 올바르지 않습니다.")
+        file_set = set(files)
+        if len(file_set) != len(files) or file_set & assigned:
+            raise AiCommitError("저장된 계획에서 파일이 중복 배정됐습니다.")
+        assigned.update(file_set)
+    return commits, assigned
+
+
+def print_apply_preview(commits: list[dict[str, Any]]) -> None:
+    for index, commit in enumerate(commits, start=1):
+        print(f"{index}. {commit['message']}")
+        for path in commit["files"]:
+            print(f"   - {path}")
+
+
+def print_warnings(warnings: list[str]) -> None:
+    if not warnings:
+        print("\n경고: 없음")
+        return
+    print("\n경고:")
+    for warning in warnings:
+        print(f"- {warning}")
+
+
+def apply_plan(repo: Path, *, reviewed: bool, dry_run: bool) -> int:
+    path, payload = load_cache(repo)
+    plan = payload["plan"]
+    commits, planned = validated_commits(plan)
+    warnings = plan.get("warnings", [])
+    if not isinstance(warnings, list) or not all(
+        isinstance(warning, str) for warning in warnings
+    ):
+        raise AiCommitError("저장된 계획의 warnings 형식이 올바르지 않습니다.")
+    if payload.get("fingerprint") != worktree_fingerprint(repo):
+        raise AiCommitError("계획 생성 후 변경 사항이 달라졌습니다. 계획을 다시 생성하세요.")
+    actual = changed_paths(repo)
+    if actual != planned:
+        raise AiCommitError(
+            f"현재 변경 파일과 계획이 다릅니다. missing={sorted(planned - actual)}, "
+            f"extra={sorted(actual - planned)}"
+        )
+    initial_staged = staged_paths(repo)
+    first_files = set(commits[0]["files"])
+    if initial_staged and not initial_staged <= first_files:
+        raise AiCommitError(
+            "현재 staged 파일이 첫 번째 커밋 그룹 밖에도 있습니다. "
+            "기존 staging을 정리하거나 계획 순서를 조정하세요."
+        )
+
+    print_apply_preview(commits)
+    print_warnings(warnings)
+    if dry_run:
+        print("\ndry-run: stage 또는 commit을 실행하지 않았습니다.")
+        if warnings:
+            print("경고를 검토한 뒤 실행하려면: git ai-commit apply --reviewed")
+        return 0
+    if warnings and not reviewed:
+        raise AiCommitError(
+            "위 경고를 검토하지 않은 상태이므로 자동 커밋을 중단했습니다. "
+            "내용을 확인한 뒤 `git ai-commit apply --reviewed`를 실행하세요."
+        )
+
+    created: list[str] = []
+    for index, commit in enumerate(commits, start=1):
+        files = commit["files"]
+        run_git(repo, ["add", "-A", "--", *files])
+        staged = staged_paths(repo)
+        expected = set(files)
+        if staged != expected:
+            raise AiCommitError(
+                f"{index}번째 커밋의 staged 파일이 계획과 다릅니다. "
+                f"expected={sorted(expected)}, actual={sorted(staged)}"
+            )
+        result = run_git(repo, ["commit", "-m", commit["message"]], check=False)
+        if result.returncode != 0:
+            detail = str(result.stderr).strip() or str(result.stdout).strip()
+            raise AiCommitError(
+                f"{index}번째 커밋에 실패했습니다. staged 상태를 유지합니다. {detail}"
+            )
+        head = str(run_git(repo, ["rev-parse", "--short", "HEAD"]).stdout).strip()
+        created.append(head)
+        remaining = {
+            item
+            for later in commits[index:]
+            for item in later["files"]
+        }
+        current = changed_paths(repo)
+        if current != remaining:
+            raise AiCommitError(
+                f"{index}번째 커밋 후 작업 트리가 계획과 달라졌습니다. "
+                f"missing={sorted(remaining - current)}, extra={sorted(current - remaining)}"
+            )
+        print(f"committed {head} {commit['message']}")
+
+    path.unlink(missing_ok=True)
+    print(f"\n완료: {len(created)}개 커밋 생성 ({', '.join(created)})")
+    print("최종 확인: git status --short && git log --oneline -n " + str(len(created)))
+    print("원격 반영이 필요하면 검토 후 별도로 `git push`를 실행하세요.")
+    return 0
+
+
+def run_message(repo: Path, provider: str | None, full: bool) -> int:
+    command = [str(executable("git-cm-ai"))]
+    if provider:
+        command.append(provider)
+    if full:
+        command.append("--full")
+    return subprocess.run(command, cwd=repo, check=False).returncode
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="git ai-commit",
+        description="AI로 Git 커밋 계획을 만들고 검증된 계획을 적용합니다.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""일반적인 흐름:
+  git ai-commit                  계획 생성·저장 (모델 호출, Git 쓰기 없음)
+  git ai-commit apply --dry-run  저장된 계획·경고 확인 (모델 호출·Git 쓰기 없음)
+  git ai-commit apply            경고 없는 계획을 stage·commit
+  git ai-commit apply --reviewed 경고를 검토한 계획을 stage·commit
+  git ai-commit message agy      현재 staged 변경의 메시지만 생성
+
+push는 자동으로 실행하지 않습니다.
+Git은 최상위 `--help`를 man page 요청으로 처리하므로 `git ai-commit -h`
+또는 `git ai-commit help`로 이 도움말을 확인하세요.""",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("help", help="전체 사용법과 안전 절차 표시")
+    plan = subparsers.add_parser("plan", help="읽기 전용 계획 생성 및 저장")
+    plan.add_argument("--full", action="store_true", help="더 많은 diff 전달")
+    apply = subparsers.add_parser(
+        "apply",
+        help="저장된 계획대로 stage 및 commit",
+        description="저장된 계획과 현재 작업 트리를 검증한 뒤 커밋합니다.",
+        epilog=(
+            "계획에 경고가 있으면 기본 실행은 중단됩니다. 먼저 --dry-run으로 "
+            "경고를 읽고 검토한 뒤 --reviewed를 명시하세요."
+        ),
+    )
+    apply.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="커밋 목록과 경고만 확인하고 Git을 변경하지 않음",
+    )
+    apply.add_argument(
+        "--reviewed",
+        action="store_true",
+        help="표시된 경고를 검토했음을 확인하고 적용",
+    )
+    message = subparsers.add_parser("message", help="staged 변경의 메시지만 생성")
+    message.add_argument("provider", nargs="?", choices=["agy", "codex", "ollama"])
+    message.add_argument("--full", action="store_true", help="더 많은 diff 전달")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        arguments.append("plan")
+    elif arguments[0] == "--full":
+        arguments.insert(0, "plan")
+    args = build_parser().parse_args(arguments)
+    try:
+        if args.command == "help":
+            build_parser().print_help()
+            return 0
+        repo = repository_root(Path.cwd())
+        if args.command == "plan":
+            return create_plan(repo, full=args.full)
+        if args.command == "apply":
+            return apply_plan(
+                repo,
+                reviewed=args.reviewed,
+                dry_run=args.dry_run,
+            )
+        return run_message(repo, args.provider, args.full)
+    except AiCommitError as error:
+        print(f"git-ai-commit: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
