@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "statuses": {
+    "complete": {
+      "sound": "Glass",
+      "slack_after_seconds": 600,
+      "local_timeout_seconds": 600
+    },
+    "attention": {
+      "sound": "Ping",
+      "slack_after_seconds": 180,
+      "local_timeout_seconds": 0
+    },
+    "error": {
+      "sound": "Basso",
+      "slack_after_seconds": 180,
+      "local_timeout_seconds": 0
+    }
+  },
+  "sources": {
+    "codex": {
+      "display_name": "Codex"
+    },
+    "agy": {
+      "display_name": "agy"
+    }
+  }
+}

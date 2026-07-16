@@ -1,0 +1,759 @@
+#!/usr/bin/env python3
+"""Persistent, provider-neutral notifications for local agent CLIs."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import getpass
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Callable, Iterator
+
+
+SCHEMA_VERSION = 2
+OSASCRIPT = "/usr/bin/osascript"
+SECURITY = "/usr/bin/security"
+KEYCHAIN_SERVICE = "agent-notify.slack-webhook"
+AGY_ALLOW_STOP = {"decision": "allow"}
+HOOK_SOURCES = {"agy", "codex", "codex-hook"}
+TERMINAL_APPS = {
+    "Apple_Terminal": "Terminal",
+    "iTerm.app": "iTerm",
+    "WezTerm": "WezTerm",
+}
+USAGE = """usage: agent-notify <command>
+
+Agent adapters:
+  codex [json]              Codex external notify adapter
+  codex-hook                Codex Stop hook adapter (JSON on stdin)
+  agy                       agy Stop hook adapter (JSON on stdin)
+  event --source NAME ...   Enqueue a normalized event for any agent CLI
+
+Pending events:
+  status                    List pending events
+  ack <id|--all>            Acknowledge pending events
+  open <id>                 Open the recorded terminal/tmux target and acknowledge
+
+Slack escalation:
+  slack configure           Prompt for a Webhook URL in macOS Keychain
+  slack status              Show enabled/configured state without the secret
+  slack test                Send one explicit test message
+  slack disable             Disable delivery while preserving the Keychain item
+
+Diagnostics:
+  test                      Send a basic macOS notification
+"""
+DEFAULT_CONFIG = {
+    "schema_version": 1,
+    "statuses": {
+        "complete": {
+            "sound": "Glass",
+            "slack_after_seconds": 600,
+            "local_timeout_seconds": 600,
+        },
+        "attention": {
+            "sound": "Ping",
+            "slack_after_seconds": 180,
+            "local_timeout_seconds": 0,
+        },
+        "error": {
+            "sound": "Basso",
+            "slack_after_seconds": 180,
+            "local_timeout_seconds": 0,
+        },
+    },
+    "sources": {
+        "codex": {"display_name": "Codex"},
+        "agy": {"display_name": "agy"},
+    },
+}
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def isoformat(value: datetime | None = None) -> str:
+    return (value or now_utc()).isoformat(timespec="seconds")
+
+
+def parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value)
+
+
+def state_root() -> Path:
+    configured = os.environ.get("AGENT_NOTIFY_STATE_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    base = Path(xdg_state).expanduser() if xdg_state else Path.home() / ".local/state"
+    return base / "agent-notify"
+
+
+def config_path() -> Path:
+    configured = os.environ.get("AGENT_NOTIFY_CONFIG")
+    if configured:
+        return Path(configured).expanduser()
+    return Path.home() / ".config/agent-notify/config.json"
+
+
+def events_dir() -> Path:
+    return state_root() / "events"
+
+
+def runtime_settings_path() -> Path:
+    return state_root() / "settings.json"
+
+
+def ensure_private_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.chmod(0o700)
+
+
+def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
+    ensure_private_directory(path.parent)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            json.dump(value, file, ensure_ascii=False, indent=2, sort_keys=True)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+
+def read_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return dict(default or {})
+    if not isinstance(value, dict):
+        raise ValueError(f"JSON object expected: {path}")
+    return value
+
+
+def load_config() -> dict[str, Any]:
+    config = json.loads(json.dumps(DEFAULT_CONFIG))
+    configured = read_json(config_path())
+    if isinstance(configured.get("statuses"), dict):
+        for status, settings in configured["statuses"].items():
+            if status in config["statuses"] and isinstance(settings, dict):
+                config["statuses"][status].update(settings)
+    if isinstance(configured.get("sources"), dict):
+        config["sources"].update(configured["sources"])
+    return config
+
+
+def runtime_settings() -> dict[str, Any]:
+    return read_json(runtime_settings_path(), {"slack_enabled": False})
+
+
+def update_runtime_settings(**updates: Any) -> None:
+    settings = runtime_settings()
+    settings.update(updates)
+    atomic_write_json(runtime_settings_path(), settings)
+
+
+def event_path(event_id: str) -> Path:
+    return events_dir() / f"{event_id}.json"
+
+
+@contextmanager
+def event_lock(event_id: str) -> Iterator[None]:
+    ensure_private_directory(events_dir())
+    lock_path = events_dir() / f".{event_id}.lock"
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def load_event(event_id: str) -> dict[str, Any]:
+    return read_json(event_path(event_id))
+
+
+def update_event(
+    event_id: str,
+    mutate: Callable[[dict[str, Any]], None] | None = None,
+    **updates: Any,
+) -> dict[str, Any]:
+    with event_lock(event_id):
+        event = load_event(event_id)
+        if mutate:
+            mutate(event)
+        event.update(updates)
+        atomic_write_json(event_path(event_id), event)
+        return event
+
+
+def list_events() -> list[dict[str, Any]]:
+    ensure_private_directory(events_dir())
+    events = []
+    for path in sorted(events_dir().glob("*.json")):
+        try:
+            events.append(read_json(path))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+    return events
+
+
+def is_pending(event: dict[str, Any]) -> bool:
+    return not any(
+        event.get(field)
+        for field in ("acknowledged_at", "superseded_at")
+    )
+
+
+def safe_source(value: str) -> str:
+    source = value.strip()
+    if not source or len(source) > 64:
+        raise ValueError("source must contain 1-64 characters")
+    if any(character.isspace() or ord(character) < 32 for character in source):
+        raise ValueError("source must not contain whitespace or control characters")
+    return source
+
+
+def one_line(value: Any, limit: int) -> str:
+    return " ".join(str(value).split())[:limit]
+
+
+def project_from_payload(payload: dict[str, Any]) -> tuple[str, str | None]:
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str):
+        workspace_paths = payload.get("workspacePaths")
+        if isinstance(workspace_paths, list) and workspace_paths:
+            cwd = workspace_paths[0]
+    if not isinstance(cwd, str) or not cwd:
+        return "현재 프로젝트", None
+    return Path(cwd).name or cwd, cwd
+
+
+def session_from_payload(payload: dict[str, Any]) -> str | None:
+    for field in ("session_id", "thread-id", "conversationId", "conversation_id"):
+        value = payload.get(field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def tmux_target() -> str | None:
+    pane = os.environ.get("TMUX_PANE")
+    if not pane or not shutil.which("tmux"):
+        return None
+    result = subprocess.run(
+        ["tmux", "display-message", "-p", "-t", pane, "#{session_name}:#{window_index}.#{pane_index}"],
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+    target = result.stdout.strip()
+    return target if result.returncode == 0 and target else None
+
+
+def normalize_event(
+    source: str,
+    status: str,
+    payload: dict[str, Any],
+    *,
+    label: str | None = None,
+) -> dict[str, Any]:
+    source = safe_source(source)
+    if status not in DEFAULT_CONFIG["statuses"]:
+        raise ValueError(f"unsupported status: {status}")
+    config = load_config()
+    profile = config["statuses"][status]
+    source_settings = config["sources"].get(source, {})
+    display_name = one_line(label or source_settings.get("display_name") or source, 80)
+    project, cwd = project_from_payload(payload)
+    session_id = session_from_payload(payload)
+    identity = session_id or cwd or project
+    dedupe_key = hashlib.sha256(f"{source}\0{identity}".encode()).hexdigest()[:24]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "id": str(uuid.uuid4()),
+        "source": source,
+        "source_label": display_name,
+        "status": status,
+        "project": one_line(project, 160),
+        "cwd": cwd,
+        "session_id": session_id,
+        "tmux_target": tmux_target(),
+        "terminal_app": TERMINAL_APPS.get(os.environ.get("TERM_PROGRAM", ""), "iTerm"),
+        "created_at": isoformat(),
+        "dedupe_key": dedupe_key,
+        "sound": str(profile["sound"]),
+        "slack_after_seconds": int(profile["slack_after_seconds"]),
+        "local_timeout_seconds": int(profile["local_timeout_seconds"]),
+        "acknowledged_at": None,
+        "escalated_at": None,
+        "superseded_at": None,
+        "slack_attempts": 0,
+    }
+
+
+def event_from_codex(payload: dict[str, Any], *, hook: bool) -> dict[str, Any] | None:
+    expected_field = "hook_event_name" if hook else "type"
+    expected_value = "Stop" if hook else "agent-turn-complete"
+    if payload.get(expected_field) != expected_value:
+        return None
+    return normalize_event("codex", "complete", payload)
+
+
+def event_from_agy(payload: dict[str, Any]) -> dict[str, Any]:
+    reason = payload.get("terminationReason")
+    if reason == "error" or payload.get("error"):
+        status = "error"
+    elif reason == "max_steps_exceeded":
+        status = "attention"
+    else:
+        status = "complete"
+    return normalize_event("agy", status, payload)
+
+
+def supersede_matching(event: dict[str, Any]) -> None:
+    timestamp = isoformat()
+    for existing in list_events():
+        if (
+            existing.get("id") != event["id"]
+            and existing.get("dedupe_key") == event["dedupe_key"]
+            and is_pending(existing)
+        ):
+            update_event(existing["id"], superseded_at=timestamp)
+
+
+def worker_log_path() -> Path:
+    ensure_private_directory(state_root())
+    return state_root() / "worker.log"
+
+
+def spawn_worker(event_id: str) -> None:
+    script = str(Path(__file__).resolve())
+    with worker_log_path().open("ab", buffering=0) as log:
+        subprocess.Popen(
+            [sys.executable, script, "worker", event_id],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+
+def enqueue_event(event: dict[str, Any]) -> str:
+    ensure_private_directory(events_dir())
+    supersede_matching(event)
+    atomic_write_json(event_path(event["id"]), event)
+    spawn_worker(event["id"])
+    return event["id"]
+
+
+def notification_text(event: dict[str, Any]) -> tuple[str, str]:
+    attention = event["status"] in {"attention", "error"}
+    suffix = "확인 필요" if attention else "작업 완료"
+    detail = {
+        "complete": "응답을 확인하세요",
+        "attention": "작업 상태를 확인하세요",
+        "error": "오류로 종료되었습니다",
+    }[event["status"]]
+    return f"{event['source_label']} {suffix}", f"{event['project']} · {detail}"
+
+
+def send_osascript(title: str, message: str, sound: str) -> None:
+    script = (
+        "on run argv\n"
+        "display notification (item 2 of argv) with title (item 1 of argv) "
+        "sound name (item 3 of argv)\n"
+        "end run"
+    )
+    subprocess.run(
+        [OSASCRIPT, "-e", script, title, message, sound],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=5,
+    )
+
+
+def slack_enabled() -> bool:
+    return runtime_settings().get("slack_enabled") is True
+
+
+def run_alerter(event: dict[str, Any], executable: str) -> str:
+    title, message = notification_text(event)
+    command = [
+        executable,
+        "--title",
+        title,
+        "--message",
+        message,
+        "--actions",
+        "확인,터미널로 이동",
+        "--dropdownLabel",
+        "처리",
+        "--closeLabel",
+        "나중에",
+        "--sound",
+        event["sound"],
+        "--group",
+        event["dedupe_key"],
+    ]
+    timeout = event["local_timeout_seconds"] if slack_enabled() else 0
+    if timeout > 0:
+        command.extend(["--timeout", str(timeout)])
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+    return result.stdout.strip()
+
+
+def open_event_target(event: dict[str, Any]) -> None:
+    target = event.get("tmux_target")
+    if target and shutil.which("tmux"):
+        subprocess.run(["tmux", "switch-client", "-t", target], check=False, timeout=3)
+        subprocess.run(["tmux", "select-pane", "-t", target], check=False, timeout=3)
+    application = event.get("terminal_app") or "iTerm"
+    subprocess.run(["open", "-a", application], check=False, timeout=3)
+
+
+def acknowledge_event(event_id: str, *, opened: bool = False) -> None:
+    updates: dict[str, Any] = {"acknowledged_at": isoformat()}
+    if opened:
+        updates["opened_at"] = updates["acknowledged_at"]
+    update_event(event_id, **updates)
+
+
+def remove_notification(event: dict[str, Any]) -> None:
+    alerter = shutil.which("alerter")
+    if not alerter:
+        return
+    subprocess.run(
+        [alerter, "--remove", event["dedupe_key"]],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=5,
+    )
+
+
+def handle_alerter_response(event: dict[str, Any], response: str) -> None:
+    normalized = response.strip()
+    if normalized in {"터미널로 이동", "@CONTENTCLICKED"}:
+        open_event_target(event)
+        acknowledge_event(event["id"], opened=True)
+    elif normalized in {"확인", "@ACTIONCLICKED"}:
+        acknowledge_event(event["id"])
+    elif normalized in {"@CLOSED", "@TIMEOUT", "", "나중에"}:
+        return
+
+
+def run_worker(event_id: str) -> int:
+    event = load_event(event_id)
+    if not is_pending(event):
+        return 0
+    title, message = notification_text(event)
+    alerter = shutil.which("alerter")
+    if not alerter:
+        send_osascript(title, message, event["sound"])
+        update_event(event_id, presented_at=isoformat(), notification_backend="osascript")
+        return 0
+    update_event(event_id, presented_at=isoformat(), notification_backend="alerter")
+    response = run_alerter(event, alerter)
+    handle_alerter_response(event, response)
+    return 0
+
+
+def keychain_account() -> str:
+    return getpass.getuser()
+
+
+def valid_slack_webhook(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "hooks.slack.com"
+        and parsed.path.startswith("/services/")
+    )
+
+
+def read_slack_webhook() -> str | None:
+    result = subprocess.run(
+        [SECURITY, "find-generic-password", "-a", keychain_account(), "-s", KEYCHAIN_SERVICE, "-w"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if result.returncode != 0:
+        return None
+    webhook = result.stdout.strip()
+    return webhook if valid_slack_webhook(webhook) else None
+
+
+def configure_slack() -> int:
+    print("Slack Incoming Webhook URL을 Keychain 프롬프트에 붙여넣으세요.")
+    result = subprocess.run(
+        [
+            SECURITY,
+            "add-generic-password",
+            "-U",
+            "-a",
+            keychain_account(),
+            "-s",
+            KEYCHAIN_SERVICE,
+            "-l",
+            "Agent Notify Slack Webhook",
+            "-w",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        print("agent-notify: Keychain 등록에 실패했습니다.", file=sys.stderr)
+        return 1
+    if read_slack_webhook() is None:
+        print("agent-notify: Slack Webhook 형식이 올바르지 않아 활성화하지 않았습니다.", file=sys.stderr)
+        return 1
+    update_runtime_settings(slack_enabled=True)
+    print("Slack 에스컬레이션이 활성화되었습니다.")
+    return 0
+
+
+def post_slack(webhook: str, text: str) -> None:
+    request = urllib.request.Request(
+        webhook,
+        data=json.dumps({"text": text}, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        if not 200 <= response.status < 300:
+            raise urllib.error.HTTPError(
+                webhook, response.status, "Slack webhook failed", response.headers, None
+            )
+
+
+def slack_text(event: dict[str, Any], current_time: datetime) -> str:
+    elapsed = max(0, int((current_time - parse_time(event["created_at"])).total_seconds() // 60))
+    status = {"complete": "완료", "attention": "확인 필요", "error": "오류"}[event["status"]]
+    return (
+        f":hourglass_flowing_sand: *{event['source_label']} 작업 미확인*\n"
+        f"• 프로젝트: {event['project']}\n"
+        f"• 상태: {status}\n"
+        f"• 미확인: {elapsed}분"
+    )
+
+
+def sweep(current_time: datetime | None = None) -> int:
+    if not slack_enabled():
+        return 0
+    webhook = read_slack_webhook()
+    if webhook is None:
+        print("agent-notify: Slack은 활성화됐지만 Keychain Webhook을 읽지 못했습니다.", file=sys.stderr)
+        return 1
+    current_time = current_time or now_utc()
+    failures = 0
+    for event in list_events():
+        if not is_pending(event) or event.get("escalated_at"):
+            continue
+        attempts = int(event.get("slack_attempts", 0))
+        if attempts >= 3:
+            continue
+        due_at = parse_time(event["created_at"]) + timedelta(
+            seconds=int(event["slack_after_seconds"])
+        )
+        if current_time < due_at:
+            continue
+        try:
+            post_slack(webhook, slack_text(event, current_time))
+        except (OSError, urllib.error.URLError, urllib.error.HTTPError):
+            failures += 1
+            update_event(
+                event["id"],
+                slack_attempts=attempts + 1,
+                slack_last_failed_at=isoformat(current_time),
+            )
+            continue
+        update_event(
+            event["id"],
+            slack_attempts=attempts + 1,
+            escalated_at=isoformat(current_time),
+        )
+    return 1 if failures else 0
+
+
+def print_status() -> int:
+    pending = [event for event in list_events() if is_pending(event)]
+    if not pending:
+        print("pending 알림이 없습니다.")
+    for event in pending:
+        marker = "slack" if event.get("escalated_at") else "local"
+        print(
+            f"{event['id'][:8]}  {event['source']:<12} {event['status']:<9} "
+            f"{marker:<5}  {event['project']}"
+        )
+    return 0
+
+
+def ack_command(identifier: str) -> int:
+    matched = 0
+    for event in list_events():
+        if is_pending(event) and (identifier == "--all" or event["id"].startswith(identifier)):
+            remove_notification(event)
+            acknowledge_event(event["id"])
+            matched += 1
+    if matched == 0:
+        print("agent-notify: 일치하는 pending 알림이 없습니다.", file=sys.stderr)
+        return 1
+    print(f"{matched}개 알림을 확인 처리했습니다.")
+    return 0
+
+
+def open_command(identifier: str) -> int:
+    matches = [
+        event for event in list_events() if is_pending(event) and event["id"].startswith(identifier)
+    ]
+    if len(matches) != 1:
+        print("agent-notify: 하나의 pending 알림 ID를 지정하세요.", file=sys.stderr)
+        return 1
+    remove_notification(matches[0])
+    open_event_target(matches[0])
+    acknowledge_event(matches[0]["id"], opened=True)
+    return 0
+
+
+def generic_event(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="agent-notify event")
+    parser.add_argument("--source", required=True)
+    parser.add_argument("--label")
+    parser.add_argument("--status", choices=["complete", "attention", "error"], default="complete")
+    parser.add_argument("--project")
+    parser.add_argument("--cwd")
+    parser.add_argument("--session")
+    args = parser.parse_args(arguments)
+    cwd = args.cwd
+    if not cwd and args.project:
+        cwd = args.project
+    payload = {"cwd": cwd, "session_id": args.session}
+    event = normalize_event(args.source, args.status, payload, label=args.label)
+    if args.project:
+        event["project"] = one_line(args.project, 160)
+    enqueue_event(event)
+    return 0
+
+
+def slack_command(arguments: list[str]) -> int:
+    command = arguments[0] if arguments else "status"
+    if command == "configure":
+        return configure_slack()
+    if command == "disable":
+        update_runtime_settings(slack_enabled=False)
+        print("Slack 에스컬레이션을 비활성화했습니다. Keychain 항목은 보존했습니다.")
+        return 0
+    if command == "status":
+        configured = read_slack_webhook() is not None
+        print(f"enabled={str(slack_enabled()).lower()} configured={str(configured).lower()}")
+        return 0
+    if command == "test":
+        webhook = read_slack_webhook()
+        if webhook is None:
+            print("agent-notify: Keychain에 유효한 Webhook이 없습니다.", file=sys.stderr)
+            return 1
+        post_slack(webhook, ":white_check_mark: Agent Notify Slack 테스트")
+        print("Slack 테스트 메시지를 전송했습니다.")
+        return 0
+    print("usage: agent-notify slack <configure|disable|status|test>", file=sys.stderr)
+    return 2
+
+
+def load_payload(source: str, arguments: list[str], stdin: str) -> dict[str, Any]:
+    raw = arguments[0] if source == "codex" and arguments else stdin
+    if not raw.strip():
+        return {}
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("notification payload must be a JSON object")
+    return payload
+
+
+def emit_agy_result() -> None:
+    print(json.dumps(AGY_ALLOW_STOP, separators=(",", ":")))
+
+
+def hook_command(source: str, arguments: list[str], stdin: str) -> int:
+    payload = load_payload(source, arguments, stdin)
+    if source == "codex":
+        event = event_from_codex(payload, hook=False)
+    elif source == "codex-hook":
+        event = event_from_codex(payload, hook=True)
+    else:
+        event = event_from_agy(payload)
+    if event is not None:
+        enqueue_event(event)
+    if source == "agy":
+        emit_agy_result()
+    return 0
+
+
+def main(arguments: list[str] | None = None, stdin: str | None = None) -> int:
+    arguments = list(sys.argv[1:] if arguments is None else arguments)
+    if not arguments:
+        print(USAGE, file=sys.stderr, end="")
+        return 2
+    command = arguments.pop(0)
+    try:
+        if command in {"-h", "--help", "help"}:
+            print(USAGE, end="")
+            return 0
+        if command in HOOK_SOURCES:
+            raw_stdin = sys.stdin.read() if stdin is None and command != "codex" else (stdin or "")
+            return hook_command(command, arguments, raw_stdin)
+        if command == "event":
+            return generic_event(arguments)
+        if command == "worker" and len(arguments) == 1:
+            return run_worker(arguments[0])
+        if command == "sweep":
+            return sweep()
+        if command == "status":
+            return print_status()
+        if command == "ack" and len(arguments) == 1:
+            return ack_command(arguments[0])
+        if command == "open" and len(arguments) == 1:
+            return open_command(arguments[0])
+        if command == "slack":
+            return slack_command(arguments)
+        if command == "test":
+            send_osascript(
+                "에이전트 알림 테스트",
+                "macOS 알림이 정상적으로 연결되었습니다",
+                "Glass",
+            )
+            return 0
+        raise ValueError(f"unsupported command: {command}")
+    except (json.JSONDecodeError, ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f"agent-notify: {error}", file=sys.stderr)
+        if command == "agy":
+            emit_agy_result()
+        return 0 if command in HOOK_SOURCES else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
