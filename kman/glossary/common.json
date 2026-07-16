@@ -1,0 +1,42 @@
+{
+  "API": {
+    "full": "Application Programming Interface",
+    "ko": "애플리케이션 프로그래밍 인터페이스"
+  },
+  "CLI": {
+    "full": "Command-Line Interface",
+    "ko": "명령줄 인터페이스"
+  },
+  "CPU": {
+    "full": "Central Processing Unit",
+    "ko": "중앙 처리 장치"
+  },
+  "IPC": {
+    "full": "Inter-Process Communication",
+    "ko": "프로세스 간 통신"
+  },
+  "PID": {
+    "full": "Process Identifier",
+    "ko": "프로세스 식별자"
+  },
+  "PTY": {
+    "full": "Pseudo-Terminal",
+    "ko": "의사 터미널"
+  },
+  "TTY": {
+    "full": "Teletypewriter",
+    "ko": "터미널 장치"
+  },
+  "UID": {
+    "full": "User Identifier",
+    "ko": "사용자 식별자"
+  },
+  "UTF-8": {
+    "full": "Unicode Transformation Format - 8-bit",
+    "ko": "8비트 유니코드 변환 형식"
+  },
+  "UTF8": {
+    "full": "Unicode Transformation Format - 8-bit",
+    "ko": "8비트 유니코드 변환 형식"
+  }
+}

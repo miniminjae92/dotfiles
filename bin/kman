@@ -1,0 +1,910 @@
+#!/usr/bin/env python3
+"""Translate man pages to Korean with an on-device cache and glossary."""
+
+from __future__ import annotations
+
+import argparse
+import gzip
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+VERSION = 3
+BLOCK_CACHE_VERSION = "apple-low-latency-v1"
+MAN_WIDTH = 100
+DATA_DIR = Path(__file__).resolve().parent.parent / "kman"
+COMMON_GLOSSARY = DATA_DIR / "glossary/common.json"
+COMMAND_GLOSSARY_DIR = DATA_DIR / "glossary/commands"
+DEFAULT_CACHE_DIR = Path(
+    os.environ.get(
+        "KMAN_CACHE_DIR",
+        str(Path.home() / "Library/Caches/kman")
+        if sys.platform == "darwin"
+        else str(Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "kman"),
+    )
+)
+HEADING_TRANSLATIONS = {
+    "NAME": "이름",
+    "SYNOPSIS": "사용법",
+    "DESCRIPTION": "설명",
+    "OPTIONS": "옵션",
+    "COMMANDS": "명령",
+    "EXAMPLES": "예제",
+    "FILES": "파일",
+    "ENVIRONMENT": "환경",
+    "EXIT STATUS": "종료 상태",
+    "SEE ALSO": "함께 보기",
+    "HISTORY": "역사",
+    "AUTHORS": "작성자",
+    "BUGS": "알려진 문제",
+    "BUFFERS": "버퍼",
+    "CLIENTS AND SESSIONS": "클라이언트와 세션",
+    "COMMAND PARSING AND EXECUTION": "명령 파싱과 실행",
+    "CONTROL MODE": "제어 모드",
+    "DEFAULT KEY BINDINGS": "기본 키 바인딩",
+    "EXIT MESSAGES": "종료 메시지",
+    "FORMATS": "형식",
+    "GLOBAL AND SESSION ENVIRONMENT": "전역 및 세션 환경",
+    "HOOKS": "훅",
+    "KEY BINDINGS": "키 바인딩",
+    "MISCELLANEOUS": "기타",
+    "MOUSE SUPPORT": "마우스 지원",
+    "NAMES AND TITLES": "이름과 제목",
+    "PARSING SYNTAX": "파싱 문법",
+    "STATUS LINE": "상태 표시줄",
+    "STYLES": "스타일",
+    "TERMINFO EXTENSIONS": "터미널 정보 확장",
+    "WINDOWS AND PANES": "창과 패널",
+}
+HEADING_WORDS = set(HEADING_TRANSLATIONS) | {
+    "DEFAULT",
+    "FORMATS",
+    "KEY",
+    "KEYS",
+    "PARSING",
+    "STATUS",
+    "STYLES",
+    "WINDOWS",
+}
+NON_ACRONYM_TOKENS = {
+    "EDITOR",
+    "HOME",
+    "LANG",
+    "MANPAGER",
+    "PAGER",
+    "PATH",
+    "PWD",
+    "SHELL",
+    "TERM",
+    "VARIABLE",
+    "VISUAL",
+}
+ACRONYM_RE = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])[A-Z]{2,}[0-9]*(?![A-Za-z0-9_])")
+ENVIRONMENT_RE = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")
+TECHNICAL_RE = re.compile(
+    r"https?://[^\s]+"
+    r"|(?<!\w)--?[A-Za-z0-9][A-Za-z0-9-]*"
+    r"|\b[A-Za-z0-9_.+-]+\([1-9][A-Za-z]*\)"
+    r"|\b[A-Z][A-Z0-9_]*(?:-[A-Z0-9]+)*\b"
+    r"|(?:~|/|\$[A-Z][A-Z0-9_]*/)[^\s,;:()]+"
+    r"|\b[A-Za-z0-9_-]+\.(?:conf|log|sock|json|yml|yaml|toml)\b"
+    r"|\b[a-z][a-z0-9]+(?:-[a-z0-9]+)+\b"
+    r"|\b(?:C|M|S)-[A-Za-z0-9]+\b"
+)
+EXPORTABLE_LICENSES = {"ISC", "MIT", "BSD-2-Clause", "BSD-3-Clause"}
+
+
+class KmanError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ManPage:
+    name: str
+    section: str | None
+    source_path: Path
+    source_text: str
+    rendered_text: str
+    source_hash: str
+    license_name: str
+    license_notice: str
+
+
+@dataclass
+class RenderBlock:
+    original: str
+    separator: str
+    heading: str | None = None
+    indent: str = ""
+    pieces: list[dict[str, Any]] | None = None
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Apple 온디바이스 번역으로 한국어 man 페이지를 표시합니다."
+    )
+    parser.add_argument("man_args", nargs="+", metavar="MAN_ARG")
+    parser.add_argument("--terms", action="store_true", help="문서에 나온 검토 용어를 표시합니다.")
+    parser.add_argument(
+        "--new-terms",
+        action="store_true",
+        help="공통·명령 용어집에 없는 약어 후보만 표시합니다.",
+    )
+    parser.add_argument("--refresh", action="store_true", help="번역 캐시를 새로 만듭니다.")
+    parser.add_argument(
+        "--export",
+        type=Path,
+        metavar="PATH",
+        help="검토·게시용 Markdown으로 내보냅니다.",
+    )
+    parser.add_argument("--no-pager", action="store_true", help="pager 없이 표준 출력에 씁니다.")
+    parser.add_argument(
+        "--translator",
+        choices=("apple", "identity"),
+        default=os.environ.get("KMAN_TRANSLATOR", "apple"),
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR, help=argparse.SUPPRESS)
+    parser.add_argument("--version", action="version", version=f"kman {VERSION}")
+    args = parser.parse_args(argv)
+    if not 1 <= len(args.man_args) <= 2:
+        parser.error("사용법: kman [section] page")
+    return args
+
+
+def man_identity(man_args: list[str]) -> tuple[str | None, str]:
+    if len(man_args) == 1:
+        return None, man_args[0]
+    return man_args[0], man_args[1]
+
+
+def run_checked(command: list[str], *, input_text: str | None = None) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            input=input_text,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError as error:
+        raise KmanError(f"필요한 명령을 찾을 수 없습니다: {command[0]}") from error
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip()
+        raise KmanError(message or f"명령 실행 실패: {' '.join(command)}")
+    return result.stdout
+
+
+def read_man_source(path: Path) -> tuple[bytes, str]:
+    raw = path.read_bytes()
+    if path.suffix == ".gz":
+        decoded = gzip.decompress(raw)
+    else:
+        decoded = raw
+    return raw, decoded.decode("utf-8", errors="replace")
+
+
+def detect_license(source_text: str) -> str:
+    if "Permission to use, copy, modify, and distribute this software" in source_text:
+        return "ISC"
+    if "Permission is hereby granted, free of charge" in source_text:
+        return "MIT"
+    if "Redistribution and use in source and binary forms" in source_text:
+        return "BSD-3-Clause" if re.search(r"^\.\\\" 3\.", source_text, re.MULTILINE) else "BSD-2-Clause"
+    if "GNU Free Documentation License" in source_text:
+        return "GFDL"
+    return "UNKNOWN"
+
+
+def extract_license_notice(source_text: str) -> str:
+    lines: list[str] = []
+    for line in source_text.splitlines():
+        if line.startswith('.\\"'):
+            cleaned = line[3:].lstrip(" -")
+            lines.append(cleaned)
+            continue
+        if lines:
+            break
+    return "\n".join(lines).strip()
+
+
+def load_man_page(section: str | None, name: str) -> ManPage:
+    arguments = [name] if section is None else [section, name]
+    source_output = run_checked(["man", "-w", *arguments])
+    source_lines = [line.strip() for line in source_output.splitlines() if line.strip()]
+    if not source_lines:
+        raise KmanError(f"man 페이지를 찾지 못했습니다: {name}")
+    source_path = Path(source_lines[-1])
+    raw, source_text = read_man_source(source_path)
+
+    env = os.environ.copy()
+    env.update({"MANPAGER": "cat", "PAGER": "cat", "MANWIDTH": str(MAN_WIDTH)})
+    man_result = subprocess.run(
+        ["man", *arguments],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    if man_result.returncode != 0:
+        raise KmanError(man_result.stderr.strip() or f"man 페이지 렌더링 실패: {name}")
+    rendered = run_checked(["col", "-bx"], input_text=man_result.stdout).rstrip() + "\n"
+    digest = hashlib.sha256(raw + b"\0" + rendered.encode()).hexdigest()
+    return ManPage(
+        name=name,
+        section=section,
+        source_path=source_path,
+        source_text=source_text,
+        rendered_text=rendered,
+        source_hash=digest,
+        license_name=detect_license(source_text),
+        license_notice=extract_license_notice(source_text),
+    )
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise KmanError(f"용어집을 읽지 못했습니다: {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise KmanError(f"용어집 최상위 값은 객체여야 합니다: {path}")
+    return value
+
+
+def glossaries_for(command: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    return load_json(COMMON_GLOSSARY), load_json(COMMAND_GLOSSARY_DIR / f"{command}.json")
+
+
+def candidate_terms(text: str, known: set[str]) -> dict[str, dict[str, Any]]:
+    section_tokens: set[str] = set()
+    for line in text.splitlines():
+        normalized = " ".join(line.split())
+        if line == line.lstrip() and normalized.isupper() and len(normalized) < 100:
+            section_tokens.update(ACRONYM_RE.findall(normalized))
+    scrubbed = ENVIRONMENT_RE.sub(" ", text)
+    scrubbed = re.sub(r"(?<!\w)-[A-Z]{1,}[A-Za-z0-9-]*", " ", scrubbed)
+    scrubbed = re.sub(r"\b[CMS]-[A-Za-z0-9-]+\b", " ", scrubbed)
+    candidates: dict[str, dict[str, Any]] = {}
+    for line in scrubbed.splitlines():
+        normalized = " ".join(line.split())
+        if not normalized or normalized in HEADING_WORDS:
+            continue
+        for token in ACRONYM_RE.findall(normalized):
+            if (
+                token in known
+                or token in HEADING_WORDS
+                or token in NON_ACRONYM_TOKENS
+                or token in section_tokens
+                or token.isdigit()
+                or token.endswith("VAR")
+            ):
+                continue
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}=", normalized):
+                continue
+            entry = candidates.setdefault(token, {"status": "candidate", "contexts": []})
+            if normalized not in entry["contexts"] and len(entry["contexts"]) < 3:
+                entry["contexts"].append(normalized[:320])
+    return dict(sorted(candidates.items()))
+
+
+def technical_pieces(text: str, command: str) -> list[dict[str, Any]]:
+    pattern = re.compile(rf"\b{re.escape(command)}\b|{TECHNICAL_RE.pattern}")
+    pieces: list[dict[str, Any]] = []
+    position = 0
+    for match in pattern.finditer(text):
+        if match.start() > position:
+            pieces.append({"text": text[position : match.start()], "translate": True})
+        pieces.append({"text": match.group(0), "translate": False})
+        position = match.end()
+    if position < len(text):
+        pieces.append({"text": text[position:], "translate": True})
+    return pieces or [{"text": text, "translate": True}]
+
+
+def block_is_translatable(block: str) -> bool:
+    stripped = block.strip()
+    if not stripped or len(re.findall(r"[A-Za-z]", stripped)) < 8:
+        return False
+    if stripped in HEADING_TRANSLATIONS or (stripped.isupper() and len(stripped) < 80):
+        return False
+    lines = [line for line in block.splitlines() if line.strip()]
+    if not lines:
+        return False
+    indents = [len(line) - len(line.lstrip()) for line in lines]
+    if any(line.lstrip().startswith(("$ ", "> ")) for line in lines):
+        return False
+    sentence_lines = sum(bool(re.search(r"[.!?;:]$", line.rstrip())) for line in lines)
+    if min(indents) >= 10 and sentence_lines == 0:
+        return False
+    column_lines = sum(bool(re.search(r"\S\s{3,}\S", line.strip())) for line in lines)
+    if len(lines) >= 3 and column_lines >= len(lines) // 2 + 1:
+        return False
+    symbols = len(re.findall(r"[][{}<>|$\\]", stripped))
+    return symbols < max(8, len(stripped) // 8)
+
+
+def prepare_blocks(text: str, command: str) -> list[RenderBlock]:
+    normalized_lines: list[str] = []
+    for line in text.splitlines():
+        if (
+            line == line.lstrip()
+            and line.strip().isupper()
+            and len(line.strip()) < 100
+            and normalized_lines
+            and normalized_lines[-1] != ""
+        ):
+            normalized_lines.append("")
+        normalized_lines.append(line)
+        if line == line.lstrip() and line.strip().isupper() and len(line.strip()) < 100:
+            normalized_lines.append("")
+    text = "\n".join(normalized_lines)
+    parts = re.split(r"(\n[ \t]*\n)", text)
+    blocks: list[RenderBlock] = []
+    index = 0
+    while index < len(parts):
+        content = parts[index]
+        separator = parts[index + 1] if index + 1 < len(parts) else ""
+        index += 2
+        stripped = content.strip()
+        if stripped in HEADING_TRANSLATIONS:
+            blocks.append(
+                RenderBlock(content, separator, heading=HEADING_TRANSLATIONS[stripped])
+            )
+            continue
+        if not block_is_translatable(content):
+            blocks.append(RenderBlock(content, separator))
+            continue
+        lines = [line for line in content.splitlines() if line.strip()]
+        indent_size = min(len(line) - len(line.lstrip()) for line in lines)
+        indent = " " * indent_size
+        unwrapped = " ".join(line.strip() for line in lines)
+        blocks.append(
+            RenderBlock(
+                content,
+                separator,
+                indent=indent,
+                pieces=technical_pieces(unwrapped, command),
+            )
+        )
+    return blocks
+
+
+def character_width(character: str) -> int:
+    if unicodedata.combining(character):
+        return 0
+    return 2 if unicodedata.east_asian_width(character) in {"W", "F"} else 1
+
+
+def display_width(value: str) -> int:
+    return sum(character_width(character) for character in value)
+
+
+def wrap_for_terminal(text: str, indent: str, width: int = MAN_WIDTH) -> str:
+    words = text.split()
+    if not words:
+        return indent.rstrip()
+    lines: list[str] = []
+    current = indent
+    for word in words:
+        separator = "" if current == indent else " "
+        candidate = current + separator + word
+        if current != indent and display_width(candidate) > width:
+            lines.append(current.rstrip())
+            current = indent + word
+        else:
+            current = candidate
+    lines.append(current.rstrip())
+    return "\n".join(lines)
+
+
+def protect_items(
+    items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    protected_items: list[dict[str, Any]] = []
+    mappings: list[dict[str, str]] = []
+    for item_index, item in enumerate(items):
+        mapping: dict[str, str] = {}
+        pieces: list[dict[str, Any]] = []
+        for piece_index, piece in enumerate(item["pieces"]):
+            if piece["translate"]:
+                pieces.append(piece)
+                continue
+            placeholder = f"KMANPH{item_index}X{piece_index}Z"
+            mapping[placeholder] = piece["text"]
+            pieces.append({"text": placeholder, "translate": False})
+        protected_items.append({"pieces": pieces})
+        mappings.append(mapping)
+    return protected_items, mappings
+
+
+def restore_protected_terms(text: str, mapping: dict[str, str]) -> str:
+    restored = text
+    for placeholder, original in mapping.items():
+        pattern = re.compile(re.escape(placeholder), re.IGNORECASE)
+        restored, count = pattern.subn(lambda _: original, restored)
+        if count != 1:
+            raise KmanError(f"보호 토큰을 복원하지 못했습니다: {original}")
+    return restored
+
+
+def finalize_translation_item(
+    value: str,
+    mapping: dict[str, str],
+    source_item: dict[str, Any],
+    destination: Path,
+) -> tuple[str, str | None]:
+    try:
+        restored = restore_protected_terms(value, mapping)
+    except KmanError as error:
+        return (
+            item_source_text(source_item),
+            f"{error}; 이 문단은 영문 원문으로 유지하며 다음 새로고침에서 다시 시도합니다.",
+        )
+    temporary = destination.with_suffix(".tmp")
+    temporary.write_text(restored, encoding="utf-8")
+    temporary.replace(destination)
+    return restored, None
+
+
+def build_helper(cache_dir: Path) -> Path:
+    if sys.platform != "darwin":
+        raise KmanError("Apple Translation 백엔드는 macOS에서만 사용할 수 있습니다.")
+    source = DATA_DIR / "KmanTranslator.swift"
+    plist = DATA_DIR / "Info.plist"
+    swift_version = run_checked(["swiftc", "--version"])
+    digest = hashlib.sha256(
+        source.read_bytes() + plist.read_bytes() + swift_version.encode()
+    ).hexdigest()[:16]
+    app = cache_dir / "helper" / digest / "KmanTranslator.app"
+    executable = app / "Contents/MacOS/KmanTranslator"
+    if executable.exists():
+        return executable
+
+    contents = app / "Contents"
+    macos_dir = contents / "MacOS"
+    macos_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(plist, contents / "Info.plist")
+    module_cache = cache_dir / "helper/module-cache"
+    module_cache.mkdir(parents=True, exist_ok=True)
+    sdk = run_checked(["xcrun", "--show-sdk-path"]).strip()
+    architecture = platform.machine() or "arm64"
+    command = [
+        "swiftc",
+        "-Xfrontend",
+        "-downgrade-typecheck-interface-error",
+        "-sdk",
+        sdk,
+        "-target",
+        f"{architecture}-apple-macosx26.4",
+        "-parse-as-library",
+        str(source),
+        "-o",
+        str(executable),
+    ]
+    env = os.environ.copy()
+    env["CLANG_MODULE_CACHE_PATH"] = str(module_cache)
+    env["SWIFT_MODULECACHE_PATH"] = str(module_cache)
+    result = subprocess.run(command, text=True, capture_output=True, env=env, check=False)
+    if result.returncode != 0:
+        shutil.rmtree(app.parent, ignore_errors=True)
+        raise KmanError(f"Apple 번역 도우미 빌드 실패:\n{result.stderr.strip()}")
+    if shutil.which("codesign"):
+        subprocess.run(
+            ["codesign", "--force", "--sign", "-", str(app)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    return executable
+
+
+def item_source_text(item: dict[str, Any]) -> str:
+    return "".join(piece["text"] for piece in item["pieces"])
+
+
+def item_cache_path(block_cache_dir: Path, item: dict[str, Any]) -> Path:
+    serialized = json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(
+        (BLOCK_CACHE_VERSION + "\0" + serialized).encode("utf-8")
+    ).hexdigest()
+    return block_cache_dir / f"{digest}.txt"
+
+
+def apple_translate(
+    items: list[dict[str, Any]],
+    cache_dir: Path,
+    block_cache_dir: Path,
+    *,
+    refresh: bool = False,
+) -> tuple[list[str], list[str]]:
+    helper = build_helper(cache_dir)
+    protected_items, protection_maps = protect_items(items)
+    block_cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_paths = [item_cache_path(block_cache_dir, item) for item in items]
+    translations: list[str | None] = [None] * len(items)
+    warnings: list[str] = []
+    if not refresh:
+        for index, path in enumerate(cache_paths):
+            if path.exists():
+                translations[index] = path.read_text(encoding="utf-8")
+
+    batches: list[list[int]] = []
+    current: list[int] = []
+    current_chars = 0
+    for index, item in enumerate(protected_items):
+        if translations[index] is not None:
+            continue
+        size = sum(len(piece["text"]) for piece in item["pieces"])
+        if current and (len(current) >= 80 or current_chars + size > 60_000):
+            batches.append(current)
+            current = []
+            current_chars = 0
+        current.append(index)
+        current_chars += size
+    if current:
+        batches.append(current)
+
+    for batch_indexes in batches:
+        batch = [protected_items[index] for index in batch_indexes]
+        with tempfile.TemporaryDirectory(prefix="kman-") as temp_dir:
+            input_path = Path(temp_dir) / "input.json"
+            output_path = Path(temp_dir) / "output.json"
+            input_path.write_text(
+                json.dumps({"source": "en", "target": "ko", "items": batch}),
+                encoding="utf-8",
+            )
+            try:
+                result = subprocess.run(
+                    [str(helper), str(input_path), str(output_path)],
+                    text=True,
+                    capture_output=True,
+                    timeout=300,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise KmanError("Apple 번역이 5분 안에 완료되지 않았습니다.") from error
+            if result.returncode != 0 or not output_path.exists():
+                detail = result.stderr.strip() or "번역 결과 파일이 생성되지 않았습니다."
+                if "언어 모델" in detail:
+                    detail += (
+                        "\n시스템 설정 > 일반 > 언어 및 지역 > 번역 언어에서 "
+                        "영어와 한국어를 내려받은 뒤 다시 실행하세요."
+                    )
+                raise KmanError(f"Apple 번역 실패: {detail}")
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            values = payload.get("translations")
+            if not isinstance(values, list) or len(values) != len(batch):
+                raise KmanError("Apple 번역 응답 개수가 요청과 다릅니다.")
+            for index, value in zip(batch_indexes, values, strict=True):
+                restored, warning = finalize_translation_item(
+                    str(value),
+                    protection_maps[index],
+                    items[index],
+                    cache_paths[index],
+                )
+                translations[index] = restored
+                if warning:
+                    warnings.append(warning)
+    return [
+        value if value is not None else item_source_text(items[index])
+        for index, value in enumerate(translations)
+    ], warnings
+
+
+def render_translation(
+    text: str,
+    command: str,
+    translator: str,
+    cache_dir: Path,
+    block_cache_dir: Path,
+    *,
+    refresh: bool = False,
+) -> tuple[str, list[str]]:
+    blocks = prepare_blocks(text, command)
+    translatable = [
+        {"pieces": block.pieces} for block in blocks if block.pieces is not None
+    ]
+    if translator == "identity":
+        translations = [
+            "".join(piece["text"] for piece in item["pieces"])
+            for item in translatable
+        ]
+        warnings: list[str] = []
+    else:
+        translations, warnings = apple_translate(
+            translatable,
+            cache_dir,
+            block_cache_dir,
+            refresh=refresh,
+        )
+
+    translation_index = 0
+    rendered: list[str] = []
+    for block in blocks:
+        if block.heading is not None:
+            rendered.append(block.indent + block.heading + block.separator)
+            continue
+        if block.pieces is None:
+            rendered.append(block.original + block.separator)
+            continue
+        translated = translations[translation_index].strip()
+        translation_index += 1
+        wrapped = wrap_for_terminal(translated, block.indent)
+        rendered.append(wrapped + block.separator)
+    return "".join(rendered).rstrip() + "\n", warnings
+
+
+def cache_path(cache_dir: Path, page: ManPage) -> Path:
+    section = page.section or "auto"
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", page.name)
+    return cache_dir / f"{safe_name}.{section}" / page.source_hash
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
+def prepare_cache(
+    page: ManPage, root: Path, translator: str
+) -> tuple[Path, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    page_cache = cache_path(root, page)
+    common, command = glossaries_for(page.name)
+    known = set(common) | set(command) | {page.name.upper()}
+    candidates = candidate_terms(page.rendered_text, known)
+    metadata = {
+        "schema_version": VERSION,
+        "command": page.name,
+        "section": page.section,
+        "source_path": str(page.source_path),
+        "source_hash": page.source_hash,
+        "source_license": page.license_name,
+        "translation": "apple-on-device" if translator == "apple" else translator,
+        "translation_strategy": "low-latency" if translator == "apple" else translator,
+        "target_language": "ko",
+        "unofficial_translation": True,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    write_json(page_cache / "metadata.json", metadata)
+    write_json(page_cache / "candidates.json", candidates)
+    return page_cache, common, command, candidates
+
+
+def print_terms(text: str, common: dict[str, Any], command: dict[str, Any]) -> None:
+    found = []
+    for scope, glossary in (("common", common), ("command", command)):
+        for token, entry in glossary.items():
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", text):
+                found.append((token, entry, scope))
+    if not found:
+        print("검토된 용어가 없습니다.")
+        return
+    for token, entry, scope in sorted(found):
+        print(f"{token}\t{entry.get('full', '')}\t{entry.get('ko', '')}\t[{scope}]")
+
+
+def print_candidates(candidates: dict[str, Any]) -> None:
+    if not candidates:
+        print("새 약어 후보가 없습니다.")
+        return
+    for token, entry in candidates.items():
+        context = entry.get("contexts", [""])[0]
+        print(f"{token}\t{context}")
+
+
+def export_markdown(
+    destination: Path,
+    page: ManPage,
+    translation: str,
+    common: dict[str, Any],
+    command: dict[str, Any],
+) -> None:
+    if page.license_name not in EXPORTABLE_LICENSES:
+        raise KmanError(
+            f"라이선스가 공개 허용 목록에 없습니다: {page.license_name}. "
+            "전체 번역은 로컬 캐시에만 유지하세요."
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    terms: list[str] = []
+    for glossary in (common, command):
+        for token, entry in glossary.items():
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", page.rendered_text):
+                terms.append(
+                    f"| `{token}` | {entry.get('full', '')} | {entry.get('ko', '')} |"
+                )
+    section = page.section or "auto"
+    frontmatter = [
+        "---",
+        f"title: {json.dumps(f'{page.name}({section}) 비공식 한국어 번역', ensure_ascii=False)}",
+        f"command: {json.dumps(page.name)}",
+        f"section: {json.dumps(section)}",
+        f"source_hash: {json.dumps(page.source_hash)}",
+        f"source_license: {json.dumps(page.license_name)}",
+        "unofficial_translation: true",
+        "reviewed: false",
+        "---",
+        "",
+        "> 기계 생성된 비공식 한국어 번역입니다. 정확성의 최종 기준은 설치된 영문 원문입니다.",
+        "",
+        "```text",
+        translation.rstrip(),
+        "```",
+    ]
+    if terms:
+        frontmatter.extend(
+            [
+                "",
+                "## 용어",
+                "",
+                "| 약어 | 원문 | 한국어 |",
+                "|---|---|---|",
+                *sorted(set(terms)),
+            ]
+        )
+    if page.license_notice:
+        frontmatter.extend(
+            [
+                "",
+                "## 원문 저작권 및 라이선스",
+                "",
+                "```text",
+                page.license_notice,
+                "```",
+            ]
+        )
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    temporary.write_text("\n".join(frontmatter) + "\n", encoding="utf-8")
+    temporary.replace(destination)
+
+
+def colorize(text: str) -> str:
+    styled: list[str] = []
+    for line in text.splitlines():
+        if line and line == line.lstrip() and not re.match(r"^[A-Z0-9_.-]+\([1-9]\)", line):
+            styled.append(f"\033[1;36m{line}\033[0m")
+            continue
+        option = re.match(r"^(\s+)(-{1,2}\S+)(.*)$", line)
+        if option:
+            styled.append(
+                f"{option.group(1)}\033[1;33m{option.group(2)}\033[0m{option.group(3)}"
+            )
+            continue
+        command = re.match(r"^(\s+)(\$ .*)$", line)
+        if command:
+            styled.append(f"{command.group(1)}\033[32m{command.group(2)}\033[0m")
+            continue
+        styled.append(line)
+    return "\n".join(styled) + ("\n" if text.endswith("\n") else "")
+
+
+def reflow_for_display(text: str) -> str:
+    parts = re.split(r"(\n[ \t]*\n)", text)
+    rendered: list[str] = []
+    index = 0
+    while index < len(parts):
+        content = parts[index]
+        separator = parts[index + 1] if index + 1 < len(parts) else ""
+        index += 2
+        lines = [line for line in content.splitlines() if line.strip()]
+        if not lines:
+            rendered.append(content + separator)
+            continue
+        stripped = content.strip()
+        indents = [len(line) - len(line.lstrip()) for line in lines]
+        column_lines = sum(
+            bool(re.search(r"\S\s{3,}\S", line.strip())) for line in lines
+        )
+        preserve = (
+            stripped.isupper()
+            or min(indents) == 0
+            or any(line.lstrip().startswith(("$ ", "> ")) for line in lines)
+            or (len(lines) >= 3 and column_lines >= len(lines) // 2 + 1)
+        )
+        if preserve:
+            rendered.append(content + separator)
+            continue
+        indent = " " * min(indents)
+        unwrapped = " ".join(line.strip() for line in lines)
+        rendered.append(wrap_for_terminal(unwrapped, indent) + separator)
+    return "".join(rendered).rstrip() + "\n"
+
+
+def display(text: str, *, no_pager: bool) -> None:
+    formatted = reflow_for_display(text)
+    if no_pager or not sys.stdout.isatty() or not shutil.which("less"):
+        sys.stdout.write(formatted)
+        return
+    subprocess.run(
+        ["less", "-R", "-i", "-M"],
+        input=colorize(formatted),
+        text=True,
+        check=False,
+    )
+
+
+def legacy_translation_path(page_cache: Path, translator: str) -> Path | None:
+    for version in range(VERSION - 1, 0, -1):
+        candidate = page_cache / f"ko.{translator}.v{version}.txt"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    section, name = man_identity(args.man_args)
+    try:
+        page = load_man_page(section, name)
+        page_cache, common, command, candidates = prepare_cache(
+            page, args.cache_dir, args.translator
+        )
+        if args.terms:
+            print_terms(page.rendered_text, common, command)
+            return 0
+        if args.new_terms:
+            print_candidates(candidates)
+            return 0
+
+        translation_path = page_cache / f"ko.{args.translator}.v{VERSION}.txt"
+        incomplete_path = Path(str(translation_path) + ".incomplete.json")
+        warnings: list[str] = []
+        legacy_path = legacy_translation_path(page_cache, args.translator)
+        if not args.refresh and translation_path.exists():
+            translation = translation_path.read_text(encoding="utf-8")
+        elif not args.refresh and legacy_path is not None:
+            translation = legacy_path.read_text(encoding="utf-8")
+        else:
+            translation, warnings = render_translation(
+                page.rendered_text,
+                page.name,
+                args.translator,
+                args.cache_dir,
+                page_cache / "blocks" / BLOCK_CACHE_VERSION,
+                refresh=args.refresh,
+            )
+            if warnings:
+                write_json(incomplete_path, {"warnings": warnings})
+            else:
+                translation_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = translation_path.with_suffix(".tmp")
+                temporary.write_text(translation, encoding="utf-8")
+                temporary.replace(translation_path)
+                incomplete_path.unlink(missing_ok=True)
+
+        for warning in warnings:
+            print(f"kman: 경고: {warning}", file=sys.stderr)
+
+        if args.export:
+            if warnings:
+                raise KmanError("미완료 번역이 있어 Markdown으로 내보내지 않았습니다.")
+            export_markdown(args.export, page, translation, common, command)
+            print(args.export)
+            return 0
+        display(translation, no_pager=args.no_pager)
+        return 0
+    except KmanError as error:
+        print(f"kman: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
