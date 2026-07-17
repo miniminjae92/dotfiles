@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "usage" ]; then
+  shift
+  exec "$(dirname "$0")/codex-account-usage" show google "$@"
+fi
+
+exec "$(dirname "$0")/codex-account" google "$@"

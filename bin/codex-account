@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'usage: codex-account <google|naver> [codex arguments...]\n' >&2
+  exit 2
+}
+
+profile="${1:-}"
+case "$profile" in
+  google|naver) ;;
+  *) usage ;;
+esac
+shift
+
+base_home="${CODEX_BASE_HOME:-$HOME/.codex}"
+account_root="${CODEX_ACCOUNT_ROOT:-$HOME/.codex-accounts}"
+account_home="$account_root/$profile"
+
+umask 077
+mkdir -p "$account_home"
+chmod 700 "$account_root" "$account_home"
+
+for shared_path in \
+  config.toml \
+  AGENTS.md \
+  hooks.json \
+  agents \
+  skills \
+  rules \
+  plugins \
+  vendor_imports \
+  computer-use
+do
+  source_path="$base_home/$shared_path"
+  target_path="$account_home/$shared_path"
+  if [ -e "$source_path" ] && [ ! -e "$target_path" ] && [ ! -L "$target_path" ]; then
+    ln -s "$source_path" "$target_path"
+  fi
+done
+
+exec env \
+  CODEX_HOME="$account_home" \
+  CODEX_ACCOUNT_PROFILE="$profile" \
+  codex -c 'cli_auth_credentials_store="keyring"' "$@"
