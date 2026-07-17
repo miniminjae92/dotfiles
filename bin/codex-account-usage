@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import selectors
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+
+KST = ZoneInfo("Asia/Seoul")
+PROFILE_NAMES = ("google", "naver")
+THRESHOLDS = (75, 90, 95, 100)
+
+
+class UsageError(RuntimeError):
+    pass
+
+
+def codex_executable() -> str:
+    configured = os.environ.get("CODEX_BIN")
+    if configured:
+        return configured
+    discovered = shutil.which("codex")
+    if discovered:
+        return discovered
+    for candidate in ("/opt/homebrew/bin/codex", "/usr/local/bin/codex"):
+        if os.access(candidate, os.X_OK):
+            return candidate
+    raise UsageError("codex 실행 파일을 찾지 못했습니다")
+
+
+def profile_home(profile: str) -> Path:
+    if profile == "default":
+        return Path(os.environ.get("CODEX_BASE_HOME", Path.home() / ".codex"))
+    root = Path(os.environ.get("CODEX_ACCOUNT_ROOT", Path.home() / ".codex-accounts"))
+    return root / profile
+
+
+class AppServer:
+    def __init__(self, profile: str):
+        command = [codex_executable()]
+        if profile != "default":
+            command.extend(["-c", 'cli_auth_credentials_store="keyring"'])
+        command.extend(["app-server", "--stdio"])
+        environment = os.environ.copy()
+        environment["CODEX_HOME"] = str(profile_home(profile))
+        self.process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=environment,
+        )
+        self.next_id = 1
+        self._request(
+            "initialize",
+            {
+                "clientInfo": {"name": "codex-account-usage", "version": "1.0"},
+                "capabilities": {"experimentalApi": True},
+            },
+        )
+        self._send({"method": "initialized"})
+
+    def _send(self, payload: dict[str, Any]) -> None:
+        if self.process.stdin is None:
+            raise UsageError("Codex app-server stdin이 닫혔습니다")
+        self.process.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        self.process.stdin.flush()
+
+    def _read(self, request_id: int, timeout: float = 15) -> dict[str, Any]:
+        if self.process.stdout is None:
+            raise UsageError("Codex app-server stdout이 닫혔습니다")
+        selector = selectors.DefaultSelector()
+        selector.register(self.process.stdout, selectors.EVENT_READ)
+        deadline = time.monotonic() + timeout
+        try:
+            while time.monotonic() < deadline:
+                events = selector.select(max(0, deadline - time.monotonic()))
+                if not events:
+                    break
+                line = self.process.stdout.readline()
+                if not line:
+                    break
+                message = json.loads(line)
+                if message.get("id") != request_id:
+                    continue
+                if "error" in message:
+                    detail = message["error"].get("message", str(message["error"]))
+                    raise UsageError(detail)
+                return message.get("result", {})
+        finally:
+            selector.close()
+        raise UsageError("Codex app-server 응답 시간이 초과됐습니다")
+
+    def _request(self, method: str, params: Any = None) -> dict[str, Any]:
+        request_id = self.next_id
+        self.next_id += 1
+        self._send({"id": request_id, "method": method, "params": params})
+        return self._read(request_id)
+
+    def snapshot(self, include_usage: bool) -> dict[str, Any]:
+        result = self._request("account/rateLimits/read")
+        if include_usage:
+            result["tokenUsage"] = self._request("account/usage/read")
+        return result
+
+    def close(self) -> None:
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=3)
+
+
+def query(profile: str, include_usage: bool = True) -> dict[str, Any]:
+    server = AppServer(profile)
+    try:
+        return server.snapshot(include_usage)
+    finally:
+        server.close()
+
+
+def reset_time(timestamp: int | None) -> str:
+    if not timestamp:
+        return "알 수 없음"
+    return datetime.fromtimestamp(timestamp, KST).strftime("%Y-%m-%d %H:%M KST")
+
+
+def summary(profile: str, snapshot: dict[str, Any]) -> str:
+    limits = snapshot.get("rateLimits") or {}
+    primary = limits.get("primary") or {}
+    used = int(primary.get("usedPercent", 0))
+    remaining = max(0, 100 - used)
+    window = primary.get("windowDurationMins")
+    window_text = f"{int(window) // 1440}일" if window else "알 수 없음"
+    reset = reset_time(primary.get("resetsAt"))
+    reset_credits = (snapshot.get("rateLimitResetCredits") or {}).get("availableCount", 0)
+    usage = snapshot.get("tokenUsage") or {}
+    lifetime = (usage.get("summary") or {}).get("lifetimeTokens")
+    lifetime_text = f", 누적 {lifetime:,} tokens" if isinstance(lifetime, int) else ""
+    return (
+        f"{profile}: 사용 {used}% · 잔여 {remaining}% · {window_text} 창 · "
+        f"다음 갱신 {reset} · reset credit {reset_credits}{lifetime_text}"
+    )
+
+
+def state_path() -> Path:
+    configured = os.environ.get("CODEX_USAGE_STATE")
+    if configured:
+        return Path(configured)
+    return Path.home() / ".local/state/codex-account-usage/state.json"
+
+
+def read_state() -> dict[str, Any]:
+    path = state_path()
+    try:
+        value = json.loads(path.read_text())
+        return value if isinstance(value, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def write_state(value: dict[str, Any]) -> None:
+    path = state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w") as output:
+            json.dump(value, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def notifier_executable() -> str | None:
+    discovered = shutil.which("agent-notify")
+    if discovered:
+        return discovered
+    candidate = Path.home() / ".local/bin/agent-notify"
+    return str(candidate) if os.access(candidate, os.X_OK) else None
+
+
+def notify(message: str, attention: bool = False) -> None:
+    executable = notifier_executable()
+    if not executable:
+        print(message)
+        return
+    subprocess.run(
+        [
+            executable,
+            "event",
+            "--source",
+            "codex-usage",
+            "--label",
+            "Codex Usage",
+            "--status",
+            "attention" if attention else "complete",
+            "--project",
+            message,
+            "--local",
+            "temporary",
+            "--slack",
+            "immediate",
+            "--slack-destination",
+            "usage",
+        ],
+        check=True,
+        timeout=10,
+    )
+
+
+def rate_values(snapshot: dict[str, Any]) -> tuple[int, int | None]:
+    primary = (snapshot.get("rateLimits") or {}).get("primary") or {}
+    return int(primary.get("usedPercent", 0)), primary.get("resetsAt")
+
+
+def run_monitor(now: datetime | None = None) -> int:
+    current_time = now or datetime.now(KST)
+    state = read_state()
+    profiles_state = state.setdefault("profiles", {})
+    daily_lines: list[str] = []
+    successful = 0
+
+    def inspect(profile: str) -> bool:
+        nonlocal successful
+        try:
+            snapshot = query(profile, include_usage=False)
+        except UsageError as error:
+            profiles_state.setdefault(profile, {})["lastError"] = str(error)
+            return False
+        successful += 1
+        used, resets_at = rate_values(snapshot)
+        previous = profiles_state.get(profile, {})
+        previous_used = previous.get("usedPercent")
+        if isinstance(previous_used, int) and previous_used - used >= 20:
+            notify(f"{profile}: 사용량 {previous_used}% → {used}%, 한도 갱신 감지")
+        crossed = [
+            threshold
+            for threshold in THRESHOLDS
+            if used >= threshold and (not isinstance(previous_used, int) or previous_used < threshold)
+        ]
+        if crossed:
+            notify(f"{profile}: 주간 한도 {used}% 사용 · {100 - used}% 남음", attention=True)
+        profiles_state[profile] = {
+            "usedPercent": used,
+            "resetsAt": resets_at,
+            "checkedAt": current_time.isoformat(),
+        }
+        daily_lines.append(summary(profile, snapshot))
+        return True
+
+    for profile in PROFILE_NAMES:
+        inspect(profile)
+    if successful == 0:
+        inspect("default")
+
+    today = current_time.date().isoformat()
+    if successful and current_time.hour >= 9 and state.get("lastDailyReport") != today:
+        for line in daily_lines:
+            notify(line)
+        state["lastDailyReport"] = today
+    write_state(state)
+    return 0
+
+
+def show(profile: str, json_output: bool) -> int:
+    profiles = PROFILE_NAMES if profile == "all" else (profile,)
+    output: dict[str, Any] = {}
+    failed = False
+    for name in profiles:
+        try:
+            snapshot = query(name)
+            output[name] = snapshot
+            if not json_output:
+                print(summary(name, snapshot))
+        except UsageError as error:
+            failed = True
+            output[name] = {"error": str(error)}
+            if not json_output:
+                print(f"{name}: {error}", file=sys.stderr)
+    if json_output:
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 1 if failed else 0
+
+
+def main(arguments: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="codex-account-usage")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    show_parser = subparsers.add_parser("show")
+    show_parser.add_argument("profile", choices=("default", "google", "naver", "all"))
+    show_parser.add_argument("--json", action="store_true")
+    subparsers.add_parser("monitor")
+    args = parser.parse_args(arguments)
+    if args.command == "show":
+        return show(args.profile, args.json)
+    return run_monitor()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, subprocess.SubprocessError, UsageError) as error:
+        print(f"codex-account-usage: {error}", file=sys.stderr)
+        sys.exit(1)
