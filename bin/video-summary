@@ -26,8 +26,11 @@ DEFAULT_OUTPUT_DIR = Path(
     )
 )
 SUMMARY_VERSION = "1"
+DETAILED_SUMMARY_VERSION = "1-detailed"
 DEFAULT_SINGLE_PASS_MAX_TOKENS = 28_000
 DEFAULT_CHUNK_TOKENS = 10_000
+DEFAULT_MEMBER_MODEL = "gpt-5.6-luna"
+DEFAULT_REASONING_EFFORT = "low"
 TIMESTAMP_RE = re.compile(
     r"(?P<start>\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3})\s+-->\s+"
     r"(?P<end>\d{1,2}:\d{2}(?::\d{2})?[.,]\d{3})"
@@ -269,14 +272,316 @@ def transcript_hash(transcript: str) -> str:
     return f"sha256:{digest}"
 
 
-def fetch_youtube_data(url: str) -> tuple[dict[str, Any], str]:
+def yt_dlp_auth_args(cookies_from_browser: str | None) -> list[str]:
+    if not cookies_from_browser:
+        return []
+    return ["--cookies-from-browser", cookies_from_browser]
+
+
+def fetch_flat_entries(
+    url: str,
+    *,
+    cookies_from_browser: str | None,
+    max_items: int = 0,
+) -> list[dict[str, Any]]:
+    if not shutil.which("yt-dlp"):
+        raise VideoSummaryError("yt-dlp가 필요합니다: brew install yt-dlp")
+    if max_items < 0:
+        raise VideoSummaryError("목록 상한은 0 이상의 정수여야 합니다.")
+
+    command = [
+        "yt-dlp",
+        "--flat-playlist",
+        "--skip-download",
+        "--no-cache-dir",
+        "--no-warnings",
+        "--dump-json",
+    ]
+    if max_items:
+        command.extend(["--playlist-end", str(max_items)])
+    command.extend(yt_dlp_auth_args(cookies_from_browser))
+    command.append(url)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        message = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
+        raise VideoSummaryError(f"YouTube 목록을 가져오지 못했습니다. {message}".strip())
+
+    entries: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
+
+
+def video_from_flat_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    video_id = str(entry.get("id") or "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", video_id):
+        return None
+    return {
+        "id": video_id,
+        "title": str(entry.get("title") or ""),
+        "url": f"https://youtu.be/{video_id}",
+        "availability": str(entry.get("availability") or ""),
+        "duration": entry.get("duration"),
+    }
+
+
+def fetch_video_metadata_batch(
+    videos: list[dict[str, Any]],
+    *,
+    cookies_from_browser: str,
+) -> tuple[dict[str, dict[str, Any]], str]:
+    if not shutil.which("yt-dlp"):
+        raise VideoSummaryError("yt-dlp가 필요합니다: brew install yt-dlp")
+    if not videos:
+        return {}, ""
+    template = (
+        '{"id":%(id)j,"title":%(title)j,"availability":%(availability)j,'
+        '"duration":%(duration)j,"upload_date":%(upload_date)j}'
+    )
+    command = [
+        "yt-dlp",
+        "--skip-download",
+        "--no-playlist",
+        "--no-cache-dir",
+        "--no-warnings",
+        "--ignore-errors",
+        "--socket-timeout",
+        "20",
+        "--retries",
+        "2",
+        "--print",
+        template,
+        "--batch-file",
+        "-",
+    ]
+    command.extend(yt_dlp_auth_args(cookies_from_browser))
+    batch = "\n".join(str(video["url"]) for video in videos) + "\n"
+    result = subprocess.run(
+        command,
+        input=batch,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    metadata: dict[str, dict[str, Any]] = {}
+    for line in result.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        video_id = str(entry.get("id") or "") if isinstance(entry, dict) else ""
+        if re.fullmatch(r"[A-Za-z0-9_-]{6,20}", video_id):
+            metadata[video_id] = entry
+    stderr = result.stderr.strip()
+    return metadata, stderr
+
+
+def list_channel_videos(
+    url: str,
+    *,
+    cookies_from_browser: str | None,
+    max_videos: int,
+    members_only: bool,
+) -> list[dict[str, Any]]:
+    if max_videos < 0:
+        raise VideoSummaryError("--max-videos는 0 이상의 정수여야 합니다.")
+    entries = fetch_flat_entries(
+        url,
+        cookies_from_browser=cookies_from_browser,
+        max_items=max_videos if max_videos and not members_only else 0,
+    )
+
+    videos: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        video = video_from_flat_entry(entry)
+        if not video or video["id"] in seen:
+            continue
+        video_id = str(video["id"])
+        availability = str(video["availability"])
+        if members_only and availability and availability != "subscriber_only":
+            continue
+        seen.add(video_id)
+        videos.append(video)
+        if members_only and max_videos and len(videos) >= max_videos:
+            break
+
+    if not videos:
+        target = "회원 전용" if members_only else "처리할"
+        raise VideoSummaryError(f"채널에서 {target} 영상 URL을 찾지 못했습니다.")
+    return videos
+
+
+def channel_base_url(url: str) -> str:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host not in {"youtube.com", "m.youtube.com"}:
+        raise VideoSummaryError("채널 전체 발견에는 YouTube 채널 URL이 필요합니다.")
+    parts = [part for part in parsed.path.split("/") if part]
+    if not parts or not (parts[0].startswith("@") or parts[0] in {"channel", "c", "user"}):
+        raise VideoSummaryError("지원하는 YouTube 채널 URL이 아닙니다.")
+    keep = 1 if parts[0].startswith("@") else 2
+    if len(parts) < keep:
+        raise VideoSummaryError("지원하는 YouTube 채널 URL이 아닙니다.")
+    return f"https://www.youtube.com/{'/'.join(parts[:keep])}"
+
+
+def discover_channel_member_candidates(
+    url: str,
+    *,
+    cookies_from_browser: str,
+    max_videos: int,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Find member candidates across tabs and playlists without model calls."""
+    base = channel_base_url(url)
+    warnings: list[str] = []
+    public_ids: set[str] = set()
+
+    for tab in ("videos", "streams", "shorts"):
+        try:
+            entries = fetch_flat_entries(
+                f"{base}/{tab}", cookies_from_browser=cookies_from_browser
+            )
+        except VideoSummaryError as error:
+            if "does not have a shorts tab" not in str(error):
+                warnings.append(f"{tab}: {error}")
+            continue
+        for entry in entries:
+            video = video_from_flat_entry(entry)
+            if video and video["availability"] in {"public", "unlisted"}:
+                public_ids.add(str(video["id"]))
+
+    candidates: dict[str, dict[str, Any]] = {}
+
+    def add_entries(
+        entries: list[dict[str, Any]], playlist: dict[str, Any] | None = None
+    ) -> None:
+        for position, entry in enumerate(entries, start=1):
+            video = video_from_flat_entry(entry)
+            if not video:
+                continue
+            video_id = str(video["id"])
+            availability = str(video["availability"])
+            if video_id in public_ids or availability in {"public", "unlisted"}:
+                continue
+            current = candidates.setdefault(video_id, video)
+            current.setdefault("playlists", [])
+            if playlist and not any(
+                item["id"] == playlist["id"] for item in current["playlists"]
+            ):
+                current["playlists"].append(
+                    {
+                        "id": playlist["id"],
+                        "title": playlist["title"],
+                        "url": playlist["url"],
+                        "position": position,
+                    }
+                )
+
+    for tab in ("membership", "community"):
+        try:
+            add_entries(
+                fetch_flat_entries(
+                    f"{base}/{tab}", cookies_from_browser=cookies_from_browser
+                )
+            )
+        except VideoSummaryError as error:
+            warnings.append(f"{tab}: {error}")
+
+    try:
+        playlist_entries = fetch_flat_entries(
+            f"{base}/playlists", cookies_from_browser=cookies_from_browser
+        )
+    except VideoSummaryError as error:
+        raise VideoSummaryError(f"재생목록 전체 발견에 실패했습니다. {error}") from error
+
+    for entry in playlist_entries:
+        playlist_id = str(entry.get("id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", playlist_id):
+            continue
+        playlist = {
+            "id": playlist_id,
+            "title": str(entry.get("title") or playlist_id),
+            "url": f"https://www.youtube.com/playlist?list={playlist_id}",
+        }
+        try:
+            add_entries(
+                fetch_flat_entries(
+                    playlist["url"], cookies_from_browser=cookies_from_browser
+                ),
+                playlist,
+            )
+        except VideoSummaryError as error:
+            warnings.append(f"playlist {playlist_id}: {error}")
+
+    unresolved = list(candidates.values())
+    resolved: dict[str, dict[str, Any]] = {}
+    stderr = ""
+    remaining = unresolved
+    for attempt in range(1, 4):
+        current, current_stderr = fetch_video_metadata_batch(
+            remaining,
+            cookies_from_browser=cookies_from_browser,
+        )
+        resolved.update(current)
+        if current_stderr:
+            stderr = current_stderr
+        remaining = [video for video in remaining if str(video["id"]) not in current]
+        print(
+            f"[availability {attempt}/3] resolved={len(resolved)} remaining={len(remaining)}",
+            file=sys.stderr,
+        )
+        if not remaining or not current:
+            break
+    videos: list[dict[str, Any]] = []
+    for candidate in unresolved:
+        metadata = resolved.get(str(candidate["id"]))
+        if not metadata:
+            continue
+        availability = str(metadata.get("availability") or "")
+        if availability != "subscriber_only":
+            continue
+        candidate.update(
+            {
+                "title": str(metadata.get("title") or candidate.get("title") or ""),
+                "availability": availability,
+                "duration": metadata.get("duration"),
+                "upload_date": metadata.get("upload_date"),
+            }
+        )
+        videos.append(candidate)
+    missing = len(unresolved) - len(resolved)
+    if missing:
+        detail = stderr.splitlines()[-1] if stderr else ""
+        warnings.append(
+            f"접근 불가능 또는 삭제된 후보 {missing}개를 제외했습니다. {detail}".strip()
+        )
+    if max_videos:
+        videos = videos[:max_videos]
+    if not videos:
+        raise VideoSummaryError("채널 탭과 재생목록에서 회원 전용 후보를 찾지 못했습니다.")
+    return videos, warnings
+
+
+def fetch_youtube_data(
+    url: str,
+    *,
+    cookies_from_browser: str | None = None,
+) -> tuple[dict[str, Any], str]:
     if not shutil.which("yt-dlp"):
         raise VideoSummaryError("yt-dlp가 필요합니다: brew install yt-dlp")
 
     metadata_template = (
         '{"id":%(id)j,"title":%(title)j,"channel":%(channel)j,'
         '"uploader":%(uploader)j,"upload_date":%(upload_date)j,'
-        '"duration":%(duration)j}'
+        '"duration":%(duration)j,"availability":%(availability)j}'
     )
     errors: list[str] = []
     with tempfile.TemporaryDirectory(prefix="video-summary-") as temp_dir:
@@ -298,8 +603,9 @@ def fetch_youtube_data(url: str) -> tuple[dict[str, Any], str]:
                 metadata_template,
                 "--output",
                 "%(id)s.%(ext)s",
-                url,
             ]
+            command.extend(yt_dlp_auth_args(cookies_from_browser))
+            command.append(url)
             result = subprocess.run(
                 command,
                 cwd=temp_dir,
@@ -430,9 +736,11 @@ def run_codex(
     schema: dict[str, Any],
     *,
     model: str | None,
+    codex_command: str = "codex",
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
 ) -> tuple[dict[str, Any], dict[str, int]]:
-    if not shutil.which("codex"):
-        raise VideoSummaryError("Codex CLI가 필요합니다.")
+    if not shutil.which(codex_command):
+        raise VideoSummaryError(f"Codex CLI 명령을 찾을 수 없습니다: {codex_command}")
 
     with tempfile.TemporaryDirectory(prefix="video-summary-codex-") as temp_dir:
         temp_path = Path(temp_dir)
@@ -441,8 +749,10 @@ def run_codex(
         schema_path.write_text(json.dumps(schema, ensure_ascii=False), encoding="utf-8")
 
         command = [
-            "codex",
+            codex_command,
             "exec",
+            "-c",
+            f'model_reasoning_effort="{reasoning_effort}"',
             "--ephemeral",
             "--ignore-user-config",
             "--ignore-rules",
@@ -491,7 +801,29 @@ SOURCE_RULES = """
 """.strip()
 
 
-def final_summary_prompt(transcript: str) -> str:
+def summary_version_for_mode(summary_mode: str) -> str:
+    return DETAILED_SUMMARY_VERSION if summary_mode == "detailed" else SUMMARY_VERSION
+
+
+def final_summary_prompt(transcript: str, summary_mode: str) -> str:
+    if summary_mode == "detailed":
+        return f"""{SOURCE_RULES}
+
+영상 전사문을 정보 손실을 최소화한 상세 학습 노트와 타임스탬프로 정리하라.
+
+포함 기준:
+- 영상의 실질적인 내용을 시간 순서대로 빠짐없이 다루고, 서로 다른 주제는 별도 항목으로 나눈다.
+- 주장과 결론뿐 아니라 그 이유, 근거, 전제, 단계, 조건, 명령·도구·개념 이름, 수치, 비교, 예외, 주의점, 반론, 질의응답도 보존한다.
+- 사례가 주장을 이해하거나 적용하는 데 도움이 되면 삭제하지 말고 관련 항목에 포함한다.
+- 광고, 인사말, 의미가 완전히 같은 반복만 제외한다.
+- 항목 개수를 줄이기 위해 서로 다른 내용을 억지로 병합하지 않는다.
+- overview는 4~8문장, 각 summary는 필요한 만큼 2~6문장으로 구체적으로 작성한다.
+- 정보가 많은 구간은 항목을 더 세분화해 한 문단에 과도하게 압축하지 않는다.
+- start와 end는 반드시 전사문에 표시된 실제 구간 안에서 선택한다.
+
+<transcript>
+{transcript}
+</transcript>"""
     return f"""{SOURCE_RULES}
 
 영상 전사문을 핵심 내용과 타임스탬프로 요약하라.
@@ -509,7 +841,20 @@ def final_summary_prompt(transcript: str) -> str:
 </transcript>"""
 
 
-def candidate_prompt(chunk: str, index: int, count: int) -> str:
+def candidate_prompt(chunk: str, index: int, count: int, summary_mode: str) -> str:
+    if summary_mode == "detailed":
+        return f"""{SOURCE_RULES}
+
+전체 영상 전사문의 {index}/{count} 구간에서 상세 요약 후보를 시간 순서대로 추출하라.
+- 주장, 근거, 전제, 절차, 조건, 이름, 수치, 비교, 예외, 주의점, 유용한 사례와 질의응답을 빠뜨리지 않는다.
+- 의미가 완전히 같은 반복과 광고, 인사말만 제외한다.
+- 후보 개수를 줄이려 하지 말고, 서로 다른 내용은 별도 후보로 남긴다.
+- claim은 후속 병합 단계에서 원래 세부 내용을 복원할 수 있을 만큼 구체적으로 작성한다.
+- start와 end는 반드시 제공된 구간 안의 타임스탬프를 사용한다.
+
+<transcript>
+{chunk}
+</transcript>"""
     return f"""{SOURCE_RULES}
 
 전체 영상 전사문의 {index}/{count} 구간에서 전역 요약 후보를 추출하라.
@@ -523,8 +868,25 @@ def candidate_prompt(chunk: str, index: int, count: int) -> str:
 </transcript>"""
 
 
-def reduce_candidates_prompt(candidates: list[dict[str, Any]]) -> str:
+def reduce_candidates_prompt(
+    candidates: list[dict[str, Any]],
+    summary_mode: str,
+) -> str:
     serialized = json.dumps(candidates, ensure_ascii=False, separators=(",", ":"))
+    if summary_mode == "detailed":
+        return f"""{SOURCE_RULES}
+
+영상 전체에서 추출한 상세 후보들을 정보 손실을 최소화한 최종 학습 노트로 정리하라.
+- 후보의 실질적인 내용을 시간 순서대로 모두 보존한다.
+- 완전히 중복된 후보만 병합하고, 서로 다른 주장·근거·단계·조건·수치·예외·사례·질의응답은 삭제하지 않는다.
+- 항목 수를 줄이기 위해 내용을 과도하게 압축하지 않는다.
+- overview는 4~8문장, 각 summary는 필요한 만큼 2~6문장으로 구체적으로 작성한다.
+- 정보가 많은 후보는 여러 항목으로 분리해도 된다.
+- 타임스탬프는 후보에 있는 범위만 사용한다.
+
+<candidates>
+{serialized}
+</candidates>"""
     return f"""{SOURCE_RULES}
 
 영상 전체에서 추출한 후보들을 최종 핵심 요약으로 병합하라.
@@ -574,13 +936,22 @@ def summarize_transcript(
     *,
     duration: float | None,
     model: str | None,
+    codex_command: str,
     single_pass_max_tokens: int,
     chunk_tokens: int,
+    summary_mode: str,
+    reasoning_effort: str,
 ) -> tuple[dict[str, Any], dict[str, int], str]:
     transcript = transcript_text(segments)
     estimated_tokens = estimate_tokens(transcript)
     if estimated_tokens <= single_pass_max_tokens:
-        summary, usage = run_codex(final_summary_prompt(transcript), FINAL_SCHEMA, model=model)
+        summary, usage = run_codex(
+            final_summary_prompt(transcript, summary_mode),
+            FINAL_SCHEMA,
+            model=model,
+            codex_command=codex_command,
+            reasoning_effort=reasoning_effort,
+        )
         return validate_summary(summary, duration), usage, "single-pass"
 
     chunks = chunk_transcript(segments, chunk_tokens)
@@ -588,9 +959,11 @@ def summarize_transcript(
     usage: dict[str, int] = {}
     for index, chunk in enumerate(chunks, start=1):
         response, current_usage = run_codex(
-            candidate_prompt(chunk, index, len(chunks)),
+            candidate_prompt(chunk, index, len(chunks), summary_mode),
             CANDIDATE_SCHEMA,
             model=model,
+            codex_command=codex_command,
+            reasoning_effort=reasoning_effort,
         )
         candidates = response.get("candidates")
         if not isinstance(candidates, list):
@@ -601,9 +974,11 @@ def summarize_transcript(
         raise VideoSummaryError("긴 영상에서 핵심 후보를 추출하지 못했습니다.")
 
     summary, current_usage = run_codex(
-        reduce_candidates_prompt(all_candidates),
+        reduce_candidates_prompt(all_candidates, summary_mode),
         FINAL_SCHEMA,
         model=model,
+        codex_command=codex_command,
+        reasoning_effort=reasoning_effort,
     )
     usage = add_usage(usage, current_usage)
     return validate_summary(summary, duration), usage, f"chunked:{len(chunks)}"
@@ -621,8 +996,9 @@ def render_markdown(metadata: dict[str, Any], summary: dict[str, Any]) -> str:
         "type: video-summary",
         f"video_id: {yaml_string(video_id)}",
         f"source_url: {yaml_string(metadata.get('source_url', canonical_url))}",
-        f"title: {yaml_string(metadata.get('title', ''))}",
-        f"channel: {yaml_string(metadata.get('channel', ''))}",
+            f"title: {yaml_string(metadata.get('title', ''))}",
+            f"channel: {yaml_string(metadata.get('channel', ''))}",
+            f"availability: {yaml_string(metadata.get('availability', ''))}",
     ]
     if metadata.get("published_at"):
         lines.append(f"published_at: {yaml_string(metadata['published_at'])}")
@@ -631,8 +1007,10 @@ def render_markdown(metadata: dict[str, Any], summary: dict[str, Any]) -> str:
             f"summarized_at: {yaml_string(metadata.get('summarized_at', ''))}",
             f"transcript_hash: {yaml_string(metadata['transcript_hash'])}",
             f"summary_version: {yaml_string(metadata['summary_version'])}",
+            f"summary_mode: {yaml_string(metadata.get('summary_mode', 'standard'))}",
             f"strategy: {yaml_string(metadata.get('strategy', ''))}",
             f"model: {yaml_string(metadata.get('model', 'codex-default'))}",
+            f"reasoning_effort: {yaml_string(metadata.get('reasoning_effort', ''))}",
             f"input_tokens: {int(metadata.get('input_tokens', 0))}",
             f"cached_input_tokens: {int(metadata.get('cached_input_tokens', 0))}",
             f"output_tokens: {int(metadata.get('output_tokens', 0))}",
@@ -744,11 +1122,208 @@ def write_atomic(path: Path, content: str) -> None:
     os.replace(temp_path, path)
 
 
+def notify_slack(status: str, label: str) -> None:
+    command = shutil.which("agent-notify")
+    if not command:
+        print("video-summary: agent-notify를 찾지 못해 Slack 알림을 보내지 못했습니다.", file=sys.stderr)
+        return
+    result = subprocess.run(
+        [
+            command,
+            "event",
+            "--source",
+            "video-summary",
+            "--status",
+            status,
+            "--label",
+            label[:500],
+            "--project",
+            str(Path.cwd()),
+            "--local",
+            "off",
+            "--slack",
+            "immediate",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        message = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
+        print(f"video-summary: Slack 알림 실패. {message}".strip(), file=sys.stderr)
+
+
+def playlist_index_filename(title: str, playlist_id: str) -> str:
+    base = safe_filename(title, playlist_id).removesuffix(".md")
+    return f"{base} - 재생목록.md"
+
+
+def write_playlist_indexes(
+    videos: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+    output_dir: Path,
+) -> list[str]:
+    results = {str(item.get("video_id")): item for item in items}
+    playlists: dict[str, dict[str, Any]] = {}
+    ungrouped: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    for video in videos:
+        result = results.get(str(video["id"]))
+        if not result or result.get("status") not in {"summarized", "cached"}:
+            continue
+        memberships = video.get("playlists") or []
+        if not memberships:
+            ungrouped.append((video, result))
+        for membership in memberships:
+            playlist = playlists.setdefault(
+                str(membership["id"]),
+                {
+                    "id": membership["id"],
+                    "title": membership["title"],
+                    "url": membership["url"],
+                    "videos": [],
+                },
+            )
+            playlist["videos"].append((int(membership["position"]), video, result))
+
+    index_dir = output_dir / "Playlists"
+    written: list[str] = []
+    overview_lines = [
+        "---",
+        "type: video-summary-channel-index",
+        f"generated_at: {yaml_string(dt.datetime.now().astimezone().isoformat(timespec='seconds'))}",
+        "---",
+        "",
+        "# 회원 전용 영상 재생목록",
+        "",
+        "회원 전용으로 확인되어 요약이 완료되거나 캐시된 영상만 표시합니다.",
+    ]
+
+    for playlist in playlists.values():
+        entries = sorted(playlist["videos"], key=lambda item: item[0])
+        filename = playlist_index_filename(str(playlist["title"]), str(playlist["id"]))
+        path = index_dir / filename
+        lines = [
+            "---",
+            "type: video-summary-playlist-index",
+            f"playlist_id: {yaml_string(playlist['id'])}",
+            f"source_url: {yaml_string(playlist['url'])}",
+            f"generated_at: {yaml_string(dt.datetime.now().astimezone().isoformat(timespec='seconds'))}",
+            f"member_summary_count: {len(entries)}",
+            "---",
+            "",
+            f"# {playlist['title']}",
+            "",
+            f"- [YouTube 재생목록]({playlist['url']})",
+            f"- 회원 전용 요약: {len(entries)}개",
+            "",
+            "## 영상",
+            "",
+        ]
+        for position, video, result in entries:
+            note_name = Path(str(result["path"])).stem
+            title = str(video.get("title") or video["id"])
+            lines.append(f"{position}. [[{note_name}|{title}]]")
+        lines.append("")
+        write_atomic(path, "\n".join(lines))
+        written.append(str(path))
+        overview_lines.append(
+            f"- [[{path.stem}|{playlist['title']}]] — {len(entries)}개"
+        )
+
+    if ungrouped:
+        overview_lines.extend(["", "## 재생목록 밖에서 발견된 영상", ""])
+        for video, result in ungrouped:
+            note_name = Path(str(result["path"])).stem
+            overview_lines.append(
+                f"- [[{note_name}|{video.get('title') or video['id']}]]"
+            )
+    overview_lines.append("")
+    overview_path = index_dir / "_회원 전용 영상 재생목록.md"
+    write_atomic(overview_path, "\n".join(overview_lines))
+    written.insert(0, str(overview_path))
+    return written
+
+
+def load_member_inventory(path: Path) -> tuple[list[dict[str, Any]], list[str]] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    videos = data.get("videos")
+    warnings = data.get("warnings")
+    if data.get("version") != 1 or not isinstance(videos, list) or not isinstance(warnings, list):
+        return None
+    if not all(isinstance(video, dict) and video.get("id") for video in videos):
+        return None
+    return videos, [str(warning) for warning in warnings]
+
+
+def save_member_inventory(
+    path: Path,
+    *,
+    source_url: str,
+    videos: list[dict[str, Any]],
+    warnings: list[str],
+) -> None:
+    payload = {
+        "version": 1,
+        "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "source_url": source_url,
+        "videos": videos,
+        "warnings": warnings,
+    }
+    write_atomic(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="YouTube 영상을 핵심 내용과 타임스탬프 Markdown으로 요약합니다."
     )
     parser.add_argument("url", help="요약할 YouTube URL")
+    parser.add_argument(
+        "--channel",
+        action="store_true",
+        help="URL을 채널 또는 재생목록으로 보고 여러 영상을 순회",
+    )
+    parser.add_argument(
+        "--discover-channel-members",
+        action="store_true",
+        help="채널 탭과 모든 재생목록을 합쳐 회원 전용 후보를 발견",
+    )
+    parser.add_argument(
+        "--cookies-from-browser",
+        metavar="BROWSER[:PROFILE]",
+        help="yt-dlp가 로그인된 브라우저 쿠키를 실행 중에 직접 읽도록 지정",
+    )
+    parser.add_argument(
+        "--members-only",
+        action="store_true",
+        help="yt-dlp availability가 subscriber_only인 회원 전용 영상만 처리",
+    )
+    parser.add_argument(
+        "--max-videos",
+        type=int,
+        default=None,
+        help="처리할 최대 영상 수 (기본값: 일반 10, 회원 전용 전체, 0: 전체)",
+    )
+    parser.add_argument(
+        "--list-only",
+        action="store_true",
+        help="채널 영상 URL만 나열하고 자막·모델·파일 작업은 수행하지 않음",
+    )
+    parser.add_argument(
+        "--notify-slack",
+        action="store_true",
+        help="완료 또는 중단 결과를 agent-notify를 통해 Slack으로 즉시 전송",
+    )
+    parser.add_argument(
+        "--refresh-inventory",
+        action="store_true",
+        help="저장된 회원 영상 발견 목록을 무시하고 채널을 다시 순회",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -759,6 +1334,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default=DEFAULT_VIDEO_SUMMARY_MODEL,
         help="Codex 모델 이름 (기본값: Codex 기본 모델)",
+    )
+    parser.add_argument(
+        "--codex-command",
+        default=os.environ.get("VIDEO_SUMMARY_CODEX_COMMAND", "codex"),
+        help="요약에 사용할 Codex CLI 명령 (기본값: codex)",
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=("low", "medium", "high", "xhigh", "max"),
+        default=DEFAULT_REASONING_EFFORT,
+        help="Codex reasoning effort (기본값: low)",
+    )
+    parser.add_argument(
+        "--summary-mode",
+        choices=("standard", "detailed"),
+        default=None,
+        help="요약 밀도 (기본값: 일반 standard, 회원 전용 detailed)",
     )
     parser.add_argument("--force", action="store_true", help="캐시가 있어도 다시 요약")
     parser.add_argument(
@@ -781,97 +1373,335 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def process_video(
+    url: str,
+    args: argparse.Namespace,
+    *,
+    skip_existing: bool,
+) -> dict[str, Any]:
+    requested_video_id = extract_video_id(url)
+    if skip_existing and not args.force:
+        existing = find_existing_summary(args.output_dir, requested_video_id)
+        existing_metadata = parse_frontmatter(existing) if existing else {}
+        availability_matches = (
+            not args.members_only
+            or existing_metadata.get("availability") == "subscriber_only"
+        )
+        if (
+            existing
+            and existing_metadata.get("summary_version")
+            == summary_version_for_mode(args.summary_mode)
+            and availability_matches
+        ):
+            return {
+                "video_id": requested_video_id,
+                "title": existing_metadata.get("title", ""),
+                "status": "cached",
+                "path": str(existing),
+            }
+
+    raw_metadata, vtt = fetch_youtube_data(
+        url,
+        cookies_from_browser=args.cookies_from_browser,
+    )
+    video_id = str(raw_metadata.get("id") or requested_video_id)
+    cues = parse_vtt(vtt)
+    segments = compact_cues(cues)
+    if not segments:
+        raise VideoSummaryError("자막에서 요약할 텍스트를 찾지 못했습니다.")
+
+    transcript = transcript_text(segments)
+    digest = transcript_hash(transcript)
+    estimated_tokens = estimate_tokens(transcript)
+    summary_version = summary_version_for_mode(args.summary_mode)
+    cached = find_cached_summary(
+        args.output_dir,
+        video_id=video_id,
+        transcript_hash=digest,
+        summary_version=summary_version,
+    )
+    planned_strategy = (
+        "single-pass"
+        if estimated_tokens <= args.single_pass_max_tokens
+        else f"chunked:{len(chunk_transcript(segments, args.chunk_tokens))}"
+    )
+    title = str(raw_metadata.get("title") or "영상 요약")
+    availability = str(raw_metadata.get("availability") or "")
+
+    if args.members_only and availability != "subscriber_only":
+        return {
+            "video_id": video_id,
+            "title": title,
+            "status": "filtered",
+            "availability": availability or "unknown",
+        }
+
+    if args.dry_run:
+        return {
+            "video_id": video_id,
+            "title": title,
+            "status": "dry-run",
+            "availability": availability,
+            "subtitle_cues": len(cues),
+            "compacted_segments": len(segments),
+            "estimated_transcript_tokens": estimated_tokens,
+            "summary_mode": args.summary_mode,
+            "strategy": planned_strategy,
+            "cache_hit": str(cached) if cached else None,
+        }
+
+    if cached and not args.force:
+        return {
+            "video_id": video_id,
+            "title": title,
+            "status": "cached",
+            "path": str(cached),
+        }
+
+    duration_value = raw_metadata.get("duration")
+    duration = float(duration_value) if isinstance(duration_value, (int, float)) else None
+    summary, usage, strategy = summarize_transcript(
+        segments,
+        duration=duration,
+        model=args.model,
+        codex_command=args.codex_command,
+        single_pass_max_tokens=args.single_pass_max_tokens,
+        chunk_tokens=args.chunk_tokens,
+        summary_mode=args.summary_mode,
+        reasoning_effort=args.reasoning_effort,
+    )
+
+    existing = find_existing_summary(args.output_dir, video_id)
+    output_path = existing or args.output_dir / safe_filename(title, video_id)
+    metadata = {
+        "video_id": video_id,
+        "source_url": f"https://youtu.be/{video_id}",
+        "title": title,
+        "channel": raw_metadata.get("channel") or raw_metadata.get("uploader") or "",
+        "availability": availability,
+        "published_at": normalize_upload_date(raw_metadata.get("upload_date")),
+        "summarized_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "transcript_hash": digest,
+        "summary_version": summary_version,
+        "summary_mode": args.summary_mode,
+        "strategy": strategy,
+        "model": args.model or "codex-default",
+        "reasoning_effort": args.reasoning_effort,
+        "input_tokens": usage.get("input_tokens", 0),
+        "cached_input_tokens": usage.get("cached_input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+        "reasoning_tokens": usage.get(
+            "reasoning_output_tokens", usage.get("reasoning_tokens", 0)
+        ),
+    }
+    write_atomic(output_path, render_markdown(metadata, summary))
+    return {
+        "video_id": video_id,
+        "title": title,
+        "status": "summarized",
+        "path": str(output_path),
+        "tokens": {
+            "input": metadata["input_tokens"],
+            "cached_input": metadata["cached_input_tokens"],
+            "output": metadata["output_tokens"],
+            "reasoning": metadata["reasoning_tokens"],
+        },
+    }
+
+
+def print_single_result(result: dict[str, Any]) -> None:
+    status = result["status"]
+    if status == "dry-run":
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif status == "cached":
+        print(f"cache hit: {result['path']}")
+    elif status == "filtered":
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(result["path"])
+        tokens = result["tokens"]
+        print(
+            "tokens: "
+            f"input={tokens['input']} "
+            f"cached_input={tokens['cached_input']} "
+            f"output={tokens['output']} "
+            f"reasoning={tokens['reasoning']}"
+        )
+
+
+def run_channel(args: argparse.Namespace) -> int:
+    warnings: list[str] = []
+    if args.discover_channel_members:
+        inventory_path = args.output_dir / "Playlists" / ".member-inventory.json"
+        cached_inventory = (
+            None if args.refresh_inventory else load_member_inventory(inventory_path)
+        )
+        if cached_inventory:
+            videos, warnings = cached_inventory
+        else:
+            videos, warnings = discover_channel_member_candidates(
+                args.url,
+                cookies_from_browser=args.cookies_from_browser,
+                max_videos=0,
+            )
+            save_member_inventory(
+                inventory_path,
+                source_url=args.url,
+                videos=videos,
+                warnings=warnings,
+            )
+        if args.max_videos:
+            videos = videos[: args.max_videos]
+    else:
+        videos = list_channel_videos(
+            args.url,
+            cookies_from_browser=args.cookies_from_browser,
+            max_videos=args.max_videos,
+            members_only=args.members_only,
+        )
+    if args.list_only:
+        items = [
+            {
+                "video_id": video["id"],
+                "title": video.get("title", ""),
+                "status": (
+                    "listed"
+                    if not args.members_only
+                    or video.get("availability") == "subscriber_only"
+                    else "unverified"
+                ),
+                "url": video.get("url", f"https://youtu.be/{video['id']}"),
+                "availability": video.get("availability", ""),
+                "playlists": video.get("playlists", []),
+            }
+            for video in videos
+        ]
+        counts: dict[str, int] = {}
+        for item in items:
+            status = str(item["status"])
+            counts[status] = counts.get(status, 0) + 1
+        print(
+            json.dumps(
+                {
+                    "mode": "channel",
+                    "source_url": args.url,
+                    "filter": "members-only" if args.members_only else "all",
+                    "counts": counts,
+                    "warnings": warnings,
+                    "items": items,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+
+    items: list[dict[str, Any]] = []
+    total = len(videos)
+    for index, video in enumerate(videos, start=1):
+        video_id = str(video["id"])
+        video_url = str(video.get("url") or f"https://youtu.be/{video_id}")
+        title = str(video.get("title") or "")
+        print(f"[{index}/{total}] {title or video_id}", file=sys.stderr)
+
+        existing = None if args.force else find_existing_summary(args.output_dir, video_id)
+        existing_metadata = parse_frontmatter(existing) if existing else {}
+        expected_version = summary_version_for_mode(args.summary_mode)
+        availability_matches = (
+            not args.members_only
+            or existing_metadata.get("availability") == "subscriber_only"
+        )
+        if (
+            existing
+            and existing_metadata.get("summary_version") == expected_version
+            and availability_matches
+        ):
+            items.append(
+                {
+                    "video_id": video_id,
+                    "title": title,
+                    "status": "cached",
+                    "path": str(existing),
+                }
+            )
+            continue
+
+        try:
+            items.append(process_video(video_url, args, skip_existing=False))
+        except VideoSummaryError as error:
+            items.append(
+                {
+                    "video_id": video_id,
+                    "title": title,
+                    "status": "failed",
+                    "error": str(error),
+                }
+            )
+
+    counts: dict[str, int] = {}
+    for item in items:
+        status = str(item["status"])
+        counts[status] = counts.get(status, 0) + 1
+    indexes = (
+        write_playlist_indexes(videos, items, args.output_dir)
+        if args.discover_channel_members
+        else []
+    )
+    report = {
+        "mode": "channel",
+        "source_url": args.url,
+        "filter": "members-only" if args.members_only else "all",
+        "counts": counts,
+        "warnings": warnings,
+        "playlist_indexes": indexes,
+        "items": items,
+    }
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    critical_warnings = [
+        warning
+        for warning in warnings
+        if not warning.startswith("접근 불가능 또는 삭제된 후보 ")
+    ]
+    has_problem = bool(counts.get("failed") or critical_warnings)
+    if args.notify_slack:
+        completed = counts.get("summarized", 0) + counts.get("cached", 0)
+        if has_problem:
+            notify_slack(
+                "error",
+                f"회원 전용 영상 작업에 확인 필요: 완료 {completed}, 실패 {counts.get('failed', 0)}, 발견 경고 {len(critical_warnings)}",
+            )
+        else:
+            notify_slack("complete", f"회원 전용 영상 작업 완료: {completed}개")
+    return 1 if has_problem else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        requested_video_id = extract_video_id(args.url)
-        raw_metadata, vtt = fetch_youtube_data(args.url)
-        video_id = str(raw_metadata.get("id") or requested_video_id)
-        cues = parse_vtt(vtt)
-        segments = compact_cues(cues)
-        if not segments:
-            raise VideoSummaryError("자막에서 요약할 텍스트를 찾지 못했습니다.")
-
-        transcript = transcript_text(segments)
-        digest = transcript_hash(transcript)
-        estimated_tokens = estimate_tokens(transcript)
-        cached = find_cached_summary(
-            args.output_dir,
-            video_id=video_id,
-            transcript_hash=digest,
-            summary_version=SUMMARY_VERSION,
-        )
-        planned_strategy = (
-            "single-pass"
-            if estimated_tokens <= args.single_pass_max_tokens
-            else f"chunked:{len(chunk_transcript(segments, args.chunk_tokens))}"
-        )
-
-        if args.dry_run:
-            print(
-                json.dumps(
-                    {
-                        "video_id": video_id,
-                        "title": raw_metadata.get("title", ""),
-                        "subtitle_cues": len(cues),
-                        "compacted_segments": len(segments),
-                        "estimated_transcript_tokens": estimated_tokens,
-                        "strategy": planned_strategy,
-                        "cache_hit": str(cached) if cached else None,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+        if args.discover_channel_members:
+            args.channel = True
+            args.members_only = True
+        if args.max_videos is None:
+            args.max_videos = 0 if args.members_only else 10
+        if args.summary_mode is None:
+            args.summary_mode = "detailed" if args.members_only else "standard"
+        if args.members_only and args.model is None:
+            args.model = DEFAULT_MEMBER_MODEL
+        if args.list_only and not args.channel:
+            raise VideoSummaryError("--list-only는 --channel과 함께 사용해야 합니다.")
+        if args.members_only and not args.cookies_from_browser:
+            raise VideoSummaryError(
+                "회원 전용 영상에는 --cookies-from-browser BROWSER[:PROFILE]이 필요합니다."
             )
-            return 0
-
-        if cached and not args.force:
-            print(f"cache hit: {cached}")
-            return 0
-
-        duration_value = raw_metadata.get("duration")
-        duration = float(duration_value) if isinstance(duration_value, (int, float)) else None
-        summary, usage, strategy = summarize_transcript(
-            segments,
-            duration=duration,
-            model=args.model,
-            single_pass_max_tokens=args.single_pass_max_tokens,
-            chunk_tokens=args.chunk_tokens,
-        )
-
-        title = str(raw_metadata.get("title") or "영상 요약")
-        existing = find_existing_summary(args.output_dir, video_id)
-        output_path = existing or args.output_dir / safe_filename(title, video_id)
-        metadata = {
-            "video_id": video_id,
-            "source_url": f"https://youtu.be/{video_id}",
-            "title": title,
-            "channel": raw_metadata.get("channel") or raw_metadata.get("uploader") or "",
-            "published_at": normalize_upload_date(raw_metadata.get("upload_date")),
-            "summarized_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-            "transcript_hash": digest,
-            "summary_version": SUMMARY_VERSION,
-            "strategy": strategy,
-            "model": args.model or "codex-default",
-            "input_tokens": usage.get("input_tokens", 0),
-            "cached_input_tokens": usage.get("cached_input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
-            "reasoning_tokens": usage.get(
-                "reasoning_output_tokens", usage.get("reasoning_tokens", 0)
-            ),
-        }
-        write_atomic(output_path, render_markdown(metadata, summary))
-        print(output_path)
-        print(
-            "tokens: "
-            f"input={metadata['input_tokens']} "
-            f"cached_input={metadata['cached_input_tokens']} "
-            f"output={metadata['output_tokens']} "
-            f"reasoning={metadata['reasoning_tokens']}"
-        )
+        if args.channel:
+            return run_channel(args)
+        result = process_video(args.url, args, skip_existing=False)
+        print_single_result(result)
         return 0
     except VideoSummaryError as error:
         print(f"video-summary: {error}", file=sys.stderr)
+        if args.notify_slack:
+            notify_slack("error", f"video-summary 중단: {error}")
         return 1
 
 
