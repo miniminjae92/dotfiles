@@ -95,11 +95,33 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-os-vault-snapshot.plist" \
     "$snapshot_plist"
-  mkdir -p "$HOME/.local/state/agent-notify" "$HOME/.local/state/agent-os"
+  usage_plist="$HOME/Library/LaunchAgents/com.miniminjae.codex-account-usage.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.codex-account-usage.plist" \
+    "$usage_plist"
+  security_plist="$HOME/Library/LaunchAgents/com.miniminjae.personal-ops-security.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.personal-ops-security.plist" \
+    "$security_plist"
+  weekly_plist="$HOME/Library/LaunchAgents/com.miniminjae.personal-ops-weekly.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.personal-ops-weekly.plist" \
+    "$weekly_plist"
+  mkdir -p \
+    "$HOME/.local/state/agent-notify" \
+    "$HOME/.local/state/agent-os" \
+    "$HOME/.local/state/codex-account-usage" \
+    "$HOME/.local/state/personal-ops"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$notification_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$snapshot_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.codex-account-usage" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$usage_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-security" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$security_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-weekly" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$weekly_plist"
 fi
 
 git config --global core.excludesFile "$HOME/.gitignore_global"
