@@ -9,6 +9,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,17 +24,29 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 OSASCRIPT = "/usr/bin/osascript"
+OPEN = "/usr/bin/open"
 SECURITY = "/usr/bin/security"
-KEYCHAIN_SERVICE = "agent-notify.slack-webhook"
+KEYCHAIN_SERVICES = {
+    "agent": "agent-notify.slack-webhook",
+    "usage": "agent-notify.slack-webhook.usage",
+}
 AGY_ALLOW_STOP = {"decision": "allow"}
 HOOK_SOURCES = {"agy", "codex", "codex-hook"}
 TERMINAL_APPS = {
     "Apple_Terminal": "Terminal",
-    "iTerm.app": "iTerm",
+    "iTerm.app": "iTerm2",
     "WezTerm": "WezTerm",
 }
+TERMINAL_BUNDLE_IDS = {
+    "Terminal": "com.apple.Terminal",
+    "iTerm": "com.googlecode.iterm2",
+    "iTerm2": "com.googlecode.iterm2",
+    "WezTerm": "com.github.wez.wezterm",
+}
+LOCAL_DELIVERIES = {"off", "temporary", "persistent"}
+SLACK_DELIVERIES = {"off", "delayed", "immediate"}
 USAGE = """usage: agent-notify <command>
 
 Agent adapters:
@@ -48,16 +61,87 @@ Pending events:
   open <id>                 Open the recorded terminal/tmux target and acknowledge
 
 Slack escalation:
-  slack configure           Prompt for a Webhook URL in macOS Keychain
-  slack status              Show enabled/configured state without the secret
-  slack test                Send one explicit test message
+  slack configure [agent|usage]
+                            Prompt for a destination Webhook URL in macOS Keychain
+  slack status [agent|usage|all]
+                            Show enabled/configured state without the secret
+  slack test [agent|usage]  Send one explicit test message
   slack disable             Disable delivery while preserving the Keychain item
 
+Away delivery:
+  away once                Send the next agent result to Slack immediately
+  away on [--for 2h]       Send results immediately until disabled or expired
+  away off                 Return to delayed Slack escalation
+  away status              Show the current away-delivery mode
+
+Delivery modes:
+  mode set --local <off|temporary|persistent>
+           --slack <off|delayed|immediate> [--for 2h]
+                            Set any of the 3 x 3 delivery combinations
+  mode status              Show active and one-shot delivery modes
+  mode --help              Show values and direct-setting examples
+  mode next NAME           Apply one named mode to the next result only
+
+Existing named modes:
+  mode normal              Temporary local, delayed Slack fallback
+  mode watch               Persistent local, delayed Slack fallback
+  mode away [--for 2h]     No local alert, immediate Slack
+  mode quiet               Local and Slack off
+
+Examples:
+  mode set --local persistent --slack off
+  mode set --local temporary --slack off
+  mode set --local persistent --slack immediate
+  mode set --local off --slack immediate
+  mode next away           Send only the next result directly to Slack
+  test                     Test click-to-focus from the current tmux pane
+
 Diagnostics:
-  test                      Send a basic macOS notification
+  test                      Send a persistent click-to-focus test notification
+"""
+MODE_USAGE = """usage: agent-notify mode <set|status|next|name>
+
+Direct setting:
+  mode set --local <off|temporary|persistent>
+           --slack <off|delayed|immediate> [--for 2h]
+
+Local values:
+  off                      Do not show a Mac notification
+  temporary                Show it for 8 seconds, then hide it
+  persistent               Keep it until an explicit action
+
+Slack values:
+  off                      Do not send to Slack
+  delayed                  Send after 3/10 minutes if unacknowledged
+  immediate                Send as soon as the result arrives
+
+Examples:
+  mode set --local persistent --slack off
+  mode set --local temporary --slack off
+  mode set --local persistent --slack immediate
+  mode set --local off --slack immediate
+
+Other commands:
+  mode next NAME           Apply one named preset to the next result only
+  mode status              Show the active and one-shot modes
+
+Existing named modes:
+  normal                   temporary local + delayed Slack
+  watch                    persistent local + delayed Slack
+  away [--for 2h]          local off + immediate Slack
+  quiet                    local off + Slack off
 """
 DEFAULT_CONFIG = {
-    "schema_version": 1,
+    "schema_version": 2,
+    "notification_backend": "auto",
+    "temporary_seconds": 8,
+    "default_profile": "normal",
+    "profiles": {
+        "normal": {"local": "temporary", "slack": "delayed"},
+        "watch": {"local": "persistent", "slack": "delayed"},
+        "away": {"local": "off", "slack": "immediate"},
+        "quiet": {"local": "off", "slack": "off"},
+    },
     "statuses": {
         "complete": {
             "sound": "Glass",
@@ -153,6 +237,24 @@ def read_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, An
 def load_config() -> dict[str, Any]:
     config = json.loads(json.dumps(DEFAULT_CONFIG))
     configured = read_json(config_path())
+    if configured.get("notification_backend") in {"auto", "osascript", "alerter"}:
+        config["notification_backend"] = configured["notification_backend"]
+    if isinstance(configured.get("temporary_seconds"), int):
+        config["temporary_seconds"] = max(1, min(60, configured["temporary_seconds"]))
+    if isinstance(configured.get("default_profile"), str):
+        config["default_profile"] = configured["default_profile"]
+    if isinstance(configured.get("profiles"), dict):
+        for name, profile in configured["profiles"].items():
+            if (
+                isinstance(name, str)
+                and isinstance(profile, dict)
+                and profile.get("local") in LOCAL_DELIVERIES
+                and profile.get("slack") in SLACK_DELIVERIES
+            ):
+                config["profiles"][name] = {
+                    "local": profile["local"],
+                    "slack": profile["slack"],
+                }
     if isinstance(configured.get("statuses"), dict):
         for status, settings in configured["statuses"].items():
             if status in config["statuses"] and isinstance(settings, dict):
@@ -166,10 +268,21 @@ def runtime_settings() -> dict[str, Any]:
     return read_json(runtime_settings_path(), {"slack_enabled": False})
 
 
+@contextmanager
+def runtime_settings_lock() -> Iterator[None]:
+    ensure_private_directory(state_root())
+    lock_path = state_root() / ".settings.lock"
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def update_runtime_settings(**updates: Any) -> None:
-    settings = runtime_settings()
-    settings.update(updates)
-    atomic_write_json(runtime_settings_path(), settings)
+    with runtime_settings_lock():
+        settings = runtime_settings()
+        settings.update(updates)
+        atomic_write_json(runtime_settings_path(), settings)
 
 
 def event_path(event_id: str) -> Path:
@@ -256,10 +369,11 @@ def session_from_payload(payload: dict[str, Any]) -> str | None:
 
 def tmux_target() -> str | None:
     pane = os.environ.get("TMUX_PANE")
-    if not pane or not shutil.which("tmux"):
+    tmux = tmux_executable()
+    if not pane or not tmux:
         return None
     result = subprocess.run(
-        ["tmux", "display-message", "-p", "-t", pane, "#{session_name}:#{window_index}.#{pane_index}"],
+        [tmux, "display-message", "-p", "-t", pane, "#{session_name}:#{window_index}.#{pane_index}"],
         capture_output=True,
         text=True,
         timeout=2,
@@ -287,6 +401,11 @@ def normalize_event(
     session_id = session_from_payload(payload)
     identity = session_id or cwd or project
     dedupe_key = hashlib.sha256(f"{source}\0{identity}".encode()).hexdigest()[:24]
+    recorded_tmux_target = tmux_target()
+    recorded_tmux_session = None
+    if recorded_tmux_target and ":" in recorded_tmux_target:
+        recorded_tmux_session = recorded_tmux_target.rsplit(":", 1)[0]
+    terminal_app = TERMINAL_APPS.get(os.environ.get("TERM_PROGRAM", ""), "iTerm2")
     return {
         "schema_version": SCHEMA_VERSION,
         "id": str(uuid.uuid4()),
@@ -296,8 +415,11 @@ def normalize_event(
         "project": one_line(project, 160),
         "cwd": cwd,
         "session_id": session_id,
-        "tmux_target": tmux_target(),
-        "terminal_app": TERMINAL_APPS.get(os.environ.get("TERM_PROGRAM", ""), "iTerm"),
+        "tmux_target": recorded_tmux_target,
+        "tmux_session": recorded_tmux_session,
+        "tmux_pane": os.environ.get("TMUX_PANE") or None,
+        "terminal_app": terminal_app,
+        "terminal_bundle_id": TERMINAL_BUNDLE_IDS[terminal_app],
         "created_at": isoformat(),
         "dedupe_key": dedupe_key,
         "sound": str(profile["sound"]),
@@ -307,6 +429,10 @@ def normalize_event(
         "escalated_at": None,
         "superseded_at": None,
         "slack_attempts": 0,
+        "slack_immediate": False,
+        "policy_name": "normal",
+        "local_delivery": "temporary",
+        "slack_delivery": "delayed",
     }
 
 
@@ -358,8 +484,12 @@ def spawn_worker(event_id: str) -> None:
         )
 
 
-def enqueue_event(event: dict[str, Any]) -> str:
+def enqueue_event(event: dict[str, Any], policy: dict[str, Any] | None = None) -> str:
     ensure_private_directory(events_dir())
+    if policy is None:
+        claim_delivery_policy(event)
+    else:
+        apply_delivery_policy(event, policy)
     supersede_matching(event)
     atomic_write_json(event_path(event["id"]), event)
     spawn_worker(event["id"])
@@ -398,6 +528,122 @@ def slack_enabled() -> bool:
     return runtime_settings().get("slack_enabled") is True
 
 
+def local_notification_backend() -> str:
+    return str(load_config().get("notification_backend", "auto"))
+
+
+def named_policy(name: str) -> dict[str, Any]:
+    config = load_config()
+    profile = config["profiles"].get(name)
+    if not isinstance(profile, dict):
+        raise ValueError(f"unknown delivery mode: {name}")
+    return {
+        "name": name,
+        "local": profile["local"],
+        "slack": profile["slack"],
+        "until": None,
+    }
+
+
+def valid_policy(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("name"), str)
+        and value.get("local") in LOCAL_DELIVERIES
+        and value.get("slack") in SLACK_DELIVERIES
+        and (value.get("until") is None or isinstance(value.get("until"), str))
+    )
+
+
+def default_policy() -> dict[str, Any]:
+    config = load_config()
+    name = str(config.get("default_profile", "normal"))
+    try:
+        return named_policy(name)
+    except ValueError:
+        return named_policy("normal")
+
+
+def policy_expired(policy: dict[str, Any], current_time: datetime) -> bool:
+    until = policy.get("until")
+    if not isinstance(until, str):
+        return False
+    try:
+        return current_time >= parse_time(until)
+    except ValueError:
+        return True
+
+
+def active_policy(
+    settings: dict[str, Any], current_time: datetime | None = None
+) -> dict[str, Any]:
+    current_time = current_time or now_utc()
+    policy = settings.get("active_policy")
+    if not valid_policy(policy) or policy_expired(policy, current_time):
+        return default_policy()
+    return dict(policy)
+
+
+def claim_delivery_policy(event: dict[str, Any], current_time: datetime | None = None) -> None:
+    current_time = current_time or now_utc()
+    with runtime_settings_lock():
+        settings = runtime_settings()
+        next_policy = settings.get("next_policy")
+        if valid_policy(next_policy):
+            policy = dict(next_policy)
+            settings["next_policy"] = None
+        else:
+            policy = active_policy(settings, current_time)
+        if policy_expired(policy, current_time):
+            policy = default_policy()
+        current = active_policy(settings, current_time)
+        if settings.get("active_policy") != current:
+            settings["active_policy"] = current
+        apply_delivery_policy(event, policy)
+        atomic_write_json(runtime_settings_path(), settings)
+
+
+def apply_delivery_policy(event: dict[str, Any], policy: dict[str, Any]) -> None:
+    event.update(
+        policy_name=policy["name"],
+        local_delivery=policy["local"],
+        slack_delivery=policy["slack"],
+        slack_immediate=policy["slack"] == "immediate",
+    )
+
+
+def parse_away_duration(value: str) -> timedelta:
+    match = re.fullmatch(r"([1-9][0-9]*)([mhd])", value)
+    if not match:
+        raise ValueError("duration must look like 30m, 2h, or 1d")
+    amount = int(match.group(1))
+    unit = match.group(2)
+    duration = {
+        "m": timedelta(minutes=amount),
+        "h": timedelta(hours=amount),
+        "d": timedelta(days=amount),
+    }[unit]
+    if duration > timedelta(days=30):
+        raise ValueError("away duration must not exceed 30 days")
+    return duration
+
+
+def alerter_path() -> str | None:
+    if local_notification_backend() == "osascript":
+        return None
+    executable = shutil.which("alerter")
+    if executable:
+        return executable
+    for candidate in ("/opt/homebrew/bin/alerter", "/usr/local/bin/alerter"):
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def temporary_notification_seconds() -> int:
+    return int(load_config().get("temporary_seconds", 8))
+
+
 def run_alerter(event: dict[str, Any], executable: str) -> str:
     title, message = notification_text(event)
     command = [
@@ -408,31 +654,96 @@ def run_alerter(event: dict[str, Any], executable: str) -> str:
         message,
         "--actions",
         "확인,터미널로 이동",
-        "--dropdownLabel",
+        "--dropdown-label",
         "처리",
-        "--closeLabel",
+        "--close-label",
         "나중에",
         "--sound",
         event["sound"],
         "--group",
         event["dedupe_key"],
     ]
-    timeout = event["local_timeout_seconds"] if slack_enabled() else 0
-    if timeout > 0:
-        command.extend(["--timeout", str(timeout)])
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+    process_timeout = None
+    if event.get("local_delivery", "temporary") == "temporary":
+        notification_timeout = temporary_notification_seconds()
+        command.extend(["--timeout", str(notification_timeout)])
+        process_timeout = notification_timeout + 10
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=process_timeout,
+    )
     return result.stdout.strip()
+
+
+def tmux_executable() -> str | None:
+    executable = shutil.which("tmux")
+    if executable:
+        return executable
+    for candidate in ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux"):
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def event_terminal_bundle_id(event: dict[str, Any]) -> str:
+    configured = event.get("terminal_bundle_id")
+    if isinstance(configured, str) and configured:
+        return configured
+    application = str(event.get("terminal_app") or "iTerm2")
+    return TERMINAL_BUNDLE_IDS.get(application, "com.googlecode.iterm2")
 
 
 def open_event_target(event: dict[str, Any]) -> None:
     target = event.get("tmux_target")
-    if target and shutil.which("tmux"):
-        subprocess.run(["tmux", "switch-client", "-t", target], check=False, timeout=3)
-        subprocess.run(["tmux", "select-pane", "-t", target], check=False, timeout=3)
-    application = event.get("terminal_app") or "iTerm"
-    subprocess.run(["open", "-a", application], check=False, timeout=3)
+    session = event.get("tmux_session")
+    tmux = tmux_executable()
+    if target and tmux:
+        pane = event.get("tmux_pane")
+        if pane:
+            resolved = subprocess.run(
+                [
+                    tmux,
+                    "display-message",
+                    "-p",
+                    "-t",
+                    pane,
+                    "#{session_name}:#{window_index}.#{pane_index}\t#{session_name}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=3,
+            )
+            dynamic_target, separator, dynamic_session = resolved.stdout.strip().partition("\t")
+            if resolved.returncode == 0 and separator:
+                target = dynamic_target
+                session = dynamic_session
+        clients = subprocess.run(
+            [tmux, "list-clients", "-F", "#{client_tty}\t#{session_name}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=3,
+        )
+        subprocess.run([tmux, "select-window", "-t", target], check=False, timeout=3)
+        subprocess.run([tmux, "select-pane", "-t", target], check=False, timeout=3)
+        if clients.returncode == 0 and session:
+            for line in clients.stdout.splitlines():
+                tty, separator, client_session = line.partition("\t")
+                if separator and client_session == session:
+                    subprocess.run(
+                        [tmux, "switch-client", "-c", tty, "-t", session],
+                        check=False,
+                        timeout=3,
+                    )
+    subprocess.run(
+        [OPEN, "-b", event_terminal_bundle_id(event)],
+        check=False,
+        timeout=3,
+    )
 
 
 def acknowledge_event(event_id: str, *, opened: bool = False) -> None:
@@ -443,11 +754,11 @@ def acknowledge_event(event_id: str, *, opened: bool = False) -> None:
 
 
 def remove_notification(event: dict[str, Any]) -> None:
-    alerter = shutil.which("alerter")
-    if not alerter:
+    executable = alerter_path()
+    if not executable:
         return
     subprocess.run(
-        [alerter, "--remove", event["dedupe_key"]],
+        [executable, "--remove", event["dedupe_key"]],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -462,24 +773,44 @@ def handle_alerter_response(event: dict[str, Any], response: str) -> None:
         acknowledge_event(event["id"], opened=True)
     elif normalized in {"확인", "@ACTIONCLICKED"}:
         acknowledge_event(event["id"])
-    elif normalized in {"@CLOSED", "@TIMEOUT", "", "나중에"}:
-        return
 
 
 def run_worker(event_id: str) -> int:
     event = load_event(event_id)
     if not is_pending(event):
         return 0
-    title, message = notification_text(event)
-    alerter = shutil.which("alerter")
-    if not alerter:
-        send_osascript(title, message, event["sound"])
-        update_event(event_id, presented_at=isoformat(), notification_backend="osascript")
+    if event.get("slack_immediate") and not event.get("escalated_at"):
+        deliver_slack_event(event, now_utc())
+        event = load_event(event_id)
+    local_delivery = event.get("local_delivery", "temporary")
+    if local_delivery == "off":
+        update_event(event_id, presented_at=isoformat(), notification_backend="off")
         return 0
-    update_event(event_id, presented_at=isoformat(), notification_backend="alerter")
-    response = run_alerter(event, alerter)
-    handle_alerter_response(event, response)
-    return 0
+    title, message = notification_text(event)
+    alerter = alerter_path()
+    if alerter:
+        try:
+            update_event(event_id, presented_at=isoformat(), notification_backend="alerter")
+            response = run_alerter(event, alerter)
+            handle_alerter_response(event, response)
+            return 0
+        except (OSError, subprocess.SubprocessError):
+            update_event(
+                event_id,
+                alerter_failed_at=isoformat(),
+            )
+    try:
+        send_osascript(title, message, event["sound"])
+        update_event(
+            event_id,
+            presented_at=isoformat(),
+            notification_backend="osascript",
+            presentation_degraded=local_delivery == "persistent",
+        )
+        return 0
+    except (OSError, subprocess.SubprocessError):
+        update_event(event_id, local_notification_failed_at=isoformat())
+        return 1
 
 
 def keychain_account() -> str:
@@ -495,9 +826,10 @@ def valid_slack_webhook(value: str) -> bool:
     )
 
 
-def read_slack_webhook() -> str | None:
+def read_slack_webhook(destination: str = "agent") -> str | None:
+    service = KEYCHAIN_SERVICES[destination]
     result = subprocess.run(
-        [SECURITY, "find-generic-password", "-a", keychain_account(), "-s", KEYCHAIN_SERVICE, "-w"],
+        [SECURITY, "find-generic-password", "-a", keychain_account(), "-s", service, "-w"],
         capture_output=True,
         text=True,
         check=False,
@@ -509,8 +841,9 @@ def read_slack_webhook() -> str | None:
     return webhook if valid_slack_webhook(webhook) else None
 
 
-def configure_slack() -> int:
-    print("Slack Incoming Webhook URL을 Keychain 프롬프트에 붙여넣으세요.")
+def configure_slack(destination: str = "agent") -> int:
+    service = KEYCHAIN_SERVICES[destination]
+    print(f"{destination} Slack Incoming Webhook URL을 Keychain 프롬프트에 붙여넣으세요.")
     result = subprocess.run(
         [
             SECURITY,
@@ -519,9 +852,9 @@ def configure_slack() -> int:
             "-a",
             keychain_account(),
             "-s",
-            KEYCHAIN_SERVICE,
+            service,
             "-l",
-            "Agent Notify Slack Webhook",
+            f"Agent Notify Slack Webhook ({destination})",
             "-w",
         ],
         check=False,
@@ -529,11 +862,11 @@ def configure_slack() -> int:
     if result.returncode != 0:
         print("agent-notify: Keychain 등록에 실패했습니다.", file=sys.stderr)
         return 1
-    if read_slack_webhook() is None:
+    if read_slack_webhook(destination) is None:
         print("agent-notify: Slack Webhook 형식이 올바르지 않아 활성화하지 않았습니다.", file=sys.stderr)
         return 1
     update_runtime_settings(slack_enabled=True)
-    print("Slack 에스컬레이션이 활성화되었습니다.")
+    print(f"Slack {destination} 목적지가 활성화되었습니다.")
     return 0
 
 
@@ -552,8 +885,14 @@ def post_slack(webhook: str, text: str) -> None:
 
 
 def slack_text(event: dict[str, Any], current_time: datetime) -> str:
-    elapsed = max(0, int((current_time - parse_time(event["created_at"])).total_seconds() // 60))
     status = {"complete": "완료", "attention": "확인 필요", "error": "오류"}[event["status"]]
+    if event.get("slack_immediate"):
+        return (
+            f":bell: *{event['source_label']} 작업 알림*\n"
+            f"• 프로젝트: {event['project']}\n"
+            f"• 상태: {status}"
+        )
+    elapsed = max(0, int((current_time - parse_time(event["created_at"])).total_seconds() // 60))
     return (
         f":hourglass_flowing_sand: *{event['source_label']} 작업 미확인*\n"
         f"• 프로젝트: {event['project']}\n"
@@ -562,41 +901,59 @@ def slack_text(event: dict[str, Any], current_time: datetime) -> str:
     )
 
 
+def deliver_slack_event(event: dict[str, Any], current_time: datetime, webhook: str | None = None) -> bool:
+    if (
+        not slack_enabled()
+        or event.get("slack_delivery", "delayed") == "off"
+        or not is_pending(event)
+        or event.get("escalated_at")
+    ):
+        return False
+    attempts = int(event.get("slack_attempts", 0))
+    if attempts >= 3:
+        return False
+    destination = event.get("slack_destination", "agent")
+    webhook = webhook or read_slack_webhook(destination)
+    if webhook is None:
+        print("agent-notify: Slack은 활성화됐지만 Keychain Webhook을 읽지 못했습니다.", file=sys.stderr)
+        return False
+    try:
+        post_slack(webhook, slack_text(event, current_time))
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError):
+        update_event(
+            event["id"],
+            slack_attempts=attempts + 1,
+            slack_last_failed_at=isoformat(current_time),
+        )
+        return False
+    update_event(
+        event["id"],
+        slack_attempts=attempts + 1,
+        escalated_at=isoformat(current_time),
+    )
+    return True
+
+
 def sweep(current_time: datetime | None = None) -> int:
     if not slack_enabled():
         return 0
-    webhook = read_slack_webhook()
-    if webhook is None:
-        print("agent-notify: Slack은 활성화됐지만 Keychain Webhook을 읽지 못했습니다.", file=sys.stderr)
-        return 1
     current_time = current_time or now_utc()
     failures = 0
     for event in list_events():
         if not is_pending(event) or event.get("escalated_at"):
             continue
+        slack_delivery = event.get("slack_delivery", "delayed")
+        if slack_delivery == "off":
+            continue
         attempts = int(event.get("slack_attempts", 0))
         if attempts >= 3:
             continue
-        due_at = parse_time(event["created_at"]) + timedelta(
-            seconds=int(event["slack_after_seconds"])
-        )
+        delay = 0 if slack_delivery == "immediate" else int(event["slack_after_seconds"])
+        due_at = parse_time(event["created_at"]) + timedelta(seconds=delay)
         if current_time < due_at:
             continue
-        try:
-            post_slack(webhook, slack_text(event, current_time))
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError):
+        if not deliver_slack_event(event, current_time):
             failures += 1
-            update_event(
-                event["id"],
-                slack_attempts=attempts + 1,
-                slack_last_failed_at=isoformat(current_time),
-            )
-            continue
-        update_event(
-            event["id"],
-            slack_attempts=attempts + 1,
-            escalated_at=isoformat(current_time),
-        )
     return 1 if failures else 0
 
 
@@ -648,40 +1005,231 @@ def generic_event(arguments: list[str]) -> int:
     parser.add_argument("--project")
     parser.add_argument("--cwd")
     parser.add_argument("--session")
+    parser.add_argument("--local", choices=sorted(LOCAL_DELIVERIES))
+    parser.add_argument("--slack", choices=sorted(SLACK_DELIVERIES))
+    parser.add_argument("--slack-destination", choices=sorted(KEYCHAIN_SERVICES), default="agent")
     args = parser.parse_args(arguments)
+    if (args.local is None) != (args.slack is None):
+        raise ValueError("--local과 --slack은 함께 지정해야 합니다")
     cwd = args.cwd
     if not cwd and args.project:
         cwd = args.project
     payload = {"cwd": cwd, "session_id": args.session}
     event = normalize_event(args.source, args.status, payload, label=args.label)
     if args.project:
-        event["project"] = one_line(args.project, 160)
-    enqueue_event(event)
+        event["project"] = one_line(args.project, 500)
+    event["slack_destination"] = args.slack_destination
+    policy = None
+    if args.local is not None and args.slack is not None:
+        policy = {
+            "name": "event",
+            "local": args.local,
+            "slack": args.slack,
+            "until": None,
+        }
+    enqueue_event(event, policy)
+    return 0
+
+
+def local_test_command() -> int:
+    if alerter_path() is None:
+        print(
+            "agent-notify: 클릭 가능한 테스트에는 `brew install vjeantet/tap/alerter`가 필요합니다.",
+            file=sys.stderr,
+        )
+        send_osascript(
+            "에이전트 알림 테스트",
+            "임시 AppleScript fallback 알림입니다",
+            "Glass",
+        )
+        return 1
+    event = normalize_event(
+        "agent-notify",
+        "complete",
+        {"cwd": os.getcwd(), "session_id": f"test-{uuid.uuid4()}"},
+        label="Agent Notify",
+    )
+    event["project"] = "클릭하면 기록된 tmux pane으로 이동합니다"
+    enqueue_event(
+        event,
+        {"name": "test", "local": "persistent", "slack": "off", "until": None},
+    )
+    print("클릭 가능한 지속형 테스트 알림을 전송했습니다.")
     return 0
 
 
 def slack_command(arguments: list[str]) -> int:
     command = arguments[0] if arguments else "status"
+    destination = arguments[1] if len(arguments) > 1 else "agent"
+    if destination not in {*KEYCHAIN_SERVICES, "all"}:
+        print("usage: agent-notify slack <configure|status|test> [agent|usage]", file=sys.stderr)
+        return 2
     if command == "configure":
-        return configure_slack()
+        if destination == "all":
+            return 2
+        return configure_slack(destination)
     if command == "disable":
         update_runtime_settings(slack_enabled=False)
         print("Slack 에스컬레이션을 비활성화했습니다. Keychain 항목은 보존했습니다.")
         return 0
     if command == "status":
-        configured = read_slack_webhook() is not None
-        print(f"enabled={str(slack_enabled()).lower()} configured={str(configured).lower()}")
+        destinations = KEYCHAIN_SERVICES if destination == "all" else (destination,)
+        for name in destinations:
+            configured = read_slack_webhook(name) is not None
+            print(
+                f"destination={name} enabled={str(slack_enabled()).lower()} "
+                f"configured={str(configured).lower()}"
+            )
         return 0
     if command == "test":
-        webhook = read_slack_webhook()
+        if destination == "all":
+            return 2
+        webhook = read_slack_webhook(destination)
         if webhook is None:
             print("agent-notify: Keychain에 유효한 Webhook이 없습니다.", file=sys.stderr)
             return 1
-        post_slack(webhook, ":white_check_mark: Agent Notify Slack 테스트")
-        print("Slack 테스트 메시지를 전송했습니다.")
+        post_slack(webhook, f":white_check_mark: Agent Notify Slack 테스트 ({destination})")
+        print(f"Slack {destination} 테스트 메시지를 전송했습니다.")
         return 0
-    print("usage: agent-notify slack <configure|disable|status|test>", file=sys.stderr)
+    print("usage: agent-notify slack <configure|disable|status|test> [agent|usage]", file=sys.stderr)
     return 2
+
+
+def policy_with_duration(policy: dict[str, Any], duration: str | None) -> dict[str, Any]:
+    result = dict(policy)
+    result["until"] = isoformat(now_utc() + parse_away_duration(duration)) if duration else None
+    return result
+
+
+def slack_policy_ready(policy: dict[str, Any]) -> bool:
+    if policy["slack"] != "immediate":
+        return True
+    if slack_enabled() and read_slack_webhook() is not None:
+        return True
+    print(
+        "agent-notify: 즉시 Slack 모드는 먼저 `agent-notify slack configure`가 필요합니다.",
+        file=sys.stderr,
+    )
+    return False
+
+
+def warn_persistent_backend(policy: dict[str, Any]) -> None:
+    if policy["local"] == "persistent" and alerter_path() is None:
+        print(
+            "agent-notify: persistent 로컬 알림에는 `brew install vjeantet/tap/alerter`가 필요합니다.",
+            file=sys.stderr,
+        )
+
+
+def set_active_policy(policy: dict[str, Any]) -> None:
+    update_runtime_settings(active_policy=policy, next_policy=None)
+
+
+def set_next_policy(policy: dict[str, Any]) -> None:
+    update_runtime_settings(next_policy=policy)
+
+
+def print_mode_status() -> int:
+    settings = runtime_settings()
+    current = active_policy(settings)
+    if settings.get("active_policy") != current:
+        update_runtime_settings(active_policy=current)
+    pending = settings.get("next_policy")
+    next_name = pending.get("name") if valid_policy(pending) else "none"
+    until = f" until={current['until']}" if current.get("until") else ""
+    print(
+        f"mode={current['name']} local={current['local']} slack={current['slack']}"
+        f"{until} next={next_name}"
+    )
+    return 0
+
+
+def mode_command(arguments: list[str]) -> int:
+    if not arguments or arguments == ["status"]:
+        return print_mode_status()
+    if arguments in (["-h"], ["--help"], ["help"]):
+        print(MODE_USAGE, end="")
+        return 0
+    command = arguments[0]
+    if command == "next":
+        if len(arguments) != 2:
+            print(
+                "usage: agent-notify mode next "
+                "<normal|watch|away|quiet>",
+                file=sys.stderr,
+            )
+            return 2
+        policy = named_policy(arguments[1])
+        if not slack_policy_ready(policy):
+            return 1
+        warn_persistent_backend(policy)
+        set_next_policy(policy)
+        print(f"다음 에이전트 결과 한 건에 {policy['name']} 모드를 적용합니다.")
+        return 0
+    if command == "set":
+        parser = argparse.ArgumentParser(prog="agent-notify mode set")
+        parser.add_argument("--local", choices=sorted(LOCAL_DELIVERIES), required=True)
+        parser.add_argument("--slack", choices=sorted(SLACK_DELIVERIES), required=True)
+        parser.add_argument("--for", dest="duration")
+        args = parser.parse_args(arguments[1:])
+        policy = policy_with_duration(
+            {"name": "custom", "local": args.local, "slack": args.slack},
+            args.duration,
+        )
+    else:
+        parser = argparse.ArgumentParser(prog=f"agent-notify mode {command}")
+        parser.add_argument("--for", dest="duration")
+        args = parser.parse_args(arguments[1:])
+        policy = policy_with_duration(named_policy(command), args.duration)
+    if not slack_policy_ready(policy):
+        return 1
+    warn_persistent_backend(policy)
+    set_active_policy(policy)
+    until = f" until={policy['until']}" if policy.get("until") else ""
+    print(
+        f"알림 모드: {policy['name']} local={policy['local']} "
+        f"slack={policy['slack']}{until}"
+    )
+    return 0
+
+
+def away_command(arguments: list[str]) -> int:
+    command = arguments[0] if arguments else "status"
+    if command == "off":
+        if len(arguments) != 1:
+            print("usage: agent-notify away off", file=sys.stderr)
+            return 2
+        set_active_policy(named_policy("normal"))
+        print("외출 즉시 알림을 해제했습니다. normal 모드로 돌아갑니다.")
+        return 0
+    if command == "status":
+        if len(arguments) != 1:
+            print("usage: agent-notify away status", file=sys.stderr)
+            return 2
+        return print_mode_status()
+    if command not in {"once", "on"}:
+        print("usage: agent-notify away <once|on [--for 2h]|off|status>", file=sys.stderr)
+        return 2
+    policy = named_policy("away")
+    if not slack_policy_ready(policy):
+        return 1
+    if command == "once":
+        if len(arguments) != 1:
+            print("usage: agent-notify away once", file=sys.stderr)
+            return 2
+        set_next_policy(policy)
+        print("다음 에이전트 결과 한 건을 Slack으로 즉시 전송합니다.")
+        return 0
+    parser = argparse.ArgumentParser(prog="agent-notify away on")
+    parser.add_argument("--for", dest="duration")
+    args = parser.parse_args(arguments[1:])
+    policy = policy_with_duration(policy, args.duration)
+    set_active_policy(policy)
+    if policy["until"]:
+        print(f"외출 즉시 알림을 활성화했습니다. 자동 해제: {policy['until']}")
+    else:
+        print("외출 즉시 알림을 활성화했습니다. `agent-notify away off`로 해제하세요.")
+    return 0
 
 
 def load_payload(source: str, arguments: list[str], stdin: str) -> dict[str, Any]:
@@ -740,13 +1288,12 @@ def main(arguments: list[str] | None = None, stdin: str | None = None) -> int:
             return open_command(arguments[0])
         if command == "slack":
             return slack_command(arguments)
+        if command == "away":
+            return away_command(arguments)
+        if command == "mode":
+            return mode_command(arguments)
         if command == "test":
-            send_osascript(
-                "에이전트 알림 테스트",
-                "macOS 알림이 정상적으로 연결되었습니다",
-                "Glass",
-            )
-            return 0
+            return local_test_command()
         raise ValueError(f"unsupported command: {command}")
     except (json.JSONDecodeError, ValueError, OSError, subprocess.SubprocessError) as error:
         print(f"agent-notify: {error}", file=sys.stderr)

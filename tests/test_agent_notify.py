@@ -67,6 +67,57 @@ class AgentNotifyTest(unittest.TestCase):
         spawn_worker.assert_called_once_with(event["id"])
 
     @mock.patch.object(agent_notify, "spawn_worker")
+    def test_generic_event_can_request_immediate_slack(self, _spawn_worker):
+        result = agent_notify.main(
+            [
+                "event",
+                "--source",
+                "codex-usage",
+                "--status",
+                "attention",
+                "--project",
+                "google 90% used",
+                "--local",
+                "temporary",
+                "--slack",
+                "immediate",
+                "--slack-destination",
+                "usage",
+            ],
+            "",
+        )
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["local_delivery"], "temporary")
+        self.assertEqual(event["slack_delivery"], "immediate")
+        self.assertEqual(event["slack_destination"], "usage")
+        self.assertTrue(event["slack_immediate"])
+
+    @mock.patch.object(agent_notify, "post_slack")
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/USAGE",
+    )
+    def test_usage_event_reads_usage_destination(self, read_webhook, post_slack):
+        event = agent_notify.normalize_event(
+            "codex-usage", "attention", {"cwd": "/tmp/sample"}
+        )
+        event.update(
+            slack_destination="usage",
+            slack_delivery="immediate",
+            slack_immediate=True,
+        )
+        self.save_event(event)
+        agent_notify.update_runtime_settings(slack_enabled=True)
+
+        self.assertTrue(agent_notify.deliver_slack_event(event, datetime.now(timezone.utc)))
+
+        read_webhook.assert_called_once_with("usage")
+        post_slack.assert_called_once()
+
+    @mock.patch.object(agent_notify, "spawn_worker")
     def test_codex_stores_only_metadata(self, _spawn_worker):
         payload = {
             "type": "agent-turn-complete",
@@ -128,30 +179,9 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertIsNotNone(agent_notify.load_event(first["id"])["superseded_at"])
         self.assertTrue(agent_notify.is_pending(agent_notify.load_event(second["id"])))
 
-    @mock.patch.object(agent_notify, "run_alerter", return_value="확인")
-    @mock.patch.object(agent_notify.shutil, "which", return_value="/opt/homebrew/bin/alerter")
-    def test_alerter_acknowledges_event(self, _which, _run_alerter):
-        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
-        self.save_event(event)
-
-        result = agent_notify.run_worker(event["id"])
-
-        self.assertEqual(result, 0)
-        self.assertIsNotNone(agent_notify.load_event(event["id"])["acknowledged_at"])
-
-    @mock.patch.object(agent_notify, "run_alerter", return_value="@CLOSED")
-    @mock.patch.object(agent_notify.shutil, "which", return_value="/opt/homebrew/bin/alerter")
-    def test_closing_as_later_keeps_event_pending(self, _which, _run_alerter):
-        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
-        self.save_event(event)
-
-        agent_notify.run_worker(event["id"])
-
-        self.assertTrue(agent_notify.is_pending(agent_notify.load_event(event["id"])))
-
     @mock.patch.object(agent_notify, "send_osascript")
-    @mock.patch.object(agent_notify.shutil, "which", return_value=None)
-    def test_osascript_remains_fallback_when_alerter_is_missing(self, _which, send):
+    @mock.patch.object(agent_notify, "alerter_path", return_value=None)
+    def test_osascript_remains_fallback_when_alerter_is_missing(self, _alerter, send):
         event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
         self.save_event(event)
 
@@ -161,6 +191,108 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertEqual(
             agent_notify.load_event(event["id"])["notification_backend"], "osascript"
         )
+
+    @mock.patch.object(agent_notify, "run_alerter")
+    @mock.patch.object(agent_notify, "send_osascript")
+    @mock.patch.object(agent_notify, "alerter_path", return_value=None)
+    @mock.patch.object(agent_notify, "local_notification_backend", return_value="osascript")
+    def test_config_can_force_reliable_osascript_backend(
+        self, _backend, _alerter, send, run_alerter
+    ):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        self.save_event(event)
+
+        self.assertEqual(agent_notify.run_worker(event["id"]), 0)
+
+        send.assert_called_once()
+        run_alerter.assert_not_called()
+        self.assertEqual(
+            agent_notify.load_event(event["id"])["notification_backend"], "osascript"
+        )
+
+    @mock.patch.object(agent_notify, "run_alerter", return_value="@TIMEOUT")
+    @mock.patch.object(
+        agent_notify, "alerter_path", return_value="/opt/homebrew/bin/alerter"
+    )
+    def test_temporary_notification_uses_alerter_timeout(self, _alerter, run_alerter):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        self.save_event(event)
+
+        self.assertEqual(agent_notify.run_worker(event["id"]), 0)
+
+        run_alerter.assert_called_once_with(event, "/opt/homebrew/bin/alerter")
+        self.assertEqual(
+            agent_notify.load_event(event["id"])["notification_backend"],
+            "alerter",
+        )
+        self.assertTrue(agent_notify.is_pending(agent_notify.load_event(event["id"])))
+
+    @mock.patch.object(agent_notify, "run_alerter", return_value="확인")
+    @mock.patch.object(
+        agent_notify, "alerter_path", return_value="/opt/homebrew/bin/alerter"
+    )
+    def test_persistent_notification_waits_for_and_handles_action(
+        self, _alerter, run_alerter
+    ):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event["local_delivery"] = "persistent"
+        self.save_event(event)
+
+        self.assertEqual(agent_notify.run_worker(event["id"]), 0)
+
+        run_alerter.assert_called_once_with(event, "/opt/homebrew/bin/alerter")
+        self.assertIsNotNone(agent_notify.load_event(event["id"])["acknowledged_at"])
+
+    @mock.patch.object(agent_notify, "send_osascript")
+    @mock.patch.object(agent_notify, "run_alerter")
+    def test_local_off_presents_nothing(self, run_alerter, send_osascript):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event["local_delivery"] = "off"
+        self.save_event(event)
+
+        self.assertEqual(agent_notify.run_worker(event["id"]), 0)
+
+        run_alerter.assert_not_called()
+        send_osascript.assert_not_called()
+        self.assertEqual(agent_notify.load_event(event["id"])["notification_backend"], "off")
+
+    @mock.patch.object(agent_notify.subprocess, "run")
+    def test_alerter_uses_actions_and_timeout(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="@TIMEOUT\n")
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+
+        response = agent_notify.run_alerter(event, "/alerter")
+
+        command = run.call_args.args[0]
+        self.assertIn("--actions", command)
+        self.assertIn("확인,터미널로 이동", command)
+        self.assertNotIn("--sender", command)
+        self.assertEqual(command[command.index("--timeout") + 1], "8")
+        self.assertEqual(response, "@TIMEOUT")
+
+    @mock.patch.object(agent_notify, "acknowledge_event")
+    @mock.patch.object(agent_notify, "open_event_target")
+    def test_alerter_content_click_focuses_target_and_acknowledges(
+        self, open_target, acknowledge
+    ):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+
+        agent_notify.handle_alerter_response(event, "@CONTENTCLICKED")
+
+        open_target.assert_called_once_with(event)
+        acknowledge.assert_called_once_with(event["id"], opened=True)
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    @mock.patch.object(
+        agent_notify, "alerter_path", return_value="/opt/homebrew/bin/alerter"
+    )
+    def test_local_test_uses_persistent_clickable_policy(self, _alerter, _spawn_worker):
+        self.assertEqual(agent_notify.main(["test"], ""), 0)
+
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["policy_name"], "test")
+        self.assertEqual(event["local_delivery"], "persistent")
+        self.assertEqual(event["slack_delivery"], "off")
 
     @mock.patch.object(agent_notify, "post_slack")
     @mock.patch.object(agent_notify, "read_slack_webhook", return_value="https://hooks.slack.com/services/T/B/X")
@@ -186,6 +318,173 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertEqual(agent_notify.sweep(), 0)
         read_webhook.assert_not_called()
 
+    @mock.patch.object(agent_notify, "post_slack")
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/X",
+    )
+    def test_slack_off_policy_never_escalates(self, _read_webhook, post_slack):
+        current_time = datetime(2026, 7, 16, 7, 0, tzinfo=timezone.utc)
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+        event["created_at"] = (current_time - timedelta(hours=1)).isoformat()
+        event["slack_delivery"] = "off"
+        self.save_event(event)
+        agent_notify.update_runtime_settings(slack_enabled=True)
+
+        self.assertEqual(agent_notify.sweep(current_time), 0)
+        post_slack.assert_not_called()
+
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/X",
+    )
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_away_once_marks_only_next_event_for_immediate_slack(
+        self, _spawn_worker, _read_webhook
+    ):
+        agent_notify.update_runtime_settings(slack_enabled=True)
+
+        self.assertEqual(agent_notify.main(["away", "once"], ""), 0)
+        first = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/first"}
+        )
+        second = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/second"}
+        )
+        agent_notify.enqueue_event(first)
+        agent_notify.enqueue_event(second)
+
+        self.assertTrue(agent_notify.load_event(first["id"])["slack_immediate"])
+        self.assertEqual(agent_notify.load_event(first["id"])["local_delivery"], "off")
+        self.assertFalse(agent_notify.load_event(second["id"])["slack_immediate"])
+        self.assertEqual(agent_notify.load_event(second["id"])["slack_delivery"], "delayed")
+        self.assertIsNone(agent_notify.runtime_settings().get("next_policy"))
+
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/X",
+    )
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_timed_away_mode_persists_until_expiration(self, _spawn_worker, _read_webhook):
+        agent_notify.update_runtime_settings(slack_enabled=True)
+
+        self.assertEqual(agent_notify.main(["away", "on", "--for", "2h"], ""), 0)
+        first = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/first"}
+        )
+        second = agent_notify.normalize_event(
+            "future-agent", "error", {"cwd": "/tmp/second"}
+        )
+        agent_notify.enqueue_event(first)
+        agent_notify.enqueue_event(second)
+
+        self.assertTrue(agent_notify.load_event(first["id"])["slack_immediate"])
+        self.assertTrue(agent_notify.load_event(second["id"])["slack_immediate"])
+        self.assertEqual(agent_notify.runtime_settings()["active_policy"]["name"], "away")
+        self.assertIsNotNone(agent_notify.runtime_settings()["active_policy"]["until"])
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_expired_away_mode_returns_to_delayed_delivery(self, _spawn_worker):
+        agent_notify.update_runtime_settings(
+            slack_enabled=True,
+            active_policy={
+                "name": "away",
+                "local": "off",
+                "slack": "immediate",
+                "until": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+            },
+        )
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+
+        agent_notify.enqueue_event(event)
+
+        self.assertFalse(agent_notify.load_event(event["id"])["slack_immediate"])
+        self.assertEqual(agent_notify.load_event(event["id"])["policy_name"], "normal")
+        self.assertEqual(agent_notify.runtime_settings()["active_policy"]["name"], "normal")
+
+    @mock.patch.object(agent_notify, "read_slack_webhook", return_value=None)
+    def test_away_mode_requires_configured_slack(self, _read_webhook):
+        agent_notify.update_runtime_settings(slack_enabled=True)
+
+        self.assertEqual(agent_notify.main(["away", "once"], ""), 1)
+        self.assertIsNone(agent_notify.runtime_settings().get("next_policy"))
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_quiet_mode_disables_both_delivery_channels(self, _spawn_worker):
+        self.assertEqual(agent_notify.main(["mode", "quiet"], ""), 0)
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+
+        agent_notify.enqueue_event(event)
+
+        saved = agent_notify.load_event(event["id"])
+        self.assertEqual(saved["local_delivery"], "off")
+        self.assertEqual(saved["slack_delivery"], "off")
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_custom_mode_supports_independent_delivery_combination(self, _spawn_worker):
+        self.assertEqual(
+            agent_notify.main(
+                ["mode", "set", "--local", "persistent", "--slack", "off"], ""
+            ),
+            0,
+        )
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+
+        agent_notify.enqueue_event(event)
+
+        saved = agent_notify.load_event(event["id"])
+        self.assertEqual(saved["policy_name"], "custom")
+        self.assertEqual(saved["local_delivery"], "persistent")
+        self.assertEqual(saved["slack_delivery"], "off")
+
+    def test_help_documents_mode_set_values_and_direct_examples(self):
+        for arguments in (["--help"], ["mode", "--help"]):
+            stdout = io.StringIO()
+            with mock.patch("sys.stdout", stdout):
+                self.assertEqual(agent_notify.main(arguments, ""), 0)
+            help_text = stdout.getvalue()
+            self.assertIn("--local <off|temporary|persistent>", help_text)
+            self.assertIn("--slack <off|delayed|immediate>", help_text)
+            self.assertIn("mode set --local persistent --slack off", help_text)
+            self.assertIn("mode set --local temporary --slack off", help_text)
+            self.assertIn("mode set --local persistent --slack immediate", help_text)
+            self.assertIn("mode set --local off --slack immediate", help_text)
+
+    @mock.patch.object(agent_notify, "post_slack")
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/X",
+    )
+    @mock.patch.object(agent_notify, "send_osascript")
+    @mock.patch.object(agent_notify.shutil, "which", return_value=None)
+    def test_worker_sends_away_event_to_slack_immediately(
+        self, _which, _send_osascript, _read_webhook, post_slack
+    ):
+        agent_notify.update_runtime_settings(slack_enabled=True)
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+        event["slack_immediate"] = True
+        event["slack_delivery"] = "immediate"
+        self.save_event(event)
+
+        self.assertEqual(agent_notify.run_worker(event["id"]), 0)
+
+        post_slack.assert_called_once()
+        self.assertIsNotNone(agent_notify.load_event(event["id"])["escalated_at"])
+
     @mock.patch.object(agent_notify, "read_slack_webhook", return_value="https://hooks.slack.com/services/T/B/X")
     @mock.patch.object(agent_notify.subprocess, "run")
     def test_slack_configure_uses_interactive_keychain_prompt(self, run, _read_webhook):
@@ -199,19 +498,36 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertNotIn("https://hooks.slack.com", " ".join(command))
         self.assertTrue(agent_notify.slack_enabled())
 
+    @mock.patch.object(agent_notify, "tmux_executable", return_value="/opt/homebrew/bin/tmux")
     @mock.patch.object(agent_notify.subprocess, "run")
-    def test_local_timeout_is_used_only_after_slack_is_enabled(self, run):
-        run.return_value = subprocess.CompletedProcess([], 0, stdout="@TIMEOUT", stderr="")
+    def test_open_focuses_recorded_tmux_client_window_and_pane(self, run, _tmux):
         event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event.update(
+            tmux_target="work:2.1",
+            tmux_session="work",
+            terminal_app="iTerm2",
+            terminal_bundle_id="com.googlecode.iterm2",
+        )
 
-        agent_notify.run_alerter(event, "/alerter")
-        self.assertNotIn("--timeout", run.call_args.args[0])
+        def result(command, **_kwargs):
+            if "list-clients" in command:
+                return subprocess.CompletedProcess(command, 0, stdout="/dev/ttys001\twork\n")
+            return subprocess.CompletedProcess(command, 0, stdout="")
 
-        agent_notify.update_runtime_settings(slack_enabled=True)
-        agent_notify.run_alerter(event, "/alerter")
-        command = run.call_args.args[0]
-        self.assertIn("--timeout", command)
-        self.assertEqual(command[command.index("--timeout") + 1], "600")
+        run.side_effect = result
+
+        agent_notify.open_event_target(event)
+
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(
+            ["/opt/homebrew/bin/tmux", "switch-client", "-c", "/dev/ttys001", "-t", "work"],
+            commands,
+        )
+        self.assertIn(
+            ["/opt/homebrew/bin/tmux", "select-pane", "-t", "work:2.1"],
+            commands,
+        )
+        self.assertIn(["/usr/bin/open", "-b", "com.googlecode.iterm2"], commands)
 
     @mock.patch.object(agent_notify, "remove_notification")
     def test_ack_removes_persistent_notification(self, remove_notification):

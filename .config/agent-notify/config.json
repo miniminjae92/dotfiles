@@ -1,5 +1,26 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "notification_backend": "auto",
+  "temporary_seconds": 8,
+  "default_profile": "normal",
+  "profiles": {
+    "normal": {
+      "local": "temporary",
+      "slack": "delayed"
+    },
+    "watch": {
+      "local": "persistent",
+      "slack": "delayed"
+    },
+    "away": {
+      "local": "off",
+      "slack": "immediate"
+    },
+    "quiet": {
+      "local": "off",
+      "slack": "off"
+    }
+  },
   "statuses": {
     "complete": {
       "sound": "Glass",
