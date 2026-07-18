@@ -27,13 +27,14 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/git-ai-commit` is the unified entry point for AI-assisted commit planning, applying a cached plan, and staged-change message generation. It can be run as `git ai-commit`.
     * `bin/git-cm-ai` and `bin/git-plan-ai` remain available as compatibility commands for message-only and plan-only workflows.
     * `bin/agent-notify` provides provider-neutral, metadata-only completion alerts for agent CLIs. Codex and `agy` adapters are included, and future CLIs can emit normalized events without changing the notification or Slack logic.
-    * `bin/gcodex` and `bin/ncodex` run Codex with isolated Google/Naver account homes and macOS Keychain-backed authentication.
+    * `bin/gcodex` and `bin/ncodex` run Codex with isolated Google/Naver account homes and file-based authentication scoped to each account home.
     * `bin/codex-account-usage` reads account usage and reset windows without starting a model turn, and reports daily or threshold changes through `agent-notify` and Slack.
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
     * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
     * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
     * `bin/video-summary` saves a YouTube video's dynamically sized Korean summary with timestamp links as an Obsidian Markdown note. It reuses unchanged summaries to avoid duplicate model calls.
+    * `.codex/skills/summarize-youtube-playlist` interactively collects a channel, playlist, named Codex account, browser profile, usage ceiling, and Slack preference before running the safe two-video gate and background playlist batch.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
@@ -110,8 +111,8 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ```
     `arc` without an argument exports the latest Codex session from `~/.codex/sessions` into `docs/conversation/YYYY-MM-DD-agent-session.md`, then runs the archive workflow. Pass a resume code or session id fragment to archive a specific session.
     `agent-os-usage` reports the latest captured session token totals and the delta since the previous Stop event. These token counts are not ChatGPT credits or API cost.
-    `gcodex` and `ncodex` keep authentication, sessions, memories, and usage records under separate `~/.codex-accounts/google` and `~/.codex-accounts/naver` directories. Shared configuration, hooks, agents, and skills remain linked from `~/.codex`, while credentials are stored in separate macOS Keychain entries derived from each account home. Authenticate each command once with `gcodex login` and `ncodex login`; plain `codex` remains unchanged.
-    Use `gcodex usage` or `ncodex usage` for an immediate account report. A 15-minute LaunchAgent check sends one Slack report after 09:00 each day, warnings when usage crosses 75%, 90%, 95%, or 100%, and a reset notice when usage drops by at least 20 percentage points. It never switches accounts or consumes a reset credit.
+    `gcodex` and `ncodex` keep authentication, sessions, memories, usage records, and file-based credentials under separate `~/.codex-accounts/google` and `~/.codex-accounts/naver` directories. Shared configuration, hooks, agents, and skills remain linked from `~/.codex`. Each `auth.json` is local credential state and must remain mode 600; never commit or copy it. Authenticate each command once with `gcodex login` and `ncodex login`. On macOS these commands use device authorization and open Chrome's `Default` profile for `gcodex` and `Profile 1` for `ncodex`; override them with `CODEX_GOOGLE_CHROME_PROFILE` or `CODEX_NAVER_CHROME_PROFILE` if Chrome profile directories change. An existing login is left intact; run the matching `logout` command first only when intentionally switching accounts. Plain `codex` remains available but is intentionally excluded from this two-account usage-monitoring workflow; use the named wrappers for managed work so an unrelated default login cannot be mistaken for Google or Naver. Existing legacy Keychain entries are ignored and are not deleted automatically.
+    Use `gcodex usage` or `ncodex usage` for an immediate account report; the masked ChatGPT email in the report verifies which account the wrapper actually resolved. A LaunchAgent runs explicitly at 09:00 and every 15 minutes, sends one daily Slack report per account after 09:00, warns when usage crosses 75%, 90%, 95%, or 100%, and reports resets when usage drops by at least 20 percentage points. It also warns when both wrappers resolve to the same ChatGPT email, when an account query fails twice consecutively, or when a failure follows 30 minutes without a successful check. Each account recovers its missed daily report independently. It never falls back to plain `codex`, switches accounts, or consumes a reset credit.
     AI model names are managed in `ai-tools/models.json`, linked to `~/.config/ai-tools/models.json`. The registry contains task assignments and model names only, never credentials. Existing model environment variables remain temporary overrides, and `ai-model-status` reports the effective override when one is set.
 
 4.  **Install Oh My Zsh and Plugins**
@@ -278,6 +279,8 @@ exported.
 ---
 
 ### YouTube Video Summaries
+
+In a Codex session, invoke `$summarize-youtube-playlist` to be prompted for the missing channel, playlist, account, browser profile, usage stop threshold, and Slack preference instead of assembling the flags manually.
 
 `video-summary` uses `yt-dlp` for Korean or English subtitles and the authenticated Codex CLI for structured summarization. Check the transcript size and planned strategy without spending model tokens:
 
