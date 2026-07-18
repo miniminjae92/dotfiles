@@ -1,0 +1,4 @@
+interface:
+  display_name: "유튜브 재생목록 요약"
+  short_description: "질문을 통해 재생목록 전체를 안전하게 요약합니다"
+  default_prompt: "$summarize-youtube-playlist를 사용해 원하는 유튜브 재생목록을 안전하게 요약해 주세요."
