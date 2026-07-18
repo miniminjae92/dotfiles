@@ -68,6 +68,26 @@ class VideoSummaryError(RuntimeError):
     pass
 
 
+def read_used_percent(codex_command: str) -> int:
+    result = subprocess.run(
+        [codex_command, "usage", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "알 수 없는 오류"
+        raise VideoSummaryError(f"Codex 사용량 확인 실패: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+        profile = next(iter(payload.values()))
+        used = profile["rateLimits"]["primary"]["usedPercent"]
+    except (json.JSONDecodeError, StopIteration, KeyError, TypeError) as error:
+        raise VideoSummaryError("Codex 사용량 응답을 해석하지 못했습니다.") from error
+    if not isinstance(used, int):
+        raise VideoSummaryError("Codex 사용량 퍼센트가 정수가 아닙니다.")
+    return used
+
+
 class Cue(NamedTuple):
     start_seconds: float
     end_seconds: float
@@ -1341,6 +1361,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="요약에 사용할 Codex CLI 명령 (기본값: codex)",
     )
     parser.add_argument(
+        "--stop-at-used-percent",
+        type=int,
+        choices=range(1, 101),
+        metavar="1-100",
+        help="각 새 요약 뒤 Codex 사용량을 확인하고 지정 퍼센트 이상이면 안전 중단",
+    )
+    parser.add_argument(
         "--reasoning-effort",
         choices=("low", "medium", "high", "xhigh", "max"),
         default=DEFAULT_REASONING_EFFORT,
@@ -1598,7 +1625,18 @@ def run_channel(args: argparse.Namespace) -> int:
 
     items: list[dict[str, Any]] = []
     total = len(videos)
+    latest_used_percent = None
+    if args.stop_at_used_percent:
+        latest_used_percent = read_used_percent(args.codex_command)
+        if latest_used_percent >= args.stop_at_used_percent:
+            warnings.append(
+                f"Codex 사용량 {latest_used_percent}%로 안전 한도 "
+                f"{args.stop_at_used_percent}% 이상이어서 시작하지 않았습니다."
+            )
     for index, video in enumerate(videos, start=1):
+        if args.stop_at_used_percent and latest_used_percent is not None:
+            if latest_used_percent >= args.stop_at_used_percent:
+                break
         video_id = str(video["id"])
         video_url = str(video.get("url") or f"https://youtu.be/{video_id}")
         title = str(video.get("title") or "")
@@ -1627,7 +1665,15 @@ def run_channel(args: argparse.Namespace) -> int:
             continue
 
         try:
-            items.append(process_video(video_url, args, skip_existing=False))
+            item = process_video(video_url, args, skip_existing=False)
+            items.append(item)
+            if args.stop_at_used_percent and item.get("status") == "summarized":
+                latest_used_percent = read_used_percent(args.codex_command)
+                if latest_used_percent >= args.stop_at_used_percent:
+                    warnings.append(
+                        f"Codex 사용량 {latest_used_percent}%가 안전 한도 "
+                        f"{args.stop_at_used_percent}%에 도달해 중단했습니다."
+                    )
         except VideoSummaryError as error:
             items.append(
                 {
@@ -1644,7 +1690,7 @@ def run_channel(args: argparse.Namespace) -> int:
         counts[status] = counts.get(status, 0) + 1
     indexes = (
         write_playlist_indexes(videos, items, args.output_dir)
-        if args.discover_channel_members
+        if args.discover_channel_members and not args.dry_run
         else []
     )
     report = {
@@ -1654,6 +1700,7 @@ def run_channel(args: argparse.Namespace) -> int:
         "counts": counts,
         "warnings": warnings,
         "playlist_indexes": indexes,
+        "latest_used_percent": latest_used_percent,
         "items": items,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))

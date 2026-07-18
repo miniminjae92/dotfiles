@@ -18,6 +18,23 @@ LOADER.exec_module(video_summary)
 
 
 class VideoSummaryTest(unittest.TestCase):
+    @mock.patch.object(video_summary.subprocess, "run")
+    def test_reads_named_codex_usage_percent_without_model_call(self, run):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {"google": {"rateLimits": {"primary": {"usedPercent": 37}}}}
+            ),
+            stderr="",
+        )
+
+        used = video_summary.read_used_percent("gcodex")
+
+        self.assertEqual(used, 37)
+        run.assert_called_once_with(
+            ["gcodex", "usage", "--json"], capture_output=True, text=True
+        )
+
     def test_extracts_video_id_from_supported_youtube_urls(self):
         urls = [
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -608,6 +625,46 @@ summary_version: "1"
             overview = Path(written[0]).read_text(encoding="utf-8")
             self.assertIn("4. [[회원 영상 [member01]|회원 영상]]", playlist)
             self.assertIn("운영체제", overview)
+
+    @mock.patch.object(video_summary, "write_playlist_indexes")
+    @mock.patch.object(video_summary, "process_video")
+    @mock.patch.object(video_summary, "load_member_inventory")
+    def test_member_channel_dry_run_does_not_write_indexes(
+        self, load_inventory, process_video, write_indexes
+    ):
+        load_inventory.return_value = (
+            [
+                {
+                    "id": "member01",
+                    "title": "회원 영상",
+                    "url": "https://youtu.be/member01",
+                    "playlists": [],
+                }
+            ],
+            [],
+        )
+        process_video.return_value = {
+            "video_id": "member01",
+            "title": "회원 영상",
+            "status": "dry-run",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                result = video_summary.main(
+                    [
+                        "https://www.youtube.com/@example",
+                        "--discover-channel-members",
+                        "--cookies-from-browser",
+                        "chrome:Default",
+                        "--dry-run",
+                        "--output-dir",
+                        temp_dir,
+                    ]
+                )
+
+        self.assertEqual(result, 0)
+        write_indexes.assert_not_called()
 
     def test_member_inventory_round_trip(self):
         with tempfile.TemporaryDirectory() as temp_dir:
