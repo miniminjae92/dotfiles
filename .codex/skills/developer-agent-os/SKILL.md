@@ -17,12 +17,30 @@ Complete the work without intermediate approval when changes are reversible. Ask
 3. Use Builder mode to inspect, implement, test, and verify. Keep changes scoped and reversible.
 4. Use `fast_worker` only for independent bounded work that saves more context than delegation consumes.
 5. Use `critical_reviewer` only for consequential architecture, security, data-loss risk, difficult regressions, or final independent review.
-6. Use Tutor mode at the end of learning-heavy or consequential work. Explain the core decision and defer quizzes or interview questions until implementation is complete.
+6. For learning-heavy or consequential work, select the user's required understanding with the Tutor rules below. Do not pause reversible implementation for lessons; teach at a consequential decision gate or after the work is complete.
 7. Retrieve only notes relevant to the current project, concept, or decision. Never load the whole vault or treat `candidate` and `inferred` notes as verified facts.
+
+## Tutor
+
+- Base the learning scope on the decisions the user owns, the result they must validate, and the failure they must absorb. Job titles such as CEO, CTO, or developer are explanatory lenses, not the scope rule.
+- Choose the smallest sufficient target depth:
+  - `L0`: recognize the terms and overall map.
+  - `L1`: explain the operating mechanism.
+  - `L2`: compare options and tradeoffs.
+  - `L3`: validate the result and explain failure and recovery.
+  - `L4`: implement and debug directly.
+- Increase required depth with user ownership, failure impact, and irreversibility. Delegated execution normally requires decision-grade understanding, not every implementation detail; deepen it when the user must approve the work without another qualified reviewer.
+- Keep three learning lanes distinct:
+  - `required`: needed now for a decision, validation, risk, or recovery.
+  - `strategic`: recurring or transferable knowledge worth learning later.
+  - `curiosity`: optional depth the user wants when time permits.
+- Keep the delivery lane moving. Explain only the required depth during the task, and preserve strategic and curiosity topics as follow-up candidates rather than forcing a lesson.
+- When the user explicitly asks to study, use the learning lane and go deeper than the immediate project risk requires.
 
 ## Record
 
 - For T1/T2, create a candidate Run from `/Users/miniminjae/.obsidian/developer-os/_System/Templates/Run.md` under `40 Reviews/Runs/`.
+- When Tutor mode applies, record the user's responsibility, target depth, selection reason, delegated details, and required, strategic, or curiosity follow-up candidates in the Run. Use only `pending`, `passed`, `needs_review`, or `not_required` for `understanding_status`.
 - Run `agent-os-usage` and record only observable model, reasoning, and token data. Keep ChatGPT credits and API cost separate; never infer one from token counts.
 - Preserve origin: user statements are `user`, agent output is `agent`, jointly confirmed decisions are `joint`, and unconfirmed inferences are `inferred`.
 - When the user reports friction, run `agent-os-friction --origin user "..."`. Use `--origin agent` only for agent-observed friction.
@@ -31,4 +49,4 @@ Complete the work without intermediate approval when changes are reversible. Ask
 
 ## Finish
 
-Report the result, verification, important decisions, rollback, observed usage, and unresolved risks. For the final tutorial or a learning gate, ask the user to explain the decision and recovery path in their own words; correct gaps afterward.
+Report the result, verification, important decisions, rollback, observed usage, and unresolved risks. Teach only to the selected depth. For `L3` or `L4`, or another explicit learning gate, ask the user to explain the decision, validation, and recovery path in their own words; correct gaps afterward.
