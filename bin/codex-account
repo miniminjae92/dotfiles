@@ -42,4 +42,4 @@ done
 exec env \
   CODEX_HOME="$account_home" \
   CODEX_ACCOUNT_PROFILE="$profile" \
-  codex -c 'cli_auth_credentials_store="keyring"' "$@"
+  codex -c 'cli_auth_credentials_store="file"' "$@"

@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo
 KST = ZoneInfo("Asia/Seoul")
 PROFILE_NAMES = ("google", "naver")
 THRESHOLDS = (75, 90, 95, 100)
+FAILURE_ALERT_COUNT = 2
+STALE_AFTER_SECONDS = 30 * 60
 
 
 class UsageError(RuntimeError):
@@ -49,7 +51,7 @@ class AppServer:
     def __init__(self, profile: str):
         command = [codex_executable()]
         if profile != "default":
-            command.extend(["-c", 'cli_auth_credentials_store="keyring"'])
+            command.extend(["-c", 'cli_auth_credentials_store="file"'])
         command.extend(["app-server", "--stdio"])
         environment = os.environ.copy()
         environment["CODEX_HOME"] = str(profile_home(profile))
@@ -110,6 +112,8 @@ class AppServer:
 
     def snapshot(self, include_usage: bool) -> dict[str, Any]:
         result = self._request("account/rateLimits/read")
+        account_result = self._request("account/read", {"refreshToken": False})
+        result["account"] = account_result.get("account")
         if include_usage:
             result["tokenUsage"] = self._request("account/usage/read")
         return result
@@ -137,6 +141,21 @@ def reset_time(timestamp: int | None) -> str:
     return datetime.fromtimestamp(timestamp, KST).strftime("%Y-%m-%d %H:%M KST")
 
 
+def account_email(snapshot: dict[str, Any]) -> str | None:
+    account = snapshot.get("account") or {}
+    email = account.get("email")
+    return email.strip().lower() if isinstance(email, str) and email.strip() else None
+
+
+def masked_account(snapshot: dict[str, Any]) -> str:
+    email = account_email(snapshot)
+    if not email or "@" not in email:
+        return "확인 불가"
+    local, domain = email.split("@", 1)
+    visible = local[:2] if len(local) > 1 else local[:1]
+    return f"{visible}***@{domain}"
+
+
 def summary(profile: str, snapshot: dict[str, Any]) -> str:
     limits = snapshot.get("rateLimits") or {}
     primary = limits.get("primary") or {}
@@ -151,7 +170,8 @@ def summary(profile: str, snapshot: dict[str, Any]) -> str:
     lifetime_text = f", 누적 {lifetime:,} tokens" if isinstance(lifetime, int) else ""
     return (
         f"{profile}: 사용 {used}% · 잔여 {remaining}% · {window_text} 창 · "
-        f"다음 갱신 {reset} · reset credit {reset_credits}{lifetime_text}"
+        f"다음 갱신 {reset} · reset credit {reset_credits}{lifetime_text} · "
+        f"계정 {masked_account(snapshot)}"
     )
 
 
@@ -229,23 +249,78 @@ def rate_values(snapshot: dict[str, Any]) -> tuple[int, int | None]:
     return int(primary.get("usedPercent", 0)), primary.get("resetsAt")
 
 
+def parse_state_time(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=KST)
+
+
+def record_profile_failure(
+    previous: dict[str, Any], error: UsageError, current_time: datetime
+) -> tuple[dict[str, Any], bool]:
+    updated = dict(previous)
+    failures = int(previous.get("consecutiveFailures", 0)) + 1
+    last_success = parse_state_time(
+        previous.get("lastSuccessfulAt") or previous.get("checkedAt")
+    )
+    stale = bool(
+        last_success
+        and (current_time - last_success).total_seconds() >= STALE_AFTER_SECONDS
+    )
+    should_notify = bool(
+        not previous.get("failureNotified")
+        and (failures >= FAILURE_ALERT_COUNT or stale)
+    )
+    updated.update(
+        {
+            "consecutiveFailures": failures,
+            "lastError": str(error),
+            "lastFailedAt": current_time.isoformat(),
+        }
+    )
+    return updated, should_notify
+
+
 def run_monitor(now: datetime | None = None) -> int:
     current_time = now or datetime.now(KST)
     state = read_state()
     profiles_state = state.setdefault("profiles", {})
-    daily_lines: list[str] = []
+    daily_lines: list[tuple[str, str]] = []
+    daily_reports = state.setdefault("dailyReports", {})
+    current_accounts: dict[str, str] = {}
+    legacy_daily_report = state.get("lastDailyReport")
+    if not daily_reports and isinstance(legacy_daily_report, str):
+        daily_reports.update(
+            {profile: legacy_daily_report for profile in PROFILE_NAMES}
+        )
     successful = 0
 
     def inspect(profile: str) -> bool:
         nonlocal successful
+        previous = profiles_state.get(profile, {})
         try:
             snapshot = query(profile, include_usage=False)
         except UsageError as error:
-            profiles_state.setdefault(profile, {})["lastError"] = str(error)
+            failure, should_notify = record_profile_failure(
+                previous, error, current_time
+            )
+            profiles_state[profile] = failure
+            if should_notify:
+                notify(
+                    f"{profile}: 사용량 조회 {failure['consecutiveFailures']}회 연속 실패 · {error}",
+                    attention=True,
+                )
+                failure["failureNotified"] = True
             return False
         successful += 1
         used, resets_at = rate_values(snapshot)
-        previous = profiles_state.get(profile, {})
+        email = account_email(snapshot)
+        if email:
+            current_accounts[profile] = email
         previous_used = previous.get("usedPercent")
         if isinstance(previous_used, int) and previous_used - used >= 20:
             notify(f"{profile}: 사용량 {previous_used}% → {used}%, 한도 갱신 감지")
@@ -260,22 +335,40 @@ def run_monitor(now: datetime | None = None) -> int:
             "usedPercent": used,
             "resetsAt": resets_at,
             "checkedAt": current_time.isoformat(),
+            "lastSuccessfulAt": current_time.isoformat(),
+            "consecutiveFailures": 0,
+            "failureNotified": False,
         }
-        daily_lines.append(summary(profile, snapshot))
+        daily_lines.append((profile, summary(profile, snapshot)))
         return True
 
     for profile in PROFILE_NAMES:
         inspect(profile)
-    if successful == 0:
-        inspect("default")
+
+    collision = len(current_accounts) == len(PROFILE_NAMES) and len(
+        set(current_accounts.values())
+    ) == 1
+    collision_email = next(iter(current_accounts.values()), None) if collision else None
+    previous_collision = state.get("accountCollision")
+    if collision_email and previous_collision != collision_email:
+        notify(
+            "google·naver가 같은 ChatGPT 계정으로 연결됨 · 각 래퍼 로그인을 확인하세요",
+            attention=True,
+        )
+        state["accountCollision"] = collision_email
+    elif not collision:
+        state.pop("accountCollision", None)
 
     today = current_time.date().isoformat()
-    if successful and current_time.hour >= 9 and state.get("lastDailyReport") != today:
-        for line in daily_lines:
+    if successful and current_time.hour >= 9:
+        for profile, line in daily_lines:
+            if daily_reports.get(profile) == today:
+                continue
             notify(line)
+            daily_reports[profile] = today
         state["lastDailyReport"] = today
     write_state(state)
-    return 0
+    return 0 if successful else 1
 
 
 def show(profile: str, json_output: bool) -> int:
@@ -302,7 +395,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="codex-account-usage")
     subparsers = parser.add_subparsers(dest="command", required=True)
     show_parser = subparsers.add_parser("show")
-    show_parser.add_argument("profile", choices=("default", "google", "naver", "all"))
+    show_parser.add_argument("profile", choices=("google", "naver", "all"))
     show_parser.add_argument("--json", action="store_true")
     subparsers.add_parser("monitor")
     args = parser.parse_args(arguments)
