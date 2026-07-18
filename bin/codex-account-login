@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'usage: codex-account-login <google|naver> [codex login arguments...]\n' >&2
+  exit 2
+}
+
+profile="${1:-}"
+case "$profile" in
+  google)
+    chrome_profile="${CODEX_GOOGLE_CHROME_PROFILE:-Default}"
+    ;;
+  naver)
+    chrome_profile="${CODEX_NAVER_CHROME_PROFILE:-Profile 1}"
+    ;;
+  *)
+    usage
+    ;;
+esac
+shift
+
+script_dir="$(dirname "$0")"
+if "$script_dir/codex-account" "$profile" login status >/dev/null 2>&1; then
+  printf '%s is already logged in; run `%s logout` first to switch accounts.\n' \
+    "$profile" "${CODEX_ACCOUNT_COMMAND:-${profile}codex}"
+  exit 0
+fi
+
+if [ "$(uname -s)" != "Darwin" ]; then
+  printf 'profile-pinned browser login is supported only on macOS\n' >&2
+  exit 1
+fi
+
+open_command="${CODEX_OPEN_COMMAND:-open}"
+verification_url="https://auth.openai.com/codex/device"
+"$open_command" -a "Google Chrome" --args \
+  "--profile-directory=$chrome_profile" \
+  "$verification_url"
+
+printf 'Chrome profile `%s` opened for %s. Enter the device code shown below.\n' \
+  "$chrome_profile" "$profile"
+exec "$script_dir/codex-account" "$profile" login --device-auth "$@"
