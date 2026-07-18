@@ -6,4 +6,15 @@ if [ "${1:-}" = "usage" ]; then
   exec "$(dirname "$0")/codex-account-usage" show google "$@"
 fi
 
+if [ "${1:-}" = "login" ] && [ "${2:-}" != "status" ]; then
+  shift
+  case "${1:-}" in
+    --with-api-key|--with-access-token)
+      exec "$(dirname "$0")/codex-account" google login "$@"
+      ;;
+  esac
+  exec env CODEX_ACCOUNT_COMMAND=gcodex \
+    "$(dirname "$0")/codex-account-login" google "$@"
+fi
+
 exec "$(dirname "$0")/codex-account" google "$@"

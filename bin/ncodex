@@ -6,4 +6,15 @@ if [ "${1:-}" = "usage" ]; then
   exec "$(dirname "$0")/codex-account-usage" show naver "$@"
 fi
 
+if [ "${1:-}" = "login" ] && [ "${2:-}" != "status" ]; then
+  shift
+  case "${1:-}" in
+    --with-api-key|--with-access-token)
+      exec "$(dirname "$0")/codex-account" naver login "$@"
+      ;;
+  esac
+  exec env CODEX_ACCOUNT_COMMAND=ncodex \
+    "$(dirname "$0")/codex-account-login" naver "$@"
+fi
+
 exec "$(dirname "$0")/codex-account" naver "$@"
