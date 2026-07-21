@@ -1,4 +1,8 @@
 {
+  "statusLine": {
+    "type": "command",
+    "command": "if [ -x \"$HOME/.local/bin/claude-statusline\" ]; then \"$HOME/.local/bin/claude-statusline\"; else \"$HOME/.dotfiles/bin/claude-statusline\"; fi"
+  },
   "hooks": {
     "Stop": [
       {
@@ -12,6 +16,17 @@
       }
     ],
     "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-notify\" ]; then \"$HOME/.local/bin/agent-notify\" claude-hook; else \"$HOME/.dotfiles/bin/agent-notify\" claude-hook; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
       {
         "hooks": [
           {

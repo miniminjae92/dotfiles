@@ -1,15 +1,15 @@
 ---
 name: handoff-session
-description: "Use when the user explicitly invokes $handoff-session or asks to create a concise Markdown handoff from the current Codex conversation so a future Codex session can continue the work without reading the raw session log."
+description: "Use when the user explicitly invokes $handoff-session or asks to create a concise Markdown handoff from the current conversation so a future agent session (any CLI, any machine) can continue the work without reading the raw session log."
 ---
 
 # Handoff Session
 
-Use this skill to create a compact handoff note for the next Codex session.
+Use this skill to create a compact handoff note for the next agent session.
 
 ## Goal
 
-Write a Markdown file that lets a future Codex agent recover the current work context quickly:
+Write a Markdown file that lets a future agent session recover the current work context quickly:
 
 - what the user is trying to accomplish
 - what has already been decided
@@ -42,7 +42,7 @@ If the user provides a path, use that path.
 ## Template
 
 ```markdown
-# Codex Handoff
+# Agent Handoff
 
 ## Context
 

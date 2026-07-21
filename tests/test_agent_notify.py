@@ -181,6 +181,22 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertNotIn("permission to use Bash", json.dumps(event))
 
     @mock.patch.object(agent_notify, "spawn_worker")
+    def test_claude_hook_precompact_becomes_labeled_attention(self, _spawn_worker):
+        payload = {
+            "hook_event_name": "PreCompact",
+            "cwd": "/Users/test/projects/sample",
+            "session_id": "claude-session-3",
+            "trigger": "auto",
+        }
+
+        result = agent_notify.main(["claude-hook"], json.dumps(payload))
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["status"], "attention")
+        self.assertEqual(event["source_label"], "Claude 컨텍스트")
+
+    @mock.patch.object(agent_notify, "spawn_worker")
     def test_claude_hook_ignores_other_events(self, spawn_worker):
         payload = {"hook_event_name": "PreToolUse", "cwd": "/tmp/sample"}
 

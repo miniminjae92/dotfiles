@@ -34,6 +34,8 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Delegate only independent, bounded, low-risk subtasks (worker) or deliberately context-free final verification (reviewer). Do not delegate trivial single-step work or tightly coupled edits.
 - When many mixed Git changes need commit grouping, prefer the read-only `git ai-commit` command and validate its output as a proposal. Never infer authorization to push.
 - Escalation means reclassifying a task to a higher role after failure, not swapping models. When it happens, log it: `agent-os-friction --origin agent "escalation: <from>→<to> | <task> | <reason>"` (D-010).
+- Declare the boundary when an independent unit of work completes. When context grows heavy or the topic shifts, proactively suggest a handoff note (`handoff-session` skill) or a fresh session.
+- When the session's work runs persistently below or above the current model's grade, say so instead of silently continuing — this is the de-escalation/escalation signal (D-010).
 
 ## Personal Paths
 

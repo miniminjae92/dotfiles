@@ -452,6 +452,9 @@ def event_from_claude(payload: dict[str, Any]) -> dict[str, Any] | None:
         return normalize_event("claude", "complete", payload)
     if hook_event == "Notification":
         return normalize_event("claude", "attention", payload)
+    if hook_event == "PreCompact":
+        # 컨텍스트 압축 임박은 핸드오프 타이밍 학습 신호로 쓴다(D-010 가시성).
+        return normalize_event("claude", "attention", payload, label="Claude 컨텍스트")
     return None
 
 

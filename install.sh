@@ -134,10 +134,11 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$weekly_plist"
 fi
 
-# Merge Claude Code hook config into the machine-local settings file.
+# Merge managed Claude Code settings into the machine-local settings file.
 # settings.json stays unlinked because Claude Code rewrites it at runtime
-# (model preference, theme); only missing hook events are added here.
-python3 - "$DOTFILES_DIR/claude/hooks-settings.json" "$HOME/.claude/settings.json" <<'PY'
+# (model preference, theme); only missing keys and hook events are added,
+# and existing entries are never overwritten.
+python3 - "$DOTFILES_DIR/claude/settings-fragment.json" "$HOME/.claude/settings.json" <<'PY'
 import json, pathlib, sys
 
 fragment_path, settings_path = map(pathlib.Path, sys.argv[1:3])
@@ -145,16 +146,22 @@ fragment = json.loads(fragment_path.read_text())
 settings_path.parent.mkdir(parents=True, exist_ok=True)
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 
+added = []
 hooks = settings.setdefault("hooks", {})
-added = [event for event in fragment["hooks"] if event not in hooks]
-for event in added:
-    hooks[event] = fragment["hooks"][event]
+for event in fragment.get("hooks", {}):
+    if event not in hooks:
+        hooks[event] = fragment["hooks"][event]
+        added.append(f"hooks.{event}")
+for key, value in fragment.items():
+    if key != "hooks" and key not in settings:
+        settings[key] = value
+        added.append(key)
 
 if added:
     settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
-    print(f"claude hooks added: {', '.join(added)}")
+    print(f"claude settings added: {', '.join(added)}")
 else:
-    print("claude hooks already configured")
+    print("claude settings already configured")
 PY
 
 git config --global core.excludesFile "$HOME/.gitignore_global"

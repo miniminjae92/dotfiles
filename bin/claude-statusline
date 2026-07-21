@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Claude Code statusLine command.
+
+Reads the statusline JSON payload from stdin and prints a single line:
+
+    <cwd basename> | <model display name> | ctx <used>%
+
+Every segment is optional: if the underlying field is missing or the
+payload itself is malformed, that segment (or the whole line) is simply
+omitted instead of raising an error.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from typing import Any
+
+
+def load_payload() -> dict[str, Any]:
+    try:
+        raw = sys.stdin.read()
+    except Exception:
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def cwd_segment(payload: dict[str, Any]) -> str | None:
+    workspace = payload.get("workspace")
+    cwd = None
+    if isinstance(workspace, dict):
+        cwd = workspace.get("current_dir")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = payload.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        return None
+    base = os.path.basename(cwd.rstrip("/"))
+    return base or cwd
+
+
+def model_segment(payload: dict[str, Any]) -> str | None:
+    model = payload.get("model")
+    if not isinstance(model, dict):
+        return None
+    name = model.get("display_name")
+    return name if isinstance(name, str) and name else None
+
+
+def context_percentage(payload: dict[str, Any]) -> float | None:
+    ctx = payload.get("context_window")
+    if not isinstance(ctx, dict):
+        return None
+
+    used = ctx.get("used_percentage")
+    if isinstance(used, (int, float)):
+        return float(used)
+
+    # Fallback: derive from raw usage + window size when the
+    # pre-calculated percentage isn't present.
+    size = ctx.get("context_window_size")
+    usage = ctx.get("current_usage")
+    if isinstance(size, (int, float)) and size > 0 and isinstance(usage, dict):
+        try:
+            total = sum(
+                float(usage.get(field) or 0)
+                for field in (
+                    "input_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_read_input_tokens",
+                )
+            )
+            return (total / float(size)) * 100
+        except Exception:
+            return None
+    return None
+
+
+def context_segment(payload: dict[str, Any]) -> str | None:
+    percentage = context_percentage(payload)
+    if percentage is None:
+        return None
+    try:
+        return f"ctx {percentage:.0f}%"
+    except Exception:
+        return None
+
+
+def main() -> int:
+    payload = load_payload()
+
+    segments = [
+        segment
+        for segment in (
+            cwd_segment(payload),
+            model_segment(payload),
+            context_segment(payload),
+        )
+        if segment
+    ]
+
+    print(" | ".join(segments))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
