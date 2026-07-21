@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-notify\" ]; then \"$HOME/.local/bin/agent-notify\" claude-hook; else \"$HOME/.dotfiles/bin/agent-notify\" claude-hook; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-notify\" ]; then \"$HOME/.local/bin/agent-notify\" claude-hook; else \"$HOME/.dotfiles/bin/agent-notify\" claude-hook; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

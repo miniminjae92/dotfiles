@@ -33,7 +33,7 @@ KEYCHAIN_SERVICES = {
     "usage": "agent-notify.slack-webhook.usage",
 }
 AGY_ALLOW_STOP = {"decision": "allow"}
-HOOK_SOURCES = {"agy", "codex", "codex-hook"}
+HOOK_SOURCES = {"agy", "codex", "codex-hook", "claude-hook"}
 TERMINAL_APPS = {
     "Apple_Terminal": "Terminal",
     "iTerm.app": "iTerm2",
@@ -53,6 +53,7 @@ Agent adapters:
   codex [json]              Codex external notify adapter
   codex-hook                Codex Stop hook adapter (JSON on stdin)
   agy                       agy Stop hook adapter (JSON on stdin)
+  claude-hook               Claude Code Stop/Notification hook adapter (JSON on stdin)
   event --source NAME ...   Enqueue a normalized event for any agent CLI
 
 Pending events:
@@ -162,6 +163,7 @@ DEFAULT_CONFIG = {
     "sources": {
         "codex": {"display_name": "Codex"},
         "agy": {"display_name": "agy"},
+        "claude": {"display_name": "Claude"},
     },
 }
 
@@ -442,6 +444,15 @@ def event_from_codex(payload: dict[str, Any], *, hook: bool) -> dict[str, Any] |
     if payload.get(expected_field) != expected_value:
         return None
     return normalize_event("codex", "complete", payload)
+
+
+def event_from_claude(payload: dict[str, Any]) -> dict[str, Any] | None:
+    hook_event = payload.get("hook_event_name")
+    if hook_event == "Stop":
+        return normalize_event("claude", "complete", payload)
+    if hook_event == "Notification":
+        return normalize_event("claude", "attention", payload)
+    return None
 
 
 def event_from_agy(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1252,6 +1263,8 @@ def hook_command(source: str, arguments: list[str], stdin: str) -> int:
         event = event_from_codex(payload, hook=False)
     elif source == "codex-hook":
         event = event_from_codex(payload, hook=True)
+    elif source == "claude-hook":
+        event = event_from_claude(payload)
     else:
         event = event_from_agy(payload)
     if event is not None:

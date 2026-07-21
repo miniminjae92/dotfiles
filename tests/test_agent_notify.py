@@ -146,6 +146,51 @@ class AgentNotifyTest(unittest.TestCase):
         spawn_worker.assert_not_called()
 
     @mock.patch.object(agent_notify, "spawn_worker")
+    def test_claude_hook_stores_only_metadata(self, _spawn_worker):
+        payload = {
+            "hook_event_name": "Stop",
+            "cwd": "/Users/test/projects/sample",
+            "session_id": "claude-session-1",
+            "transcript_path": "/Users/test/.claude/projects/sample/transcript.jsonl",
+        }
+
+        result = agent_notify.main(["claude-hook"], json.dumps(payload))
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["source"], "claude")
+        self.assertEqual(event["status"], "complete")
+        self.assertEqual(event["source_label"], "Claude")
+        self.assertEqual(event["project"], "sample")
+        self.assertEqual(event["session_id"], "claude-session-1")
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_claude_hook_notification_becomes_attention_event(self, _spawn_worker):
+        payload = {
+            "hook_event_name": "Notification",
+            "cwd": "/Users/test/projects/sample",
+            "session_id": "claude-session-2",
+            "message": "Claude needs your permission to use Bash",
+        }
+
+        result = agent_notify.main(["claude-hook"], json.dumps(payload))
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["status"], "attention")
+        self.assertNotIn("permission to use Bash", json.dumps(event))
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_claude_hook_ignores_other_events(self, spawn_worker):
+        payload = {"hook_event_name": "PreToolUse", "cwd": "/tmp/sample"}
+
+        result = agent_notify.main(["claude-hook"], json.dumps(payload))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(agent_notify.list_events(), [])
+        spawn_worker.assert_not_called()
+
+    @mock.patch.object(agent_notify, "spawn_worker")
     def test_agy_error_enqueues_event_and_allows_stop(self, _spawn_worker):
         payload = {
             "terminationReason": "error",

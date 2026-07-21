@@ -49,6 +49,7 @@ link_file \
   "$DOTFILES_DIR/.config/agent-notify/config.json" \
   "$HOME/.config/agent-notify/config.json"
 link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+link_file "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 link_file "$DOTFILES_DIR/agent-os/hooks.json" "$HOME/.codex/hooks.json"
 link_file "$DOTFILES_DIR/agy/hooks.json" "$HOME/.gemini/config/hooks.json"
 if [ -d "$DOTFILES_DIR/.codex/agents" ]; then
@@ -123,6 +124,29 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-weekly" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$weekly_plist"
 fi
+
+# Merge Claude Code hook config into the machine-local settings file.
+# settings.json stays unlinked because Claude Code rewrites it at runtime
+# (model preference, theme); only missing hook events are added here.
+python3 - "$DOTFILES_DIR/claude/hooks-settings.json" "$HOME/.claude/settings.json" <<'PY'
+import json, pathlib, sys
+
+fragment_path, settings_path = map(pathlib.Path, sys.argv[1:3])
+fragment = json.loads(fragment_path.read_text())
+settings_path.parent.mkdir(parents=True, exist_ok=True)
+settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+
+hooks = settings.setdefault("hooks", {})
+added = [event for event in fragment["hooks"] if event not in hooks]
+for event in added:
+    hooks[event] = fragment["hooks"][event]
+
+if added:
+    settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
+    print(f"claude hooks added: {', '.join(added)}")
+else:
+    print("claude hooks already configured")
+PY
 
 git config --global core.excludesFile "$HOME/.gitignore_global"
 
