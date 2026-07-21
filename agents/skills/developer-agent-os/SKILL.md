@@ -15,8 +15,8 @@ Complete the work without intermediate approval when changes are reversible. Ask
    - `T2`: multi-module, ambiguous, unfamiliar, or high-risk work. Define explicit success, budget, stop conditions, and rollback before execution.
 2. Use Architect mode only as much as needed. Establish the problem, goal, facts, assumptions, unknowns, options, decision, risks, validation, and rollback.
 3. Use Builder mode to inspect, implement, test, and verify. Keep changes scoped and reversible.
-4. Delegate to the `worker` role (Codex: `fast_worker` agent; Claude: a low-effort subagent) only for independent bounded work that saves more context than delegation consumes.
-5. Use the `reviewer` role (Codex: `critical_reviewer` agent; Claude: a context-free review subagent) only for consequential architecture, security, data-loss risk, difficult regressions, or final independent review. Roles are declared in `~/.dotfiles/agents/routing.json`.
+4. Delegate to the `worker` role (Codex: `worker` agent; Claude: a low-effort subagent) only for independent bounded work that saves more context than delegation consumes.
+5. Use the `reviewer` role (Codex: `reviewer` agent; Claude: a context-free review subagent) only for consequential architecture, security, data-loss risk, difficult regressions, or final independent review. Roles are declared in `~/.dotfiles/agents/routing.json`.
 6. For learning-heavy or consequential work, select the user's required understanding with the Tutor rules below. Do not pause reversible implementation for lessons; teach at a consequential decision gate or after the work is complete.
 7. Retrieve only notes relevant to the current project, concept, or decision. Never load the whole vault or treat `candidate` and `inferred` notes as verified facts.
 

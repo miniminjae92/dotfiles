@@ -29,11 +29,11 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 
 ## Roles and Delegation
 
-- Model and account routing follows the logical roles in `~/.dotfiles/agents/routing.json` (planner/worker/reviewer/mechanical).
+- Model and account routing follows the logical roles in `~/.dotfiles/agents/routing.json` (planner/worker/reviewer/clerk).
 - Keep tightly coupled edits and continuous design judgment in one session. Context severance, not model switching, is what breaks accuracy.
 - Delegate only independent, bounded, low-risk subtasks (worker) or deliberately context-free final verification (reviewer). Do not delegate trivial single-step work or tightly coupled edits.
 - When many mixed Git changes need commit grouping, prefer the read-only `git ai-commit` command and validate its output as a proposal. Never infer authorization to push.
-- When a task started on a lower tier fails and is redone on a higher tier, log it: `agent-os-friction --origin agent "escalation: <from>→<to> | <task> | <reason>"` (D-010).
+- Escalation means reclassifying a task to a higher role after failure, not swapping models. When it happens, log it: `agent-os-friction --origin agent "escalation: <from>→<to> | <task> | <reason>"` (D-010).
 
 ## Personal Paths
 

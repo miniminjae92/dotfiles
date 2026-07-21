@@ -1,4 +1,4 @@
-name = "fast_worker"
+name = "worker"
 description = "Low-cost worker for independent, bounded scans, classification, summarization, and simple mechanical tasks."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "low"
