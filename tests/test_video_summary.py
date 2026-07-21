@@ -666,6 +666,50 @@ summary_version: "1"
         self.assertEqual(result, 0)
         write_indexes.assert_not_called()
 
+    @mock.patch.object(video_summary, "save_member_inventory")
+    @mock.patch.object(video_summary, "discover_channel_member_candidates")
+    @mock.patch.object(video_summary, "process_video")
+    @mock.patch.object(video_summary, "load_member_inventory", return_value=None)
+    def test_member_channel_dry_run_does_not_write_inventory(
+        self, load_inventory, process_video, discover, save_inventory
+    ):
+        discover.return_value = (
+            [
+                {
+                    "id": "member01",
+                    "title": "회원 영상",
+                    "url": "https://youtu.be/member01",
+                    "playlists": [],
+                }
+            ],
+            [],
+        )
+        process_video.return_value = {
+            "video_id": "member01",
+            "title": "회원 영상",
+            "status": "dry-run",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                result = video_summary.main(
+                    [
+                        "https://www.youtube.com/@example",
+                        "--discover-channel-members",
+                        "--cookies-from-browser",
+                        "chrome:Default",
+                        "--dry-run",
+                        "--output-dir",
+                        temp_dir,
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            save_inventory.assert_not_called()
+            self.assertFalse(
+                (Path(temp_dir) / "Playlists" / ".member-inventory.json").exists()
+            )
+
     def test_member_inventory_round_trip(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "Playlists" / ".member-inventory.json"

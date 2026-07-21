@@ -1571,12 +1571,13 @@ def run_channel(args: argparse.Namespace) -> int:
                 cookies_from_browser=args.cookies_from_browser,
                 max_videos=0,
             )
-            save_member_inventory(
-                inventory_path,
-                source_url=args.url,
-                videos=videos,
-                warnings=warnings,
-            )
+            if not args.dry_run:
+                save_member_inventory(
+                    inventory_path,
+                    source_url=args.url,
+                    videos=videos,
+                    warnings=warnings,
+                )
         if args.max_videos:
             videos = videos[: args.max_videos]
     else:
