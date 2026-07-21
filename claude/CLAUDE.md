@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-@~/.dotfiles/.codex/AGENTS.md
+@~/.dotfiles/agents/AGENTS.md
 
 ## Claude 전용
 

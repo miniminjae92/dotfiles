@@ -20,7 +20,8 @@ chmod 700 "$account_root" "$account_home"
 for shared_path in \
   settings.json \
   config \
-  trustedFolders.json
+  trustedFolders.json \
+  GEMINI.md
 do
   source_path="$base_home/$shared_path"
   target_path="$account_home/$shared_path"

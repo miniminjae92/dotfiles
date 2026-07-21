@@ -48,7 +48,8 @@ link_file \
 link_file \
   "$DOTFILES_DIR/.config/agent-notify/config.json" \
   "$HOME/.config/agent-notify/config.json"
-link_file "$DOTFILES_DIR/.codex/AGENTS.md" "$HOME/.codex/AGENTS.md"
+link_file "$DOTFILES_DIR/agents/AGENTS.md" "$HOME/.codex/AGENTS.md"
+link_file "$DOTFILES_DIR/agents/AGENTS.md" "$HOME/.gemini/GEMINI.md"
 link_file "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 link_file "$DOTFILES_DIR/agent-os/hooks.json" "$HOME/.codex/hooks.json"
 link_file "$DOTFILES_DIR/agy/hooks.json" "$HOME/.gemini/config/hooks.json"
