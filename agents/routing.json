@@ -1,0 +1,86 @@
+{
+  "schema_version": 2,
+  "updated": "2026-07-21",
+  "purpose": "모델·계정 라우팅의 단일 진실 공급원. 자동 라우터가 읽는 파일이 아니라 사람이 참조하고 doctor가 drift를 검사하는 선언이다.",
+  "models": {
+    "claude_opus": {
+      "provider": "claude",
+      "model": "opus",
+      "note": "Fable/Opus 급 최상위 슬롯. 주간 캡의 실질 지배 변수."
+    },
+    "claude_sonnet": {
+      "provider": "claude",
+      "model": "sonnet"
+    },
+    "claude_haiku": {
+      "provider": "claude",
+      "model": "haiku"
+    },
+    "codex_sol": {
+      "provider": "codex",
+      "model": "gpt-5.6-sol"
+    },
+    "codex_terra": {
+      "provider": "codex",
+      "model": "gpt-5.6-terra"
+    },
+    "gemini_flash": {
+      "provider": "agy",
+      "model": "Gemini 3.5 Flash (Low)"
+    },
+    "ollama_local": {
+      "provider": "ollama",
+      "model": "qwen2.5-coder:7b"
+    }
+  },
+  "accounts": {
+    "codex": [
+      { "profile": "google", "command": "gcodex" },
+      { "profile": "naver", "command": "ncodex" }
+    ],
+    "agy": [
+      { "profile": "main", "command": "magy" },
+      { "profile": "sub", "command": "sagy" }
+    ],
+    "claude": [
+      { "profile": "max", "command": "claude" }
+    ]
+  },
+  "roles": {
+    "planner": {
+      "description": "요구 해석, 아키텍처 설계, 어려운 디버깅, 연속 판단이 필요한 강결합 작업. 컨텍스트 단절이 정확도를 깨뜨리므로 세션 중 모델을 교체하지 않는다.",
+      "primary": { "ref": "claude_opus", "effort": "high" },
+      "overflow": { "ref": "codex_sol", "effort": "high" }
+    },
+    "worker": {
+      "description": "일상 구현. 윈도우가 살아있는 동안의 기본값이며, 독립적이고 경계가 명확한 하위 작업은 서브에이전트로 위임 가능.",
+      "primary": { "ref": "claude_sonnet", "effort": "medium" },
+      "overflow": { "ref": "codex_sol", "effort": "medium" },
+      "delegate": { "ref": "codex_terra", "effort": "low", "via": ".codex/agents/fast_worker.toml" }
+    },
+    "reviewer": {
+      "description": "의도적으로 작업 컨텍스트 없이 보는 독립 검증. 보안, 데이터 손실 위험, 최종 리뷰.",
+      "primary": { "ref": "claude_opus", "effort": "high" },
+      "overflow": { "ref": "codex_sol", "effort": "high", "via": ".codex/agents/critical_reviewer.toml" }
+    },
+    "mechanical": {
+      "description": "커밋 메시지, 분류, 요약, 추출. 정적 기본값을 유지하고 윈도우 잔량에 따른 동적 전환을 만들지 않는다(레버가 없는 최적화).",
+      "primary": { "ref": "gemini_flash" },
+      "fallback": { "ref": "ollama_local" }
+    }
+  },
+  "policy": {
+    "claude_window": "5시간 윈도우는 부패 자원이다. 놀리지 않고 Sonnet(worker)으로 채운다.",
+    "claude_weekly_cap": "주간 캡은 저장 자원이다. Opus 사용량이 지배 변수이므로 Opus만 배급제로 아낀다.",
+    "overflow": "윈도우·주간 캡 소진 시 작업을 멈추지 않고 Codex(gcodex/ncodex)로 흘린다. Codex 2계정은 예비가 아니라 오버플로우 밸브다.",
+    "without_claude": "Claude 구독이 없는 기간에는 각 역할의 overflow가 primary가 된다. 이 파일에서 claude_* 참조를 제거해도 시스템이 성립해야 한다.",
+    "no_auto_routing": "품질·비용 실측 데이터 없이 자동 계정·모델 전환을 구현하지 않는다(D-004, D-009)."
+  },
+  "escalation_log": {
+    "purpose": "하위 티어에서 실패해 상위 티어로 재시도한 작업(에스컬레이션)과 상위 티어에서 한 번에 끝난 기계적 작업(하향 후보)만이 라우팅 오류의 직접 증거다.",
+    "how": "agent-os-friction --origin agent \"escalation: worker→planner | <작업> | <실패 이유>\" 형식으로 기록하고 주간 리뷰가 집계한다."
+  },
+  "legacy": {
+    "ai-tools/models.json": "스크립트(git ai-commit, ai-model-status 등)가 기계적으로 읽는 레지스트리로 유지한다. 모델명이 이 파일과 어긋나면 doctor가 경고한다."
+  }
+}
