@@ -138,9 +138,14 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     * **Install Other CLI Tools (via Homebrew):**
         ```bash
-        brew install eza bat fzf fd gh thefuck zoxide pyenv lazygit ollama jq yt-dlp
-        brew install vjeantet/tap/alerter
-    ```
+        brew bundle --file ~/.dotfiles/Brewfile
+        ```
+        The Brewfile is the single definition of required CLI tools and casks. After
+        installing, verify the whole environment (symlinks, tools, agent CLI auth,
+        launchd jobs, and model-registry drift) with the read-only health check:
+        ```bash
+        dotfiles-doctor
+        ```
 
     `alerter` returns the selected action to `agent-notify`. Temporary alerts close automatically after eight seconds; persistent alerts wait for an explicit action. Clicking the alert body or **터미널로 이동** acknowledges the event, selects its recorded tmux client/window/pane, and brings the terminal app forward. **확인** acknowledges without changing focus. **나중에** leaves the event pending, so delayed Slack fallback can still run. AppleScript remains a degraded fallback when `alerter` is unavailable, but its click is owned by Script Editor and cannot focus a tmux pane or acknowledge an event.
 
