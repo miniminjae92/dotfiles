@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 
-DEFAULT_VAULT = Path.home() / ".obsidian/yggdrasil"
+DEFAULT_VAULT = Path.home() / ".obsidian/mimir"
 DEFAULT_MODEL = "qwen2.5-coder:7b"
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
 REPORT_DIR = Path("3. Resource/Obsidian/AI Classification Reports")

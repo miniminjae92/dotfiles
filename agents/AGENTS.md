@@ -39,7 +39,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 
 ## Personal Paths
 
-- When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/yggdrasil`. AI-generated reports go under `3. Resource/AI Work Reports` there.
+- When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/mimir`. AI-generated reports go under `3. Resource/AI Work Reports` there.
 - Agent OS runs, development knowledge, technical learning, service design, and productivity-friction notes go under `/Users/miniminjae/.obsidian/developer-os`.
 
 ## Skills

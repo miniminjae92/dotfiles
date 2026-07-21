@@ -24,7 +24,7 @@ DEVELOPER_VAULT = Path(
 REPORT_ROOT = Path(
     os.environ.get(
         "PERSONAL_OPS_REPORT_ROOT",
-        HOME / ".obsidian/yggdrasil/3. Resource/AI Work Reports",
+        HOME / ".obsidian/mimir/3. Resource/AI Work Reports",
     )
 )
 STATE_ROOT = Path(

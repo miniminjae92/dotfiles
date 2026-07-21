@@ -156,6 +156,8 @@
 
 ### 새 볼트
 
+> 2026-07-21 개정: 아래 "yggdrasil=레거시, developer-os=지식 볼트" 판단은 실사용과 어긋나 폐기. yggdrasil을 현역으로 되살려 `mimir`로 리네임, developer-os는 에이전트 운영 로그로 재정의 (DECISIONS.md D-001 개정 참조).
+
 - [x] 기존 `yggdrasil`을 읽기 전용 레거시로 둔다.
 - [x] 새 볼트 이름과 경로를 `/Users/miniminjae/.obsidian/developer-os`로 확정한다.
 - [x] 새 볼트의 포함 범위를 개발·학습·서비스 설계·Agent OS로 확정한다.
