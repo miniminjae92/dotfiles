@@ -67,6 +67,14 @@ if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
     link_file "$skill_dir" "$HOME/.codex/skills/$skill_name"
   done
 fi
+if [ -d "$DOTFILES_DIR/agents/skills" ]; then
+  for skill_dir in "$DOTFILES_DIR"/agents/skills/*; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    link_file "$skill_dir" "$HOME/.codex/skills/$skill_name"
+    link_file "$skill_dir" "$HOME/.claude/skills/$skill_name"
+  done
+fi
 link_file "$DOTFILES_DIR/.gitignore" "$HOME/.gitignore_global"
 if [ -d "$DOTFILES_DIR/bin" ]; then
   for script_path in "$DOTFILES_DIR"/bin/*; do
