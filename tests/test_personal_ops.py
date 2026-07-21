@@ -78,6 +78,28 @@ class PersonalOpsTest(unittest.TestCase):
         notify.assert_called_once()
         self.assertIn("obsidian://open", notify.call_args.args[3])
 
+    def test_friction_entries_filters_by_date_and_keeps_escalations(self):
+        note = self.developer_vault / "00 Inbox" / "생산성 불편일기.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(
+            "## 미처리\n"
+            "\n"
+            "- [ ] 2026-07-18T10:00:00+09:00 | origin:agent | escalation: worker→planner | 마이그레이션 | 반복 실패\n"
+            "- [ ] 2026-06-01T10:00:00+09:00 | origin:user | 오래된 항목\n"
+            "- 타임스탬프 없는 줄\n",
+            encoding="utf-8",
+        )
+
+        entries = personal_ops.friction_entries(datetime(2026, 7, 12, tzinfo=KST))
+
+        self.assertEqual(len(entries), 1)
+        self.assertIn("escalation: worker→planner", entries[0])
+
+    def test_friction_entries_returns_empty_without_note(self):
+        self.assertEqual(
+            personal_ops.friction_entries(datetime(2026, 7, 12, tzinfo=KST)), []
+        )
+
     def test_obsidian_link_uses_encoded_absolute_path(self):
         link = personal_ops.obsidian_link(Path("/tmp/My Report.md"), "열기")
 
