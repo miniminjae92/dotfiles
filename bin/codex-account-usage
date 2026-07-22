@@ -16,6 +16,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 
+HOME = Path.home()
 KST = ZoneInfo("Asia/Seoul")
 PROFILE_NAMES = ("google", "naver")
 THRESHOLDS = (75, 90, 95, 100)
@@ -207,6 +208,18 @@ def write_state(value: dict[str, Any]) -> None:
             os.unlink(temporary)
 
 
+def emit_ops_event(source, kind, severity="info", **fields):
+    """ops-event 로 구조화 이벤트 1줄 append. 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("ops-event") or str(HOME / ".local/bin/ops-event")
+    try:
+        subprocess.run(
+            [exe, "--source", source, "--kind", kind, "--severity", severity],
+            input=json.dumps(fields), text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def notifier_executable() -> str | None:
     discovered = shutil.which("agent-notify")
     if discovered:
@@ -368,6 +381,16 @@ def run_monitor(now: datetime | None = None) -> int:
             daily_reports[profile] = today
         state["lastDailyReport"] = today
     write_state(state)
+    used_fields = {}
+    for profile, profile_state in profiles_state.items():
+        if isinstance(profile_state, dict) and isinstance(profile_state.get("usedPercent"), int):
+            used_fields[f"used_{profile}"] = profile_state["usedPercent"]
+    emit_ops_event(
+        "codex-account-usage",
+        "usage" if successful else "error",
+        severity="info" if successful else "high",
+        successful=successful, **used_fields,
+    )
     return 0 if successful else 1
 
 

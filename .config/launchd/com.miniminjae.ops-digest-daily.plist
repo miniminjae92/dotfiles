@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.miniminjae.ops-digest-daily</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/miniminjae/.local/bin/ops-digest</string>
+    <string>--days</string>
+    <string>7</string>
+    <string>--out</string>
+    <string>/Users/miniminjae/.local/state/ops/digest-latest.md</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>21</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/miniminjae/.local/state/ops/digest.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/miniminjae/.local/state/ops/digest.error.log</string>
+</dict>
+</plist>

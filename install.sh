@@ -123,10 +123,15 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.session-harvest-weekly.plist" \
     "$harvest_weekly_plist"
+  ops_digest_plist="$HOME/Library/LaunchAgents/com.miniminjae.ops-digest-daily.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.ops-digest-daily.plist" \
+    "$ops_digest_plist"
   mkdir -p \
     "$HOME/.local/state/agent-notify" \
     "$HOME/.local/state/agent-os" \
     "$HOME/.local/state/codex-account-usage" \
+    "$HOME/.local/state/ops" \
     "$HOME/.local/state/personal-ops" \
     "$HOME/.local/state/session-harvest"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
@@ -144,6 +149,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$harvest_daily_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.session-harvest-weekly" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$harvest_weekly_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.ops-digest-daily" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$ops_digest_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.

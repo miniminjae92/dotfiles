@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""ops-event — 로컬 백그라운드 잡의 구조화 이벤트를 통합 스트림에 append.
+
+언어 무관 CLI. 모든 개인 백그라운드 잡(python/bash/ruby)이 실행 1건당
+이벤트 1줄을 이 스트림에 남겨, 데이터 기반 의사결정(주간 다이제스트 등)의
+단일 수집 지점이 된다.
+
+봉투(한 줄 JSON):
+  {"schema_version":1,"ts":<iso8601>,"source":<job>,"kind":<run|finding|usage|error>,
+   "severity":<info|low|medium|high>, ...payload}
+
+스트림 경로:
+  $OPS_STATE_DIR (있으면) 또는 $XDG_STATE_HOME/ops (기본 ~/.local/state/ops)
+  아래 events/YYYY-MM-DD.jsonl  (0700 dir, 0600 file, flock append)
+
+사용법:
+  ops-event --source session-harvest --kind run sessions=45 chars=472370
+  echo '{"sessions":45,"chars":472370}' | ops-event --source session-harvest
+  # stdin JSON 을 base payload 로, key=value 플래그가 덮어씀.
+
+값 파싱: key=value 의 value 는 int→float→JSON→문자열 순으로 시도.
+철학: 텔레메트리 실패가 잡을 깨뜨리면 안 된다 → 기록 실패는 stderr 경고 후 exit 0.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import fcntl
+import json
+import os
+import sys
+
+SCHEMA_VERSION = 1
+RESERVED = {"schema_version", "ts", "source", "kind", "severity"}
+KINDS = {"run", "finding", "usage", "error"}
+SEVERITIES = {"info", "low", "medium", "high"}
+
+
+def state_root() -> str:
+    override = os.environ.get("OPS_STATE_DIR")
+    if override:
+        return os.path.expanduser(override)
+    xdg = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return os.path.join(xdg, "ops")
+
+
+def parse_value(raw: str):
+    """int → float → JSON → 원문 문자열 순으로 파싱."""
+    for caster in (int, float):
+        try:
+            return caster(raw)
+        except ValueError:
+            pass
+    try:
+        return json.loads(raw)
+    except (ValueError, json.JSONDecodeError):
+        return raw
+
+
+def read_stdin_payload() -> dict:
+    if sys.stdin is None or sys.stdin.isatty():
+        return {}
+    data = sys.stdin.read().strip()
+    if not data:
+        return {}
+    try:
+        obj = json.loads(data)
+    except (ValueError, json.JSONDecodeError) as err:
+        sys.stderr.write(f"ops-event: stdin JSON 파싱 실패, 무시함: {err}\n")
+        return {}
+    if not isinstance(obj, dict):
+        sys.stderr.write("ops-event: stdin JSON 은 객체여야 함, 무시함\n")
+        return {}
+    return obj
+
+
+def build_event(args, pairs: list[str]) -> dict:
+    payload = read_stdin_payload()
+    for pair in pairs:
+        if "=" not in pair:
+            sys.stderr.write(f"ops-event: 'key=value' 형식이 아님, 무시함: {pair!r}\n")
+            continue
+        key, raw = pair.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        payload[key] = parse_value(raw)
+
+    # 예약 키는 payload 가 덮어쓰지 못하도록 제거 (플래그가 진실 공급원)
+    for key in RESERVED:
+        payload.pop(key, None)
+
+    ts = args.ts or _dt.datetime.now().astimezone().isoformat()
+    event = {
+        "schema_version": SCHEMA_VERSION,
+        "ts": ts,
+        "source": args.source,
+        "kind": args.kind,
+        "severity": args.severity,
+    }
+    event.update(payload)
+    return event
+
+
+def append_event(event: dict) -> None:
+    events_dir = os.path.join(state_root(), "events")
+    os.makedirs(events_dir, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(events_dir, 0o700)
+    except OSError:
+        pass
+
+    day = event["ts"][:10]  # iso8601 앞 10자 = YYYY-MM-DD
+    path = os.path.join(events_dir, f"{day}.jsonl")
+    line = json.dumps(event, ensure_ascii=False)
+
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        os.write(fd, (line + "\n").encode("utf-8"))
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="ops-event",
+        description="로컬 백그라운드 잡의 구조화 이벤트를 통합 스트림에 append",
+    )
+    parser.add_argument("--source", required=True, help="이벤트를 낸 잡 이름 (kebab)")
+    parser.add_argument("--kind", default="run", help=f"이벤트 종류 {sorted(KINDS)} (기본 run)")
+    parser.add_argument("--severity", default="info", help=f"심각도 {sorted(SEVERITIES)} (기본 info)")
+    parser.add_argument("--ts", default=None, help="iso8601 타임스탬프 override (백필/테스트용)")
+    parser.add_argument("pairs", nargs="*", help="payload 로 넣을 key=value 쌍")
+    args = parser.parse_args()
+
+    # 경고만 하고 통과 — 새 kind/severity 를 막지 않되 오타를 알린다.
+    if args.kind not in KINDS:
+        sys.stderr.write(f"ops-event: 경고 — 관례 밖 kind {args.kind!r}\n")
+    if args.severity not in SEVERITIES:
+        sys.stderr.write(f"ops-event: 경고 — 관례 밖 severity {args.severity!r}\n")
+
+    event = build_event(args, args.pairs)
+    try:
+        append_event(event)
+    except OSError as err:
+        # 텔레메트리 실패가 호출한 잡을 깨뜨리면 안 된다.
+        sys.stderr.write(f"ops-event: 기록 실패, 무시함: {err}\n")
+        return 0
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

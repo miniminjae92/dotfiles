@@ -9,10 +9,22 @@ codex 미가용/실패 시 조용히 종료(0) — 원시 추출분은 캐시에
 
 사용: session-harvest [--days N] [--out-vault DIR]
 """
-import os, re, shutil, subprocess, tempfile, argparse, datetime
+import os, re, json, shutil, subprocess, tempfile, argparse, datetime
 from pathlib import Path
 
 HOME = Path.home()
+
+
+def emit_ops_event(source, kind, severity="info", **fields):
+    """ops-event 로 구조화 이벤트 1줄 append. 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("ops-event") or str(HOME / ".local/bin/ops-event")
+    try:
+        subprocess.run(
+            [exe, "--source", source, "--kind", kind, "--severity", severity],
+            input=json.dumps(fields), text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 VAULT = Path(os.environ.get("DEVELOPER_OS_VAULT", HOME / ".obsidian/mimir"))
 CACHE = HOME / ".cache/harvest-sessions"
 MAX_CHARS = 180_000
@@ -99,6 +111,7 @@ def main():
     path = out_dir / f"세션 수확 {ts:%Y-%m-%d}.md"
     if path.exists():
         print(f"이미 존재 — 건너뜀(덮어쓰기 방지): {path}")
+        emit_ops_event("session-harvest", "run", note="skipped-exists", window_days=args.days)
         return
 
     run_extract(args.days)
@@ -121,6 +134,11 @@ def main():
     tmp.write_text(doc, encoding="utf-8")
     os.replace(tmp, path)
     print(f"수확 적재: {path} (generator={generator}, source={len(source):,}자)")
+    emit_ops_event(
+        "session-harvest", "run",
+        severity="info" if generator == "codex" else "low",
+        generator=generator, source_chars=len(source), window_days=args.days,
+    )
 
 
 if __name__ == "__main__":

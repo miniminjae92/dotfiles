@@ -116,6 +116,18 @@ def notify(source: str, label: str, status: str, message: str) -> None:
     )
 
 
+def emit_ops_event(source, kind, severity="info", **fields):
+    """ops-event 로 구조화 이벤트 1줄 append. 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("ops-event") or str(HOME / ".local/bin/ops-event")
+    try:
+        subprocess.run(
+            [exe, "--source", source, "--kind", kind, "--severity", severity],
+            input=json.dumps(fields), text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def finding(severity: str, title: str, detail: str) -> dict[str, str]:
     return {"severity": severity, "title": title, "detail": detail}
 
@@ -295,6 +307,14 @@ def security_command() -> int:
         "listenerBaseline": previous.get("listenerBaseline") or sorted(listeners),
     }
     atomic_write(SECURITY_STATE, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+
+    new_severities = {current[identifier]["severity"] for identifier in new_ids if identifier in current}
+    finding_severity = "high" if "high" in new_severities else "medium" if "medium" in new_severities else "info"
+    emit_ops_event(
+        "personal-ops-security", "finding", severity=finding_severity,
+        active=len(current), new=len(new_ids), resolved=len(resolved_ids),
+        changed=len(changed_ids), listeners=len(listeners),
+    )
 
     if not new_ids and not resolved_ids:
         return 0
@@ -526,6 +546,12 @@ def weekly_command(no_agent: bool = False) -> int:
         ]
     )
     atomic_write(path, document)
+    emit_ops_event(
+        "personal-ops-weekly", "run",
+        severity="low" if generator == "rules" else "info",
+        generator=generator, source_files=len(source_files),
+        source_chars=len(source), iso_week=f"{iso_year}-W{iso_week:02d}",
+    )
     notify(
         "weekly-review",
         "Weekly Review",

@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 
+HOME = Path.home()
 SCHEMA_VERSION = 4
 OSASCRIPT = "/usr/bin/osascript"
 OPEN = "/usr/bin/open"
@@ -166,6 +167,18 @@ DEFAULT_CONFIG = {
         "claude": {"display_name": "Claude"},
     },
 }
+
+
+def emit_ops_event(source, kind, severity="info", **fields):
+    """ops-event 로 구조화 이벤트 1줄 append. 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("ops-event") or str(HOME / ".local/bin/ops-event")
+    try:
+        subprocess.run(
+            [exe, "--source", source, "--kind", kind, "--severity", severity],
+            input=json.dumps(fields), text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def now_utc() -> datetime:
@@ -968,6 +981,12 @@ def sweep(current_time: datetime | None = None) -> int:
             continue
         if not deliver_slack_event(event, current_time):
             failures += 1
+    emit_ops_event(
+        "agent-notify-sweep",
+        "error" if failures else "run",
+        severity="low" if failures else "info",
+        failures=failures,
+    )
     return 1 if failures else 0
 
 

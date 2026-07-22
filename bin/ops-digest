@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""ops-digest — 통합 이벤트 스트림을 읽어 의사결정용 다이제스트를 생성.
+
+`ops-event` 가 쌓은 ~/.local/state/ops/events/*.jsonl 를 롤업해,
+백그라운드 잡들에서 "무슨 일이 있었고 무엇을 결정해야 하는가"를 한 곳에 보여준다.
+
+표면화하는 결정 신호:
+  - 침묵 감지: 과거엔 돌던 잡이 최근 창에서 이벤트가 없음 → launchagent 고장 의심
+  - 오류: kind=error 이벤트
+  - 주의 필요 발견: severity>=medium 인 finding
+  - 지표 추세: 숫자 payload 필드의 min/last/max (예: usedPercent 상승)
+
+사용법:
+  ops-digest                 # 최근 7일, 마크다운을 stdout 으로
+  ops-digest --days 14
+  ops-digest --json          # 기계 판독용 JSON
+  ops-digest --out PATH      # 파일로도 기록 (예: mimir 볼트)
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import glob
+import json
+import os
+import sys
+from collections import defaultdict
+
+SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
+# 침묵 감지: 과거(롤백 창)엔 있었는데 최근 창에 없는 소스를 찾기 위한 되돌아보기.
+SILENCE_LOOKBACK_DAYS = 30
+
+
+def state_root() -> str:
+    override = os.environ.get("OPS_STATE_DIR")
+    if override:
+        return os.path.expanduser(override)
+    xdg = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return os.path.join(xdg, "ops")
+
+
+def load_events(events_dir: str) -> list[dict]:
+    events = []
+    for path in sorted(glob.glob(os.path.join(events_dir, "*.jsonl"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            continue
+    return events
+
+
+def parse_ts(ev: dict):
+    try:
+        return _dt.datetime.fromisoformat(ev["ts"])
+    except (KeyError, ValueError):
+        return None
+
+
+def numeric_fields(ev: dict) -> dict:
+    reserved = {"schema_version", "ts", "source", "kind", "severity"}
+    return {
+        k: v
+        for k, v in ev.items()
+        if k not in reserved and isinstance(v, (int, float)) and not isinstance(v, bool)
+    }
+
+
+def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
+    window_start = now - _dt.timedelta(days=days)
+    lookback_start = now - _dt.timedelta(days=SILENCE_LOOKBACK_DAYS)
+
+    recent_sources: set[str] = set()
+    prior_sources: set[str] = set()
+    last_seen: dict[str, str] = {}
+    per_source = defaultdict(lambda: {
+        "runs": 0, "events": 0, "errors": 0,
+        "findings": [], "metrics": defaultdict(list),
+    })
+    errors = []
+    findings = []
+
+    for ev in events:
+        ts = parse_ts(ev)
+        if ts is None:
+            continue
+        src = ev.get("source", "?")
+        if ts >= lookback_start:
+            prior_sources.add(src)
+        if ts < window_start:
+            continue
+        recent_sources.add(src)
+        iso = ev["ts"]
+        if src not in last_seen or iso > last_seen[src]:
+            last_seen[src] = iso
+
+        s = per_source[src]
+        s["events"] += 1
+        kind = ev.get("kind", "run")
+        if kind == "run":
+            s["runs"] += 1
+        elif kind == "error":
+            s["errors"] += 1
+            errors.append(ev)
+        elif kind == "finding":
+            s["findings"].append(ev)
+            if SEVERITY_RANK.get(ev.get("severity", "info"), 0) >= SEVERITY_RANK["medium"]:
+                findings.append(ev)
+        for field, val in numeric_fields(ev).items():
+            s["metrics"][field].append(val)
+
+    silent = sorted(prior_sources - recent_sources)
+
+    # metrics 를 min/last/max 로 축약
+    for src, s in per_source.items():
+        trends = {}
+        for field, vals in s["metrics"].items():
+            trends[field] = {"min": min(vals), "last": vals[-1], "max": max(vals), "n": len(vals)}
+        s["metrics"] = trends
+        s["findings"] = len(s["findings"])
+
+    return {
+        "generated_at": now.isoformat(),
+        "window_days": days,
+        "sources_active": sorted(recent_sources),
+        "sources_silent": silent,
+        "per_source": {k: dict(v) for k, v in per_source.items()},
+        "last_seen": last_seen,
+        "errors": errors,
+        "findings_attention": sorted(
+            findings, key=lambda e: -SEVERITY_RANK.get(e.get("severity", "info"), 0)
+        ),
+    }
+
+
+def render_markdown(d: dict) -> str:
+    lines = []
+    lines.append(f"# 백그라운드 잡 다이제스트 — 최근 {d['window_days']}일")
+    lines.append("")
+    lines.append(f"생성: {d['generated_at'][:19]}  ·  활성 소스 {len(d['sources_active'])}개")
+    lines.append("")
+
+    # 결정 신호 먼저 (요약 우선)
+    if d["sources_silent"]:
+        lines.append("## ⚠️ 침묵한 잡 (launchagent 점검 권장)")
+        for src in d["sources_silent"]:
+            lines.append(f"- **{src}** — 최근 {d['window_days']}일 이벤트 없음")
+        lines.append("")
+    if d["errors"]:
+        lines.append(f"## 🔴 오류 {len(d['errors'])}건")
+        for ev in d["errors"][:10]:
+            msg = ev.get("message") or ev.get("detail") or ev.get("error") or ""
+            lines.append(f"- `{ev.get('source','?')}` {ev.get('ts','')[:19]} — {msg}")
+        lines.append("")
+    if d["findings_attention"]:
+        lines.append(f"## 🟡 주의 필요 발견 {len(d['findings_attention'])}건")
+        for ev in d["findings_attention"][:15]:
+            sev = ev.get("severity", "?")
+            title = ev.get("title") or ev.get("detail") or ""
+            lines.append(f"- [{sev}] `{ev.get('source','?')}` — {title}")
+        lines.append("")
+
+    lines.append("## 잡별 요약")
+    lines.append("")
+    lines.append("| 소스 | 실행 | 이벤트 | 오류 | 발견 | 마지막 |")
+    lines.append("|---|--:|--:|--:|--:|---|")
+    for src in sorted(d["per_source"]):
+        s = d["per_source"][src]
+        last = d["last_seen"].get(src, "")[:16]
+        lines.append(
+            f"| {src} | {s['runs']} | {s['events']} | {s['errors']} | {s['findings']} | {last} |"
+        )
+    lines.append("")
+
+    # 지표 추세
+    trend_rows = []
+    for src in sorted(d["per_source"]):
+        for field, t in d["per_source"][src].get("metrics", {}).items():
+            arrow = "→"
+            if t["last"] > t["min"] and t["last"] >= t["max"]:
+                arrow = "↑"
+            elif t["last"] < t["max"] and t["last"] <= t["min"]:
+                arrow = "↓"
+            trend_rows.append((src, field, t, arrow))
+    if trend_rows:
+        lines.append("## 지표 추세 (min → last / max)")
+        lines.append("")
+        for src, field, t, arrow in trend_rows:
+            lines.append(f"- `{src}.{field}` {arrow} {t['min']} → **{t['last']}** / {t['max']}  (n={t['n']})")
+        lines.append("")
+
+    if not d["per_source"]:
+        lines.append("_이 창에 이벤트 없음._")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="ops-digest")
+    parser.add_argument("--days", type=int, default=7)
+    parser.add_argument("--json", action="store_true", help="마크다운 대신 JSON 출력")
+    parser.add_argument("--out", default=None, help="stdout 외에 이 경로로도 기록")
+    parser.add_argument("--now", default=None, help="iso8601 기준시각 override (테스트용)")
+    args = parser.parse_args()
+
+    now = _dt.datetime.fromisoformat(args.now) if args.now else _dt.datetime.now().astimezone()
+    events = load_events(os.path.join(state_root(), "events"))
+    digest = build_digest(events, args.days, now)
+
+    out = json.dumps(digest, ensure_ascii=False, indent=2) if args.json else render_markdown(digest)
+    sys.stdout.write(out + "\n")
+    if args.out:
+        path = os.path.expanduser(args.out)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(out + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

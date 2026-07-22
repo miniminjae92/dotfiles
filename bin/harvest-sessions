@@ -9,7 +9,23 @@
   harvest-sessions [--since YYYY-MM-DD] [--out DIR] [--days N]
 기본: 최근 7일, 출력 ~/.cache/harvest-sessions/
 """
-import os, json, glob, re, argparse, datetime, sys
+import os, json, glob, re, argparse, datetime, sys, shutil, subprocess
+from pathlib import Path
+
+HOME = Path.home()
+
+
+def emit_ops_event(source, kind, severity="info", **fields):
+    """ops-event 로 구조화 이벤트 1줄 append. 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("ops-event") or str(HOME / ".local/bin/ops-event")
+    try:
+        subprocess.run(
+            [exe, "--source", source, "--kind", kind, "--severity", severity],
+            input=json.dumps(fields), text=True, check=False, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
 
 CODEX = os.path.expanduser("~/.codex/sessions")
 CLAUDE = os.path.expanduser("~/.claude/projects")
@@ -120,6 +136,10 @@ def main():
     print(f"세션 {written}개 · 사용자 발화 {tot_msg}건 · {tot_char:,}자 (~{tot_char // 3500}K 토큰)")
     print(f"출력: {args.out}")
     print(f"since: {since.date()}")
+    emit_ops_event(
+        "harvest-sessions", "run", severity="info",
+        sessions=written, utterances=tot_msg, chars=tot_char, window_days=args.days,
+    )
 
 
 if __name__ == "__main__":
