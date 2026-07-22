@@ -1,7 +1,6 @@
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+# Powerlevel10k instant prompt (iTerm2 & others; Ghostty uses Starship below).
+# Console-input init must go above this block; everything else may go below.
+if [[ "$TERM_PROGRAM" != "ghostty" && -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
@@ -11,22 +10,24 @@ export EDITOR="vim"
 # Keep PATH entries unique — dedups even if installers re-append later.
 typeset -U path PATH
 
-# Path to your oh-my-zsh installation.
-export ZSH="$HOME/.oh-my-zsh"
+# Homebrew prefix (cached once; portable across Apple Silicon / Intel).
+export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$(brew --prefix)}"
 
-# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-ZSH_THEME="powerlevel10k/powerlevel10k"
+# Completion system (previously initialized by oh-my-zsh).
+fpath=("$HOMEBREW_PREFIX/share/zsh/site-functions" $fpath)
+autoload -Uz compinit && compinit
 
-plugins=(
-  git
-  zsh-syntax-highlighting
-  zsh-autosuggestions
-)
+# Autosuggestions (syntax-highlighting is sourced last, at end of file).
+source "$HOMEBREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
-source $ZSH/oh-my-zsh.sh
-
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# Prompt: Ghostty gets Starship (A/B trial); iTerm2 & others keep Powerlevel10k.
+if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
+  eval "$(starship init zsh)"
+else
+  source "$HOMEBREW_PREFIX/share/powerlevel10k/powerlevel10k.zsh-theme"
+  # To customize the p10k prompt, run `p10k configure` or edit ~/.p10k.zsh.
+  [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+fi
 
 # history setup
 HISTFILE=$HOME/.zhistory
@@ -280,3 +281,6 @@ export PATH="$HOME/.dotfiles/scripts:$PATH"
 
 # Added by Antigravity
 export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
+
+# Syntax highlighting must be sourced last (after all zle widgets are defined).
+source "$HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"

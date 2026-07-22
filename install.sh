@@ -42,6 +42,7 @@ link_file "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 link_file "$DOTFILES_DIR/.tmux.conf" "$HOME/.tmux.conf"
 link_file "$DOTFILES_DIR/.ideavimrc" "$HOME/.ideavimrc"
 link_file "$DOTFILES_DIR/.config/nvim" "$HOME/.config/nvim"
+link_file "$DOTFILES_DIR/.config/starship.toml" "$HOME/.config/starship.toml"
 link_file \
   "$DOTFILES_DIR/.config/bat/themes/tokyonight_night.tmTheme" \
   "$HOME/.config/bat/themes/tokyonight_night.tmTheme"

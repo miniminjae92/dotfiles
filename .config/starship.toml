@@ -1,0 +1,12 @@
+# Starship prompt — active in Ghostty (terminal branch lives in ~/.dotfiles/.zshrc).
+# Intentionally minimal starting point: redesign alongside the new Ghostty theme.
+
+add_newline = true
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true

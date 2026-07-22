@@ -16,6 +16,10 @@ brew "fd"
 brew "ripgrep"
 brew "zoxide"
 brew "jq"
+brew "starship"                # 프롬프트 (Ghostty)
+brew "powerlevel10k"           # 프롬프트 (iTerm2 등) — oh-my-zsh 제거 후 standalone 소싱
+brew "zsh-autosuggestions"     # oh-my-zsh 플러그인 대체
+brew "zsh-syntax-highlighting" # oh-my-zsh 플러그인 대체 (마지막에 소싱)
 
 # Development
 brew "gh"
