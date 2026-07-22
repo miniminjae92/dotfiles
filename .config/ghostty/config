@@ -1,0 +1,20 @@
+# Ghostty configuration — managed by dotfiles (symlinked from ~/.dotfiles/.config/ghostty/config).
+#
+# Theme, font, and design are intentionally left open — design these directly.
+# Reference:  ghostty +show-config --default --docs
+#             https://ghostty.org/docs/config
+#
+# Prompt note: the shell picks Starship automatically in Ghostty
+# (TERM_PROGRAM=ghostty branch in ~/.dotfiles/.zshrc). A Nerd Font is
+# recommended once you choose a font, so prompt glyphs render.
+
+# --- Theme / appearance (design here) ---
+# theme =
+# font-family =
+# font-size =
+# background-opacity =
+# window-padding-x =
+# window-padding-y =
+
+# --- Ergonomics (uncomment if wanted) ---
+# macos-option-as-alt = true
