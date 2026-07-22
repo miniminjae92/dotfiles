@@ -6,6 +6,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
 fi
 
 export LANG="en_US.UTF-8"
+export EDITOR="vim"
 
 # Keep PATH entries unique — dedups even if installers re-append later.
 typeset -U path PATH
@@ -36,10 +37,13 @@ setopt hist_expire_dups_first
 setopt hist_ignore_dups
 setopt hist_verify
 
-# completion using arrow keys (based on history)
+# Use vi keybindings first, then layer bindings onto the vi insert keymap
+# (bindings set before `bindkey -v` are lost when the main keymap switches).
+bindkey -v
+
+# History search on arrow keys
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
-bindkey -v
 
 # Keep a couple of familiar Emacs bindings available while using vi mode.
 bindkey '^A' beginning-of-line
@@ -153,7 +157,6 @@ export MANPATH="$HOME/.dotfiles/man:${MANPATH:-}"
 
 # User alias
 alias cl="clear"
-alias vi="nvim"
 alias lg="lazygit"
 alias gcalw="gcalcli calw"
 alias gcala="gcalcli agenda"
