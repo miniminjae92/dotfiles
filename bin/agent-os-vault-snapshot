@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-vault="${DEVELOPER_OS_VAULT:-$HOME/.obsidian/developer-os}"
+# Snapshot each vault locally and mirror it to its private Git remote so the
+# latest notes are readable on the phone (GitHub mobile app) without exposing a
+# public site. Pushes are best-effort: an offline or auth-less run must never
+# fail the launchd job, because the local commit already preserves history.
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
 
-if ! git -C "$vault" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  printf 'agent-os-vault-snapshot: not a Git repository: %s\n' "$vault" >&2
-  exit 0
-fi
+vaults=(
+  "${YGGDRASIL_VAULT:-$HOME/.obsidian/yggdrasil}"
+  "${DEVELOPER_OS_VAULT:-$HOME/.obsidian/mimir}"
+)
 
-git -C "$vault" add --all
+for vault in "${vaults[@]}"; do
+  if ! git -C "$vault" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    printf 'agent-os-vault-snapshot: not a Git repository: %s\n' "$vault" >&2
+    continue
+  fi
 
-if git -C "$vault" diff --cached --quiet; then
-  exit 0
-fi
+  git -C "$vault" add --all
 
-git -C "$vault" commit -m "docs: Developer OS snapshot $(date '+%Y-%m-%d %H:%M')"
+  if ! git -C "$vault" diff --cached --quiet; then
+    git -C "$vault" commit -m "docs: vault snapshot $(date '+%Y-%m-%d %H:%M')"
+  fi
+
+  if git -C "$vault" remote get-url origin >/dev/null 2>&1; then
+    branch="$(git -C "$vault" symbolic-ref --quiet --short HEAD || echo HEAD)"
+    if ! git -C "$vault" push --quiet origin "$branch"; then
+      printf 'agent-os-vault-snapshot: push skipped (offline/auth): %s\n' "$vault" >&2
+    fi
+  fi
+done

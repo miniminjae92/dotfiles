@@ -3,7 +3,7 @@
 ## Local history
 
 - The vault is a local Git repository.
-- `agent-os-vault-snapshot` commits changed notes every hour without pushing.
+- `agent-os-vault-snapshot` commits changed notes every hour and best-effort pushes them to the private Git remote (for phone reading via the GitHub app); an offline run still commits locally.
 - Restore a note by inspecting Git history and applying the selected version.
 
 ## Off-device backup
