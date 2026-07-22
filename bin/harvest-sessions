@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""harvest-sessions — 에이전트 세션에서 사용자 발화를 싸게 추출한다.
+
+'세션 수확' 파이프라인의 1단계(추출). Codex(rollout) + Claude 두 jsonl 포맷 모두 처리.
+불편·아이디어·결정의 발원지인 사용자 발화만 골라 세션별 압축 텍스트로 떨군다.
+2단계(마이닝: 불편/아이디어/결정 구조화)는 이 출력을 에이전트에 물려 수행한다.
+
+사용:
+  harvest-sessions [--since YYYY-MM-DD] [--out DIR] [--days N]
+기본: 최근 7일, 출력 ~/.cache/harvest-sessions/
+"""
+import os, json, glob, re, argparse, datetime, sys
+
+CODEX = os.path.expanduser("~/.codex/sessions")
+CLAUDE = os.path.expanduser("~/.claude/projects")
+NOISE = re.compile(r"local-command|command-name|stdout|caveat|system-reminder|<antml|tool_use_id|permissions instructions", re.I)
+
+
+def texts_from_content(c):
+    if isinstance(c, str):
+        return [c]
+    if isinstance(c, list):
+        out = []
+        for b in c:
+            if isinstance(b, dict) and isinstance(b.get("text"), str):
+                out.append(b["text"])
+            elif isinstance(b, str):
+                out.append(b)
+        return out
+    return []
+
+
+def _user(m):
+    return m.get("content") if isinstance(m, dict) and m.get("role") == "user" else None
+
+
+def user_contents(obj):
+    res = []
+    m = obj.get("message")
+    c = _user(m) if isinstance(m, dict) else None
+    if c is not None:
+        res.append(c)
+    if obj.get("type") == "user" and isinstance(obj.get("content"), (str, list)):
+        res.append(obj.get("content"))
+    p = obj.get("payload")
+    if isinstance(p, dict):
+        c = _user(p)
+        if c is not None:
+            res.append(c)
+        rh = p.get("replacement_history")
+        if isinstance(rh, list):
+            for mm in rh:
+                c = _user(mm)
+                if c is not None:
+                    res.append(c)
+    return res
+
+
+def clean(t):
+    t = t.strip()
+    if not t or len(t) < 4:
+        return None
+    if NOISE.search(t):
+        return None
+    if t.startswith("/") and len(t) < 40:
+        return None
+    return t
+
+
+def extract(path):
+    users = []
+    try:
+        for line in open(path, encoding="utf-8", errors="ignore"):
+            if '"user"' not in line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            for c in user_contents(obj):
+                for t in texts_from_content(c):
+                    ct = clean(t)
+                    if ct:
+                        users.append(ct)
+    except Exception:
+        return None
+    return users
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--since", help="YYYY-MM-DD (기본: --days 전)")
+    ap.add_argument("--days", type=int, default=7)
+    ap.add_argument("--out", default=os.path.expanduser("~/.cache/harvest-sessions"))
+    args = ap.parse_args()
+
+    if args.since:
+        since = datetime.datetime.strptime(args.since, "%Y-%m-%d")
+    else:
+        since = datetime.datetime.now() - datetime.timedelta(days=args.days)
+    since_ts = since.timestamp()
+
+    os.makedirs(args.out, exist_ok=True)
+    files = glob.glob(f"{CODEX}/*/*/*/*.jsonl") + glob.glob(f"{CLAUDE}/*/*.jsonl")
+    files = [f for f in files if "/subagents/" not in f and os.path.getmtime(f) >= since_ts]
+
+    tot_msg = tot_char = written = 0
+    for f in sorted(files):
+        users = extract(f)
+        if not users:
+            continue
+        src = "codex" if "/.codex/" in f else "claude"
+        body = "\n\n".join(f"- {u}" for u in users)
+        tot_msg += len(users)
+        tot_char += len(body)
+        with open(os.path.join(args.out, f"{src}__{os.path.basename(f)[:40]}.txt"), "w", encoding="utf-8") as w:
+            w.write(f"# {src} :: {os.path.basename(f)}\n# 사용자 발화 {len(users)}건\n\n{body}\n")
+        written += 1
+
+    print(f"세션 {written}개 · 사용자 발화 {tot_msg}건 · {tot_char:,}자 (~{tot_char // 3500}K 토큰)")
+    print(f"출력: {args.out}")
+    print(f"since: {since.date()}")
+
+
+if __name__ == "__main__":
+    main()

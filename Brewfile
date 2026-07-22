@@ -33,3 +33,4 @@ brew "vjeantet/tap/alerter" # agent-notify 클릭 가능 알림
 cask "iterm2"
 cask "karabiner-elements"
 cask "visual-studio-code"
+cask "tailscale-app"    # 기기 간 메시 VPN(맥북↔아이맥 원격 SSH/화면공유). up은 계정 로그인 필요
