@@ -17,7 +17,7 @@ abort "usage: agent-os-friction [--origin user|agent] <message>" unless %w[user 
 message = ARGV.join(" ").gsub(/\s+/, " ").strip.gsub("|", "\\|")
 abort "usage: agent-os-friction [--origin user|agent] <message>" if message.empty?
 
-vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/developer-os"))
+vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/mimir"))
 path = File.join(vault, "00 Inbox", "생산성 불편일기.md")
 abort "friction note not found: #{path}" unless File.file?(path)
 

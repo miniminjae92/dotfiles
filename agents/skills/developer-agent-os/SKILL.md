@@ -39,7 +39,7 @@ Complete the work without intermediate approval when changes are reversible. Ask
 
 ## Record
 
-- For T1/T2, create a candidate Run from `/Users/miniminjae/.obsidian/developer-os/_System/Templates/Run.md` under `40 Reviews/Runs/`.
+- For T1/T2, create a candidate Run from `/Users/miniminjae/.obsidian/mimir/_System/Templates/Run.md` under `40 Reviews/Runs/`.
 - When Tutor mode applies, record the user's responsibility, target depth, selection reason, delegated details, and required, strategic, or curiosity follow-up candidates in the Run. Use only `pending`, `passed`, `needs_review`, or `not_required` for `understanding_status`.
 - Run `agent-os-usage` and record only observable model, reasoning, and token data. Keep ChatGPT credits and API cost separate; never infer one from token counts.
 - Preserve origin: user statements are `user`, agent output is `agent`, jointly confirmed decisions are `joint`, and unconfirmed inferences are `inferred`.

@@ -4,17 +4,18 @@
 
 ## D-001 Developer OS 범위와 위치
 
-- 상태: 확정 (2026-07-21 개정)
+- 상태: 확정 (2026-07-22 재개정)
 - 날짜: 2026-07-15
 - 개정: 2026-07-21 — 실사용이 기록과 반대(yggdrasil이 현역, developer-os는 운영 로그)임을 확인. 개인 지식 볼트를 `mimir`로 리네임하고 역할을 현실에 맞게 갱신.
+- 재개정: 2026-07-22 — 신화적 의미(yggdrasil=세계수·개인 지식 나무, mimir=지혜의 샘·개발/운영)에 맞춰 두 볼트 이름을 교환. 개인 지식 볼트 `mimir`→`yggdrasil`, 운영 로그 볼트 `developer-os`→`mimir`. GitHub 저장소·Obsidian 등록 경로·dotfiles 참조를 함께 동기화.
 
 ### 결정
 
 - Agent OS는 개발, 기술 학습, 서비스 설계, 생산성 개선과 관련 개인 철학을 다룬다.
 - 생활 전반은 초기 범위에서 제외한다.
 - 시스템 정의는 `/Users/miniminjae/.dotfiles/agent-os`에 둔다.
-- 개인 지식(살아있는 볼트)은 `/Users/miniminjae/.obsidian/mimir`(구 yggdrasil)에 둔다.
-- `developer-os`는 에이전트 운영 로그(Agent OS 기록·리뷰·백로그)로 둔다.
+- 개인 지식(살아있는 볼트)은 `/Users/miniminjae/.obsidian/yggdrasil`에 둔다.
+- `mimir`는 에이전트 운영 로그(Agent OS 기록·리뷰·백로그)로 둔다.
 
 ### 이유
 

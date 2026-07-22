@@ -23,7 +23,7 @@ class PersonalOpsTest(unittest.TestCase):
         root = Path(self.temporary_directory.name)
         self.state_root = root / "state"
         self.report_root = root / "reports"
-        self.developer_vault = root / "developer-os"
+        self.developer_vault = root / "mimir"
         self.patches = [
             mock.patch.object(personal_ops, "STATE_ROOT", self.state_root),
             mock.patch.object(personal_ops, "SECURITY_STATE", self.state_root / "security.json"),

@@ -19,12 +19,12 @@ from typing import Any
 
 HOME = Path.home()
 DEVELOPER_VAULT = Path(
-    os.environ.get("DEVELOPER_OS_VAULT", HOME / ".obsidian/developer-os")
+    os.environ.get("DEVELOPER_OS_VAULT", HOME / ".obsidian/mimir")
 )
 REPORT_ROOT = Path(
     os.environ.get(
         "PERSONAL_OPS_REPORT_ROOT",
-        HOME / ".obsidian/mimir/3. Resource/AI Work Reports",
+        HOME / ".obsidian/yggdrasil/3. Resource/AI Work Reports",
     )
 )
 STATE_ROOT = Path(

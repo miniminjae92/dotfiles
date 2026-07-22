@@ -14,7 +14,7 @@
   - `agents/routing.json`: planner/worker/reviewer/clerk 역할, 부패 자원(윈도우)/저장 자원(주간 캡) 정책
   - 공유 스킬: work, developer-agent-os, handoff-session (`agents/skills/` → 양쪽 CLI 링크)
   - Claude 훅(Stop/Notification/PreCompact→agent-notify), 상태줄(ctx % 게이지), Brewfile, dotfiles-doctor
-  - 아이디어 배치 평가 완료 → 결정은 developer-os 볼트 `10 Projects/시스템 개선 백로그.md`
+  - 아이디어 배치 평가 완료 → 결정은 mimir 볼트 `10 Projects/시스템 개선 백로그.md`
 - What is intentionally not changed:
   - `.codex/skills/`의 아카이브 체인(archive-session 등) — 감사 후 통합 예정
   - 알림 UX — 실불편 발생 전 백로그
@@ -30,7 +30,7 @@
 
 ## Files To Read First
 
-- `~/.obsidian/developer-os/10 Projects/시스템 개선 백로그.md`: 다음 세션들의 작업 지시서
+- `~/.obsidian/mimir/10 Projects/시스템 개선 백로그.md`: 다음 세션들의 작업 지시서
 - `agents/routing.json`: 역할·모델 라우팅 선언
 - `agent-os/DECISIONS.md` D-008~D-011: 이번 재설계의 결정 원본
 
@@ -51,7 +51,7 @@
 
 1. (사용자) push 여부 결정 → iMac에서 pull + install.sh + brew bundle + dotfiles-doctor
 2. 아카이빙 감사 — 새 세션, 플랜 모드, Opus. 기준: 재사용·보정·복구. Hermes 도입은 감사 후
-3. 우테코 레벨3 학습 노트를 developer-os 00 Inbox에 수집 시작 (에이전트 불필요)
+3. 우테코 레벨3 학습 노트를 mimir 00 Inbox에 수집 시작 (에이전트 불필요)
 4. 트랙 2 (p10k/thefuck/nvm) — 새 세션, Sonnet, 착수 전 웹 재검증
 
 ## Watch Outs

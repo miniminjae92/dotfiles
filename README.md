@@ -303,7 +303,7 @@ video-summary 'https://www.youtube.com/watch?v=VIDEO_ID'
 
 After reloading `.zshrc`, the shorter `vsummary` alias runs the same command.
 
-By default, notes are saved under `~/.obsidian/mimir/3. Resource/Video Summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
+By default, notes are saved under `~/.obsidian/yggdrasil/3. Resource/Video Summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
 
 For a channel membership, let `yt-dlp` read the signed-in browser profile directly. The cookie database is read at runtime and is never exported by `video-summary`. Discover member candidates across the Membership and Community tabs and every channel playlist, then verify their availability without fetching subtitles or calling Codex:
 

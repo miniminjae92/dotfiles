@@ -4,7 +4,7 @@
 require "json"
 require "time"
 
-vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/developer-os"))
+vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/mimir"))
 run_threshold = Integer(ENV.fetch("AGENT_OS_REVIEW_RUNS", "5"))
 day_threshold = Integer(ENV.fetch("AGENT_OS_REVIEW_DAYS", "7"))
 

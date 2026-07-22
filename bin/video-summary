@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 DEFAULT_OUTPUT_DIR = Path(
     os.environ.get(
         "VIDEO_SUMMARY_DIR",
-        "/Users/miniminjae/.obsidian/mimir/3. Resource/Video Summaries",
+        "/Users/miniminjae/.obsidian/yggdrasil/3. Resource/Video Summaries",
     )
 )
 SUMMARY_VERSION = "1"
