@@ -20,7 +20,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bat` for file viewing with syntax highlighting (replaces `cat`), including the `tokyonight_night` theme.
     * `fzf` with `fd` for fast and efficient file and directory searching.
     * `gh` for GitHub CLI workflows.
-    * `thefuck` to correct command typos.
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.

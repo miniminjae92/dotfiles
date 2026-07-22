@@ -16,7 +16,6 @@ brew "fd"
 brew "ripgrep"
 brew "zoxide"
 brew "jq"
-brew "thefuck" # 교체 후보(트랙 2): 업스트림 정체, .zshrc eval 제거와 함께 정리 예정
 
 # Development
 brew "gh"
