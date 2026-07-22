@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""asx — Agent Session eXplorer · 에이전트 대화 통합 탐색기 (Claude + Codex).
+
+작업 디렉터리·에이전트별로 흩어진 대화 로그를 하나의 검색 레이어로 묶는다.
+로그는 각 CLI가 실시간 자동 기록하므로 별도 아카이빙이 필요 없다 — asx는 그 위의 인덱스다.
+
+소스 3종:
+  claude      ~/.claude/projects/<cwd>/*.jsonl            (본대화)
+  claude-sub  ~/.claude/projects/<cwd>/subagents/*.jsonl  (서브에이전트/멀티에이전트)
+  codex       ~/.codex/{sessions,archived_sessions}/**/*.jsonl
+
+  asx list [-n N] [--cwd 패턴] [--source S]   최근 세션 통합 목록
+  asx search <질의> [-i] [--source S]         전 소스 본문 grep + 스니펫
+  asx show <세션ID접두사>                       세션 하나를 읽기 좋게 출력
+"""
+import sys, os, glob, json, argparse, datetime, textwrap
+
+HOME = os.path.expanduser("~")
+C_ROOT = os.path.join(HOME, ".claude", "projects")
+X_SESS = os.path.join(HOME, ".codex", "sessions")
+X_ARCH = os.path.join(HOME, ".codex", "archived_sessions")
+
+SRC_COLORS = {"claude": "36", "claude-sub": "35", "codex": "32"}
+
+
+# ---------- 소스별 파일 수집 ----------
+def files_for(source):
+    out = []
+    if source in ("all", "claude"):
+        out += [(p, "claude") for p in glob.glob(os.path.join(C_ROOT, "*", "*.jsonl"))]
+    if source in ("all", "claude-sub"):
+        out += [(p, "claude-sub") for p in
+                glob.glob(os.path.join(C_ROOT, "**", "subagents", "*.jsonl"),
+                          recursive=True)]
+    if source in ("all", "codex"):
+        for root in (X_SESS, X_ARCH):
+            out += [(p, "codex") for p in
+                    glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True)]
+    return out
+
+
+# ---------- 소스별 메시지/메타 추출 ----------
+def _claude_text(msg):
+    if not isinstance(msg, dict):
+        return ""
+    c = msg.get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return " ".join(b.get("text", "") for b in c
+                        if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+
+def parse(path, source):
+    """세션 파일 → dict(meta + messages[(role,text)]).  실패해도 최대한 살린다."""
+    sid = os.path.splitext(os.path.basename(path))[0]
+    cwd = title = branch = None
+    msgs = []
+    for line in open(path, encoding="utf-8", errors="replace"):
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        if source == "codex":
+            p = d.get("payload", {})
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") == "session_meta" or (cwd is None and "cwd" in p):
+                cwd = p.get("cwd") or cwd
+            if p.get("type") == "message" and p.get("role") in ("user", "assistant"):
+                parts = [b.get("text", "") for b in p.get("content", [])
+                         if isinstance(b, dict) and "text" in b]
+                txt = " ".join(parts).strip()
+                if txt and not txt.startswith("<"):   # 시스템/지시문 프리앰블 스킵
+                    msgs.append((p["role"], txt))
+        else:  # claude / claude-sub
+            cwd = d.get("cwd") or cwd
+            branch = d.get("gitBranch") or branch
+            title = d.get("aiTitle") or d.get("slug") or title
+            if d.get("type") in ("user", "assistant"):
+                txt = _claude_text(d.get("message", {})).strip()
+                if txt:
+                    msgs.append((d["type"], txt))
+    return {"id": sid, "path": path, "source": source, "cwd": cwd,
+            "branch": branch, "title": title, "msgs": msgs,
+            "mtime": os.path.getmtime(path)}
+
+
+def when(mtime):
+    return datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+
+
+def tag(source):
+    return f"\033[{SRC_COLORS.get(source,'37')}m{source:<10}\033[0m"
+
+
+def short(rec):
+    """표시·지정용 짧은 ID. codex는 rollout-…-<uuid> 꼬리를, 그 외는 앞 8자."""
+    if rec["source"] == "codex":
+        return rec["id"].split("-")[-1][:8]   # uuid 마지막 그룹 앞 8자
+    return rec["id"][:8]
+
+
+def label(rec):
+    if rec["title"]:
+        return rec["title"]
+    for role, txt in rec["msgs"]:
+        if role == "user":
+            return txt[:60]
+    return "(빈 세션)"
+
+
+# ---------- 명령 ----------
+def cmd_list(args):
+    recs = [parse(p, s) for p, s in files_for(args.source)]
+    recs.sort(key=lambda r: r["mtime"], reverse=True)
+    if args.cwd:
+        recs = [r for r in recs if r["cwd"] and args.cwd in r["cwd"]]
+    for r in recs[: args.n]:
+        cwd = (r["cwd"] or "?").replace(HOME, "~")
+        nu = sum(1 for role, _ in r["msgs"] if role == "user")
+        na = len(r["msgs"]) - nu
+        print(f"\033[1m{when(r['mtime'])}\033[0m  {tag(r['source'])}  "
+              f"\033[2m{short(r)}  {cwd}\033[0m  u{nu}/a{na}")
+        print(f"    {label(r)}")
+
+
+def cmd_search(args):
+    q = args.query if args.case else args.query.lower()
+    hits = []
+    for p, s in files_for(args.source):
+        rec = parse(p, s)
+        matched = []
+        for role, txt in rec["msgs"]:
+            hay = txt if args.case else txt.lower()
+            i = hay.find(q)
+            if i >= 0:
+                snip = txt[max(0, i - 40): i + 60].replace("\n", " ")
+                matched.append((role, snip))
+        if matched:
+            hits.append((rec, matched))
+    hits.sort(key=lambda h: h[0]["mtime"], reverse=True)
+    for rec, matched in hits:
+        cwd = (rec["cwd"] or "?").replace(HOME, "~")
+        print(f"\033[1m{when(rec['mtime'])}\033[0m  {tag(rec['source'])}  "
+              f"\033[2m{short(rec)}  {cwd}\033[0m  ({len(matched)}건)")
+        for role, snip in matched[:3]:
+            print(f"    \033[33m{role[0]}\033[0m …{snip}…")
+    if not hits:
+        print("일치하는 세션 없음")
+    else:
+        print(f"\n\033[2m총 {len(hits)}개 세션 일치\033[0m")
+
+
+def cmd_show(args):
+    cands = [(p, s) for p, s in files_for("all")
+             if args.id in os.path.basename(p)]
+    if not cands:
+        print(f"세션 없음: {args.id}"); return
+    if len(cands) > 1:
+        print("접두사가 여러 세션과 일치 — 더 길게 지정:")
+        for p, s in cands:
+            print(f"  [{s}] {os.path.basename(p)}")
+        return
+    rec = parse(*cands[0])
+    print(f"\033[2m{rec['source']} · {(rec['cwd'] or '?').replace(HOME,'~')} · "
+          f"{when(rec['mtime'])}\033[0m\n")
+    for role, txt in rec["msgs"]:
+        who = "나" if role == "user" else ("Claude" if rec["source"] != "codex" else "Codex")
+        print(f"\033[1m[{who}]\033[0m")
+        print(textwrap.indent(txt, "  "))
+        print()
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="asx")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    SRC = ("all", "claude", "claude-sub", "codex")
+    p = sub.add_parser("list"); p.add_argument("-n", type=int, default=30)
+    p.add_argument("--cwd"); p.add_argument("--source", choices=SRC, default="all")
+    p.set_defaults(fn=cmd_list)
+    p = sub.add_parser("search"); p.add_argument("query")
+    p.add_argument("-i", "--case", action="store_true", help="대소문자 구분")
+    p.add_argument("--source", choices=SRC, default="all")
+    p.set_defaults(fn=cmd_search)
+    p = sub.add_parser("show"); p.add_argument("id"); p.set_defaults(fn=cmd_show)
+    args = ap.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()
