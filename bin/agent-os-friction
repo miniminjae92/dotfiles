@@ -17,7 +17,23 @@ abort "usage: agent-os-friction [--origin user|agent] <message>" unless %w[user 
 message = ARGV.join(" ").gsub(/\s+/, " ").strip.gsub("|", "\\|")
 abort "usage: agent-os-friction [--origin user|agent] <message>" if message.empty?
 
-vault = ENV.fetch("DEVELOPER_OS_VAULT", File.expand_path("~/.obsidian/mimir"))
+# 경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값(fallback 시 이벤트)
+def contract_path(key, fallback)
+  env = ENV[key]
+  return env if env && !env.empty?
+  file = File.join(ENV.fetch("DOTFILES_DIR", File.expand_path("~/.dotfiles")), "agent-os", "paths.env")
+  line = File.foreach(file).find { |l| l.start_with?("#{key}=") }
+  raise KeyError, key unless line
+  line.split("=", 2).last.strip.gsub("$HOME", Dir.home)
+rescue StandardError
+  system("ops-event", "--source", File.basename($PROGRAM_NAME),
+         "--kind", "error", "--severity", "low",
+         "reason=paths-contract-fallback", "key=#{key}",
+         out: File::NULL, err: File::NULL)
+  File.expand_path(fallback)
+end
+
+vault = contract_path("DEVELOPER_OS_VAULT", "~/.obsidian/mimir")
 path = File.join(vault, "00 Inbox", "생산성 불편일기.md")
 abort "friction note not found: #{path}" unless File.file?(path)
 

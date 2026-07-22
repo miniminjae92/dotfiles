@@ -85,6 +85,30 @@ for label in com.miniminjae.agent-notify-sweep com.miniminjae.agent-os-vault-sna
   fi
 done
 
+echo "== Scripts contract (D-012) =="
+paths_env="$DOTFILES_DIR/agent-os/paths.env"
+if [ -r "$paths_env" ] && ! grep -qvE '^(#|$|[A-Z_]+=)' "$paths_env"; then
+  ok "paths.env parseable"
+else
+  bad "paths.env missing or malformed: $paths_env"
+fi
+registry_diff="$(comm -3 \
+  <(ls "$DOTFILES_DIR/bin" | grep -v '^__pycache__$' | sort) \
+  <(grep -oE '^\| `[a-z0-9-]+`' "$DOTFILES_DIR/agent-os/scripts.md" 2>/dev/null | tr -d '`| ' | sort))"
+if [ -z "$registry_diff" ]; then
+  ok "scripts registry matches bin/ ($(ls "$DOTFILES_DIR/bin" | grep -cv '^__pycache__$') scripts)"
+else
+  bad "scripts registry drift (agent-os/scripts.md vs bin/): $(echo "$registry_diff" | tr '\n' ' ')"
+fi
+# 하드코딩 vault 경로: 계약(paths.env) 미채택 파일 수 — D-012 목표는 단조 감소
+uncontracted="$(grep -rlE --exclude-dir=__pycache__ 'obsidian/(mimir|yggdrasil)' "$DOTFILES_DIR/bin" 2>/dev/null |
+  xargs grep -L 'paths\.env' 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$uncontracted" = 0 ]; then
+  ok "hardcoded vault paths: none outside contract"
+else
+  warn "hardcoded vault paths in $uncontracted file(s) without paths.env contract (D-012: 손댈 때 이관)"
+fi
+
 echo "== Registry drift =="
 python3 - "$DOTFILES_DIR" <<'PY'
 import json, pathlib, re, sys

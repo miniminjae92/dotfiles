@@ -8,10 +8,25 @@ set -euo pipefail
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
 
+# 경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값(fallback 시 이벤트)
+paths_file="${DOTFILES_DIR:-$HOME/.dotfiles}/agent-os/paths.env"
+paths_fallback=0
+ygg_default="$(grep -m1 '^YGGDRASIL_VAULT=' "$paths_file" 2>/dev/null | cut -d= -f2-)" || ygg_default=""
+dev_default="$(grep -m1 '^DEVELOPER_OS_VAULT=' "$paths_file" 2>/dev/null | cut -d= -f2-)" || dev_default=""
+if [ -z "$ygg_default" ] || [ -z "$dev_default" ]; then
+  paths_fallback=1
+  ygg_default='$HOME/.obsidian/yggdrasil'
+  dev_default='$HOME/.obsidian/mimir'
+fi
 vaults=(
-  "${YGGDRASIL_VAULT:-$HOME/.obsidian/yggdrasil}"
-  "${DEVELOPER_OS_VAULT:-$HOME/.obsidian/mimir}"
+  "${YGGDRASIL_VAULT:-${ygg_default/\$HOME/$HOME}}"
+  "${DEVELOPER_OS_VAULT:-${dev_default/\$HOME/$HOME}}"
 )
+if [ "$paths_fallback" = 1 ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source vault-snapshot --kind error --severity low \
+      reason=paths-contract-fallback 2>/dev/null || true
+fi
 
 committed=0
 pushed=0
