@@ -140,10 +140,6 @@ export BAT_THEME=tokyonight_night
 alias ls="eza --icons=always"
 alias l="ls -la"
 
-# ---- Zoxide (better cd) ----
-eval "$(zoxide init zsh)"
-
-alias cd="z"
 
 # ---- git alias ----
 
@@ -281,6 +277,11 @@ export PATH="$HOME/.dotfiles/scripts:$PATH"
 
 # Added by Antigravity
 export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
+
+# ---- Zoxide (better cd) ----
+# init은 PATH 조작이 모두 끝난 뒤 실행해야 doctor 경고가 없다 (syntax highlighting 직전).
+eval "$(zoxide init zsh)"
+alias cd="z"
 
 # Syntax highlighting must be sourced last (after all zle widgets are defined).
 source "$HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
