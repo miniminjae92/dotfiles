@@ -280,6 +280,8 @@ export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
 # ---- Zoxide (better cd) ----
 # init은 PATH 조작이 모두 끝난 뒤 실행해야 doctor 경고가 없다 (syntax highlighting 직전).
+# 에이전트 툴 셸(Claude Code)은 chpwd 훅이 유실돼 doctor가 오탐하므로 검사만 끈다.
+[ -n "${CLAUDECODE:-}" ] && export _ZO_DOCTOR=0
 eval "$(zoxide init zsh)"
 alias cd="z"
 
