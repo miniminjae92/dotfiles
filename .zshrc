@@ -1,4 +1,4 @@
-#2 Enable Powerlevel11k instant prompt. Should stay close to the top of ~/.zshrc.
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
@@ -30,8 +30,8 @@ source $ZSH/oh-my-zsh.sh
 
 # history setup
 HISTFILE=$HOME/.zhistory
-SAVEHIST=1000
-HISTSIZE=999
+SAVEHIST=50000
+HISTSIZE=50000
 setopt share_history 
 setopt hist_expire_dups_first
 setopt hist_ignore_dups
