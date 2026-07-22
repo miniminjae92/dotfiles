@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-os-core-check\" ]; then \"$HOME/.local/bin/agent-os-core-check\" codex; fi",
+            "timeout": 5,
+            "statusMessage": "Checking Agent OS core drift"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

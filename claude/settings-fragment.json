@@ -4,6 +4,17 @@
     "command": "if [ -x \"$HOME/.local/bin/claude-statusline\" ]; then \"$HOME/.local/bin/claude-statusline\"; else \"$HOME/.dotfiles/bin/claude-statusline\"; fi"
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-os-core-check\" ]; then \"$HOME/.local/bin/agent-os-core-check\" claude; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

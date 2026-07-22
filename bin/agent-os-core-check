@@ -1,0 +1,88 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+#
+# agent-os-core-check — 공통 core drift 탐지 계기(instrument). 탐지 전용.
+#
+# 모든 에이전트가 컨텍스트로 로드하는 공통 core(SSoT) 파일들이 직전 세션 이후
+# 바뀌었는지 SessionStart에서 대조해 알린다. 낙관적 락의 "읽을 때 대조"만 구현하며,
+# 강제·차단·승격(promotion)·CAS 쓰기는 하지 않는다(D-004/D-009: 실측 없이 자동화 금지).
+#
+# 출력은 drift가 있을 때만 stdout 한 줄. 이 stdout은 SessionStart 훅 규약상
+# 세션 컨텍스트로 주입된다(Claude). plain stdout이라 공급자 중립이다.
+
+require "digest"
+require "fileutils"
+require "json"
+require "time"
+
+# 모든 에이전트 컨텍스트에 로드되는 공통 core 집합.
+CORE_FILES = {
+  "AGENTS.md"    => File.expand_path("~/.dotfiles/agents/AGENTS.md"),
+  "routing.json" => File.expand_path("~/.dotfiles/agents/routing.json"),
+  "DECISIONS.md" => File.expand_path("~/.dotfiles/agent-os/DECISIONS.md")
+}.freeze
+
+def state_root
+  return ENV["AGENT_OS_STATE_DIR"] unless ENV["AGENT_OS_STATE_DIR"].to_s.empty?
+
+  xdg_state_home = ENV["XDG_STATE_HOME"]
+  xdg_state_home = File.expand_path("~/.local/state") if xdg_state_home.to_s.empty?
+  File.join(xdg_state_home, "agent-os")
+end
+
+# provider 계보별로 기준선을 분리한다(예: claude, codex). 라벨을 나누지 않으면
+# 먼저 시작한 provider가 drift 신호를 소비해 나머지가 놓친다.
+def state_label
+  raw = ARGV[0].to_s.downcase.gsub(/[^a-z0-9_-]/, "")
+  raw.empty? ? "default" : raw
+end
+
+def fingerprint
+  CORE_FILES.each_with_object({}) do |(label, path), acc|
+    acc[label] = File.file?(path) ? Digest::SHA256.file(path).hexdigest[0, 12] : nil
+  end
+end
+
+# stdin(SessionStart 훅 payload)은 있으면 소비하되 없어도 동작한다(공급자 중립).
+begin
+  $stdin.read
+rescue StandardError
+  nil
+end
+
+current = fingerprint
+FileUtils.mkdir_p(state_root, mode: 0o700)
+state_path = File.join(state_root, "core-version-#{state_label}.json")
+
+changed = []
+begin
+  File.open(state_path, File::RDWR | File::CREAT, 0o600) do |file|
+    file.flock(File::LOCK_EX)
+    stored = begin
+      parsed = JSON.parse(file.read)
+      parsed.is_a?(Hash) && parsed["fingerprint"].is_a?(Hash) ? parsed["fingerprint"] : {}
+    rescue JSON::ParserError
+      {}
+    end
+
+    # 기준선이 있을 때만 비교한다. 첫 실행은 조용히 기준선만 저장.
+    unless stored.empty?
+      CORE_FILES.each_key { |label| changed << label if stored[label] != current[label] }
+    end
+
+    file.rewind
+    file.truncate(0)
+    file.puts(JSON.generate("fingerprint" => current, "updated_at" => Time.now.iso8601))
+    file.flush
+    file.flock(File::LOCK_UN)
+  end
+rescue SystemCallError => error
+  warn "agent-os-core-check: state unavailable: #{error.message}"
+  exit 0
+end
+
+unless changed.empty?
+  puts "[core-check] 공통 core가 직전 세션 이후 변경됨: #{changed.join(', ')}. " \
+       "이번 세션은 최신 core 기준이다. 다른 세션의 컨텍스트를 이어받아 작업 중이라면 " \
+       "해당 파일의 델타를 먼저 확인하라."
+end
