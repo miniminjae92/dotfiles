@@ -115,15 +115,20 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.personal-ops-security.plist" \
     "$security_plist"
-  weekly_plist="$HOME/Library/LaunchAgents/com.miniminjae.personal-ops-weekly.plist"
+  harvest_daily_plist="$HOME/Library/LaunchAgents/com.miniminjae.session-harvest-daily.plist"
   link_file \
-    "$DOTFILES_DIR/.config/launchd/com.miniminjae.personal-ops-weekly.plist" \
-    "$weekly_plist"
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.session-harvest-daily.plist" \
+    "$harvest_daily_plist"
+  harvest_weekly_plist="$HOME/Library/LaunchAgents/com.miniminjae.session-harvest-weekly.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.session-harvest-weekly.plist" \
+    "$harvest_weekly_plist"
   mkdir -p \
     "$HOME/.local/state/agent-notify" \
     "$HOME/.local/state/agent-os" \
     "$HOME/.local/state/codex-account-usage" \
-    "$HOME/.local/state/personal-ops"
+    "$HOME/.local/state/personal-ops" \
+    "$HOME/.local/state/session-harvest"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$notification_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
@@ -132,8 +137,13 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$usage_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-security" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$security_plist"
+  # 은퇴: personal-ops-weekly → session-harvest-weekly로 대체(2026-07-22). bootout만, 재부트스트랩 안 함.
   launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-weekly" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$weekly_plist"
+  rm -f "$HOME/Library/LaunchAgents/com.miniminjae.personal-ops-weekly.plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.session-harvest-daily" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$harvest_daily_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.session-harvest-weekly" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$harvest_weekly_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.

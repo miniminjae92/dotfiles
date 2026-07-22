@@ -24,7 +24,9 @@ DEVELOPER_VAULT = Path(
 REPORT_ROOT = Path(
     os.environ.get(
         "PERSONAL_OPS_REPORT_ROOT",
-        HOME / ".obsidian/yggdrasil/3. Resource/AI Work Reports",
+        # 2026-07-22: yggdrasil 4-버킷 재편으로 옛 "3. Resource/AI Work Reports" 경로 소멸.
+        # agent-os 운영 산출물은 mimir(개발·에이전트 볼트)에 둔다.
+        HOME / ".obsidian/mimir/40 Reviews",
     )
 )
 STATE_ROOT = Path(
