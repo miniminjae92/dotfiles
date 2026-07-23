@@ -40,7 +40,6 @@
 | `harvest-sessions` | 배관 | 세션에서 사용자 발화 추출(수확 1단계) |
 | `kman` | 제품 | man 페이지 한국어 번역(캐시+용어집) |
 | `lazygit-ai-commit` | 제품 | lazygit용 AI 커밋 통합 |
-| `magy` | 글루 | main 계정 agy 래퍼 |
 | `ncodex` | 글루 | naver 계정 codex 래퍼 |
 | `ops-digest` | 배관 | 이벤트 스트림 → 의사결정 다이제스트 |
 | `ops-event` | 배관 | 백그라운드 잡 구조화 이벤트 수집 CLI |
@@ -48,7 +47,6 @@
 | `prfb` | 글루 | prfb-export 실행 래퍼 |
 | `prfb-export` | 제품 | GitHub PR 피드백 → Obsidian 내보내기 |
 | `prfbo` | 글루 | 내보낸 PR 피드백 fzf 선택 → nvim 열기 |
-| `sagy` | 글루 | sub 계정 agy 래퍼 |
 | `session-harvest` | 배관 | 세션 수확 파이프라인 2단계(마이닝+적재) |
 | `vault-ai-classify` | 제품 | 볼트 노트 AI 분류 |
 | `video-summary` | 제품 | YouTube 타임스탬프 요약 → Markdown 노트 |

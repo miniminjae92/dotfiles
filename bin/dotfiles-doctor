@@ -61,13 +61,11 @@ for profile in google naver; do
     warn "codex auth missing: run '${profile:0:1}codex login' once on this machine"
   fi
 done
-for profile in main sub; do
-  if [ -e "$HOME/.gemini-accounts/$profile/google_accounts.json" ]; then
-    ok "agy auth: $profile"
-  else
-    warn "agy auth missing: run '$([ "$profile" = main ] && echo magy || echo sagy)' once and log in"
-  fi
-done
+if security find-generic-password -s gemini -a antigravity >/dev/null 2>&1; then
+  ok "agy auth: macOS Keychain session"
+else
+  warn "agy auth missing: run 'agy' once and log in"
+fi
 if [ -f "$HOME/.claude/settings.json" ] && grep -q "claude-hook" "$HOME/.claude/settings.json" 2>/dev/null; then
   ok "claude hooks configured"
 else
