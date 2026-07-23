@@ -163,6 +163,11 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     The existing `normal`, `watch`, `away`, and `quiet` named modes remain available for compatibility, but direct settings are the recommended discovery path until a stable personal pattern emerges.
 
+    For bulk work that would flood notifications, scope a named mode to one process tree with the `AGENT_NOTIFY_POLICY` environment variable instead of changing the global mode. Hooks inherit the agent CLI's environment, so only events from that command stay quiet while other sessions keep notifying; there is no global state to restore afterwards:
+    ```bash
+    AGENT_NOTIFY_POLICY=quiet <bulk-command>
+    ```
+
     Run the following inside a tmux pane to verify click-to-focus behavior:
     ```bash
     agent-notify test

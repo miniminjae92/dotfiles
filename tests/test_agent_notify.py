@@ -27,6 +27,7 @@ class AgentNotifyTest(unittest.TestCase):
             {
                 "AGENT_NOTIFY_STATE_DIR": str(root / "state"),
                 "AGENT_NOTIFY_CONFIG": str(root / "missing-config.json"),
+                "AGENT_NOTIFY_POLICY": "",
                 "TMUX_PANE": "",
             },
         )
@@ -489,6 +490,87 @@ class AgentNotifyTest(unittest.TestCase):
         saved = agent_notify.load_event(event["id"])
         self.assertEqual(saved["local_delivery"], "off")
         self.assertEqual(saved["slack_delivery"], "off")
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_environment_policy_scopes_quiet_to_process_tree(self, _spawn_worker):
+        payload = {
+            "hook_event_name": "Stop",
+            "cwd": "/tmp/bulk",
+            "session_id": "bulk-session-1",
+        }
+
+        with mock.patch.dict(os.environ, {"AGENT_NOTIFY_POLICY": "quiet"}):
+            self.assertEqual(agent_notify.main(["claude-hook"], json.dumps(payload)), 0)
+
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["policy_name"], "env:quiet")
+        self.assertEqual(event["local_delivery"], "off")
+        self.assertEqual(event["slack_delivery"], "off")
+        self.assertEqual(agent_notify.active_policy(agent_notify.runtime_settings())["name"], "normal")
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_unknown_environment_policy_falls_back_to_global_mode(self, _spawn_worker):
+        event = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/sample"}
+        )
+        stderr = io.StringIO()
+
+        with mock.patch.dict(os.environ, {"AGENT_NOTIFY_POLICY": "loud"}):
+            with mock.patch("sys.stderr", stderr):
+                agent_notify.enqueue_event(event)
+
+        saved = agent_notify.load_event(event["id"])
+        self.assertEqual(saved["policy_name"], "normal")
+        self.assertIn("loud", stderr.getvalue())
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_explicit_event_policy_beats_environment_policy(self, _spawn_worker):
+        with mock.patch.dict(os.environ, {"AGENT_NOTIFY_POLICY": "quiet"}):
+            result = agent_notify.main(
+                [
+                    "event",
+                    "--source",
+                    "future-agent",
+                    "--project",
+                    "sample",
+                    "--local",
+                    "persistent",
+                    "--slack",
+                    "off",
+                ],
+                "",
+            )
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["local_delivery"], "persistent")
+        self.assertEqual(event["slack_delivery"], "off")
+
+    @mock.patch.object(
+        agent_notify,
+        "read_slack_webhook",
+        return_value="https://hooks.slack.com/services/T/B/X",
+    )
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_environment_policy_preserves_one_shot_next_policy(
+        self, _spawn_worker, _read_webhook
+    ):
+        agent_notify.update_runtime_settings(slack_enabled=True)
+        self.assertEqual(agent_notify.main(["away", "once"], ""), 0)
+        bulk = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/bulk"}
+        )
+        interactive = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/interactive"}
+        )
+
+        with mock.patch.dict(os.environ, {"AGENT_NOTIFY_POLICY": "quiet"}):
+            agent_notify.enqueue_event(bulk)
+        agent_notify.enqueue_event(interactive)
+
+        self.assertEqual(agent_notify.load_event(bulk["id"])["policy_name"], "env:quiet")
+        self.assertTrue(agent_notify.load_event(interactive["id"])["slack_immediate"])
+        self.assertIsNone(agent_notify.runtime_settings().get("next_policy"))
 
     @mock.patch.object(agent_notify, "spawn_worker")
     def test_custom_mode_supports_independent_delivery_combination(self, _spawn_worker):

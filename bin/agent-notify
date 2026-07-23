@@ -98,6 +98,11 @@ Examples:
   mode next away           Send only the next result directly to Slack
   test                     Test click-to-focus from the current tmux pane
 
+Scoped override (bulk work):
+  AGENT_NOTIFY_POLICY=quiet <command>
+                            Apply a named mode only to events from that
+                            process tree; other sessions keep the global mode
+
 Diagnostics:
   test                      Send a persistent click-to-focus test notification
 """
@@ -514,6 +519,8 @@ def spawn_worker(event_id: str) -> None:
 def enqueue_event(event: dict[str, Any], policy: dict[str, Any] | None = None) -> str:
     ensure_private_directory(events_dir())
     if policy is None:
+        policy = environment_policy()
+    if policy is None:
         claim_delivery_policy(event)
     else:
         apply_delivery_policy(event, policy)
@@ -580,6 +587,28 @@ def valid_policy(value: Any) -> bool:
         and value.get("slack") in SLACK_DELIVERIES
         and (value.get("until") is None or isinstance(value.get("until"), str))
     )
+
+
+def environment_policy() -> dict[str, Any] | None:
+    """AGENT_NOTIFY_POLICY로 프로세스 트리 범위의 정책 오버라이드를 허용한다.
+
+    훅은 에이전트 CLI의 자식 프로세스라 환경을 상속하므로, 대량 작업을
+    `AGENT_NOTIFY_POLICY=quiet <command>`로 실행하면 그 트리의 이벤트만
+    조용해지고 다른 세션은 전역 정책을 그대로 따른다.
+    """
+    name = os.environ.get("AGENT_NOTIFY_POLICY", "").strip()
+    if not name:
+        return None
+    try:
+        policy = named_policy(name)
+    except ValueError:
+        print(
+            f"agent-notify: 알 수 없는 AGENT_NOTIFY_POLICY 값을 무시합니다: {name}",
+            file=sys.stderr,
+        )
+        return None
+    policy["name"] = f"env:{name}"
+    return policy
 
 
 def default_policy() -> dict[str, Any]:
