@@ -30,6 +30,8 @@ AI가 이 Neovim 설정을 수정할 때는 먼저 이 문서를 읽고, 실제 
 
 ```text
 .config/nvim/
+├── assets/
+│   └── markdown-reader.css
 ├── init.lua
 ├── lazy-lock.json
 ├── README.md
@@ -113,7 +115,7 @@ AI가 이 Neovim 설정을 수정할 때는 먼저 이 문서를 읽고, 실제 
 ### Markdown/MDX
 
 - `render-markdown.nvim`: markdown/mdx 렌더링 보조.
-- `markdown-preview.nvim`: Markdown preview. `<leader>mp`, `<leader>ms`, `<leader>mt`.
+- `markdown-preview.nvim`: 브라우저 Markdown preview. Reader UI는 `assets/markdown-reader.css`가 제공하며, `<leader>mp`, `<leader>ms`, `<leader>mt`, `<leader>ml`을 사용한다.
 - `img-clip.nvim`: clipboard image paste. `<leader>p`, 이미지 저장 위치는 현재 파일 기준 상대 경로.
 - `snippets/markdown.lua`: front matter, 이미지 div, video tag, spacer snippets.
 
@@ -238,6 +240,7 @@ Formatters/linters/debug tools:
 - `mason_registry.refresh` callback 안에서 jdtls를 시작하므로 Java 파일 첫 진입 시 비동기 타이밍을 고려해야 한다.
 - `dap.lua`는 UI와 키맵만 정의하고 언어별 adapter 설정은 Java 외에는 없다. 다른 언어 디버깅을 기대하면 adapter 구성이 추가로 필요하다.
 - `markdown-preview.nvim`의 build가 `cd app && yarn install`이라 Node/Yarn이 필요하다.
+- `markdown-preview.nvim`의 custom Markdown CSS는 기본 `markdown.css`에 덧붙지 않고 교체된다. Reader CSS를 수정할 때는 이 파일이 독립적으로 필요한 기본 스타일을 모두 제공해야 한다.
 - `telescope-fzf-native.nvim`와 `LuaSnip` jsregexp build는 `make`가 필요하다.
 
 ## 전문가 평가
@@ -281,4 +284,4 @@ Formatters/linters/debug tools:
 - diagnostics UI: `<leader>xw`, `<leader>xd`
 - 파일 탐색: `<leader>ee`
 - fuzzy find: `<leader>ff`, `<leader>fs`
-
+- Markdown preview: `<leader>mp` 열기, `<leader>ms` 중지, `<leader>mt` 토글, `<leader>ml` 라이트/다크 전환
