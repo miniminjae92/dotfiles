@@ -39,8 +39,7 @@
       { "profile": "naver", "command": "ncodex" }
     ],
     "agy": [
-      { "profile": "main", "command": "magy" },
-      { "profile": "sub", "command": "sagy" }
+      { "profile": "macos-keychain", "command": "agy" }
     ],
     "claude": [
       { "profile": "max", "command": "claude" }
