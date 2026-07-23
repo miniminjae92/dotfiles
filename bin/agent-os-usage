@@ -44,11 +44,33 @@ def token_delta(current, previous)
 end
 
 events = load_events
-session_filter = ARGV.first
+args = ARGV.dup
+latest_requested = args.delete("--latest")
+if args.length > 1 || (ARGV.include?("--latest") && !args.empty?)
+  warn "usage: agent-os-usage [SESSION_ID_PREFIX | --latest]"
+  exit 2
+end
+
+session_filter = args.first
+if latest_requested
+  session_filter = nil
+elsif session_filter.to_s.empty?
+  session_filter = ENV["CODEX_THREAD_ID"]
+  if session_filter.to_s.empty? && !ENV["CLAUDECODE"].to_s.empty?
+    warn "agent-os-usage: Claude session usage is not captured; refusing Codex fallback"
+    exit 2
+  end
+  if session_filter.to_s.empty?
+    warn "agent-os-usage: session unknown; pass SESSION_ID_PREFIX or --latest"
+    exit 2
+  end
+end
+
 events.select! { |event| event["session_id"].include?(session_filter) } if session_filter
 
 if events.empty?
-  warn "agent-os-usage: no captured token events"
+  suffix = session_filter ? " for session #{session_filter}" : ""
+  warn "agent-os-usage: no captured token events#{suffix}"
   exit 1
 end
 

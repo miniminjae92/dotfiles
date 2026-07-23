@@ -7,7 +7,7 @@
 소스 3종:
   claude      ~/.claude/projects/<cwd>/*.jsonl            (본대화)
   claude-sub  ~/.claude/projects/<cwd>/subagents/*.jsonl  (서브에이전트/멀티에이전트)
-  codex       ~/.codex/{sessions,archived_sessions}/**/*.jsonl
+  codex       ~/.codex + ~/.codex-accounts/* 의 sessions/archived_sessions
 
   asx list [-n N] [--cwd 패턴] [--source S]   최근 세션 통합 목록
   asx search <질의> [-i] [--source S]         전 소스 본문 grep + 스니펫
@@ -16,9 +16,56 @@
 import sys, os, glob, json, argparse, datetime, textwrap
 
 HOME = os.path.expanduser("~")
-C_ROOT = os.path.join(HOME, ".claude", "projects")
-X_SESS = os.path.join(HOME, ".codex", "sessions")
-X_ARCH = os.path.join(HOME, ".codex", "archived_sessions")
+PATHS_CONTRACT = os.environ.get(
+    "AGENT_OS_PATHS",
+    os.path.join(HOME, ".dotfiles", "agent-os", "paths.env"),
+)
+
+
+def load_path_contract(path=PATHS_CONTRACT):
+    values = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return values
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().replace("$HOME", HOME)
+    return values
+
+
+PATHS = load_path_contract()
+C_ROOT = os.environ.get(
+    "ASX_CLAUDE_ROOT",
+    PATHS.get("CLAUDE_SESSION_HOME", os.path.join(HOME, ".claude", "projects")),
+)
+
+
+def codex_session_roots():
+    default_home = os.environ.get(
+        "ASX_CODEX_HOME",
+        PATHS.get("CODEX_DEFAULT_HOME", os.path.join(HOME, ".codex")),
+    )
+    accounts_home = os.environ.get(
+        "ASX_CODEX_ACCOUNTS_HOME",
+        PATHS.get("CODEX_ACCOUNTS_HOME", os.path.join(HOME, ".codex-accounts")),
+    )
+    homes = [default_home]
+    homes += sorted(p for p in glob.glob(os.path.join(accounts_home, "*"))
+                    if os.path.isdir(p))
+    roots = []
+    seen = set()
+    for home in homes:
+        for name in ("sessions", "archived_sessions"):
+            root = os.path.realpath(os.path.join(home, name))
+            if root not in seen and os.path.isdir(root):
+                seen.add(root)
+                roots.append(root)
+    return roots
 
 SRC_COLORS = {"claude": "36", "claude-sub": "35", "codex": "32"}
 
@@ -33,7 +80,7 @@ def files_for(source):
                 glob.glob(os.path.join(C_ROOT, "**", "subagents", "*.jsonl"),
                           recursive=True)]
     if source in ("all", "codex"):
-        for root in (X_SESS, X_ARCH):
+        for root in codex_session_roots():
             out += [(p, "codex") for p in
                     glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True)]
     return out
@@ -57,31 +104,36 @@ def parse(path, source):
     sid = os.path.splitext(os.path.basename(path))[0]
     cwd = title = branch = None
     msgs = []
-    for line in open(path, encoding="utf-8", errors="replace"):
-        try:
-            d = json.loads(line)
-        except Exception:
-            continue
-        if source == "codex":
-            p = d.get("payload", {})
-            if not isinstance(p, dict):
+    with open(path, encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                d = json.loads(line)
+            except Exception:
                 continue
-            if p.get("type") == "session_meta" or (cwd is None and "cwd" in p):
-                cwd = p.get("cwd") or cwd
-            if p.get("type") == "message" and p.get("role") in ("user", "assistant"):
-                parts = [b.get("text", "") for b in p.get("content", [])
-                         if isinstance(b, dict) and "text" in b]
-                txt = " ".join(parts).strip()
-                if txt and not txt.startswith("<"):   # 시스템/지시문 프리앰블 스킵
-                    msgs.append((p["role"], txt))
-        else:  # claude / claude-sub
-            cwd = d.get("cwd") or cwd
-            branch = d.get("gitBranch") or branch
-            title = d.get("aiTitle") or d.get("slug") or title
-            if d.get("type") in ("user", "assistant"):
-                txt = _claude_text(d.get("message", {})).strip()
-                if txt:
-                    msgs.append((d["type"], txt))
+            if source == "codex":
+                p = d.get("payload", {})
+                if not isinstance(p, dict):
+                    continue
+                if p.get("type") == "session_meta" or (cwd is None and "cwd" in p):
+                    cwd = p.get("cwd") or cwd
+                if p.get("type") == "message" and p.get("role") in ("user", "assistant"):
+                    parts = [b.get("text", "") for b in p.get("content", [])
+                             if isinstance(b, dict) and "text" in b]
+                    txt = " ".join(parts).strip()
+                    injected = (
+                        txt.startswith("<")
+                        or txt.startswith("# AGENTS.md instructions")
+                    )
+                    if txt and not injected:   # 시스템/지시문 프리앰블 스킵
+                        msgs.append((p["role"], txt))
+            else:  # claude / claude-sub
+                cwd = d.get("cwd") or cwd
+                branch = d.get("gitBranch") or branch
+                title = d.get("aiTitle") or d.get("slug") or title
+                if d.get("type") in ("user", "assistant"):
+                    txt = _claude_text(d.get("message", {})).strip()
+                    if txt:
+                        msgs.append((d["type"], txt))
     return {"id": sid, "path": path, "source": source, "cwd": cwd,
             "branch": branch, "title": title, "msgs": msgs,
             "mtime": os.path.getmtime(path)}
