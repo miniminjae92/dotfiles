@@ -91,6 +91,20 @@ class VideoSummaryTest(unittest.TestCase):
         self.assertIn("첫 문장입니다.", segments[0].text)
         self.assertIn("두 번째 문장입니다.", segments[0].text)
 
+    def test_prefers_original_language_over_translation(self):
+        # 영어 원본 영상: 원본(en)이 자동번역(ko)보다 앞서야 한다.
+        order = video_summary.build_subtitle_language_order(None, "en")
+        self.assertLess(order.index("en"), order.index("ko"))
+        self.assertEqual(order[0], "en-orig")
+
+    def test_korean_original_still_prefers_korean(self):
+        order = video_summary.build_subtitle_language_order(None, "ko")
+        self.assertLess(order.index("ko"), order.index("en"))
+
+    def test_explicit_sub_langs_take_top_priority(self):
+        order = video_summary.build_subtitle_language_order(["ja"], "en")
+        self.assertEqual(order[0], "ja")
+
     def test_renders_timestamp_links_and_cache_metadata(self):
         metadata = {
             "video_id": "abc123",
@@ -195,6 +209,10 @@ summary_version: "1"
     @mock.patch.object(video_summary.subprocess, "run")
     def test_fetches_subtitles_with_browser_cookies(self, run, _which):
         def fake_run(command, **kwargs):
+            if "cwd" not in kwargs:  # 원본 언어 감지(probe) 호출
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="ko\n", stderr=""
+                )
             Path(kwargs["cwd"], "dQw4w9WgXcQ.ko.vtt").write_text(
                 "WEBVTT\n", encoding="utf-8"
             )
@@ -354,6 +372,7 @@ summary_version: "1"
         with tempfile.TemporaryDirectory() as temp_dir:
             arguments = [
                 "https://youtu.be/dQw4w9WgXcQ",
+                "--summarize",
                 "--output-dir",
                 temp_dir,
             ]
@@ -363,10 +382,53 @@ summary_version: "1"
             note = notes[0].read_text(encoding="utf-8")
             self.assertIn('input_tokens: 120', note)
             self.assertIn('transcript_hash: "sha256:', note)
+            self.assertIn('## 전체 요약', note)
+            self.assertIn('## 전체 전사', note)
 
             summarize.reset_mock()
             self.assertEqual(video_summary.main(arguments), 0)
             summarize.assert_not_called()
+
+    @mock.patch.object(video_summary, "summarize_transcript")
+    @mock.patch.object(video_summary, "fetch_youtube_data")
+    def test_default_saves_raw_transcript_without_model_call(self, fetch, summarize):
+        fetch.return_value = (
+            {
+                "id": "rawvideo001",
+                "title": "전사만 저장",
+                "channel": "테스트 채널",
+                "upload_date": "20260716",
+                "duration": 30,
+            },
+            """WEBVTT
+
+00:00:01.000 --> 00:00:05.000
+raw 전사 첫 줄입니다.
+
+00:00:06.000 --> 00:00:10.000
+raw 전사 둘째 줄입니다.
+""",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            arguments = ["https://youtu.be/rawvideo001", "--output-dir", temp_dir]
+            self.assertEqual(video_summary.main(arguments), 0)
+            summarize.assert_not_called()
+
+            notes = list(Path(temp_dir).glob("*.md"))
+            self.assertEqual(len(notes), 1)
+            note = notes[0].read_text(encoding="utf-8")
+            self.assertIn("type: video-transcript", note)
+            self.assertIn("has_transcript: true", note)
+            self.assertIn('summary_version: "raw-1"', note)
+            self.assertIn("## 전체 전사", note)
+            self.assertIn("raw 전사 첫 줄입니다.", note)
+            self.assertNotIn("## 전체 요약", note)
+            self.assertIn("input_tokens: 0", note)
+
+            # 같은 raw 노트를 다시 돌리면 캐시로 재사용된다.
+            self.assertEqual(video_summary.main(arguments), 0)
+            self.assertEqual(len(list(Path(temp_dir).glob("*.md"))), 1)
 
     @mock.patch.object(video_summary, "process_video")
     @mock.patch.object(video_summary, "list_channel_videos")

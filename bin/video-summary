@@ -22,11 +22,12 @@ from urllib.parse import parse_qs, urlparse
 DEFAULT_OUTPUT_DIR = Path(
     os.environ.get(
         "VIDEO_SUMMARY_DIR",
-        "/Users/miniminjae/.obsidian/yggdrasil/3. Resource/Video Summaries",
+        "/Users/miniminjae/.obsidian/yggdrasil/3-stash/video-summaries",
     )
 )
 SUMMARY_VERSION = "1"
 DETAILED_SUMMARY_VERSION = "1-detailed"
+RAW_TRANSCRIPT_VERSION = "raw-1"
 DEFAULT_SINGLE_PASS_MAX_TOKENS = 28_000
 DEFAULT_CHUNK_TOKENS = 10_000
 DEFAULT_MEMBER_MODEL = "gpt-5.6-luna"
@@ -590,13 +591,66 @@ def discover_channel_member_candidates(
     return videos, warnings
 
 
+def probe_original_language(
+    url: str, *, cookies_from_browser: str | None = None
+) -> str | None:
+    """영상의 원본(음성) 언어 코드를 알아낸다. 예: 'en-US' -> 'en'. 실패 시 None."""
+    command = [
+        "yt-dlp",
+        "--skip-download",
+        "--no-playlist",
+        "--no-warnings",
+        "--print",
+        "%(language)s",
+    ]
+    command.extend(yt_dlp_auth_args(cookies_from_browser))
+    command.append(url)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        code = line.strip()
+        if code and code.upper() != "NA":
+            return code.split("-")[0]
+    return None
+
+
+def build_subtitle_language_order(
+    preferred: list[str] | None, original: str | None
+) -> list[str]:
+    """자막 언어 우선순위. 원본 언어(원문 ASR)를 자동번역본보다 앞세운다."""
+    order: list[str] = []
+
+    def add(code: str | None) -> None:
+        if code and code not in order:
+            order.append(code)
+
+    for code in preferred or []:
+        add(code)
+    if original:
+        add(f"{original}-orig")
+        add(original)
+    for code in ("en-orig", "en", "ko"):
+        add(code)
+    return order
+
+
 def fetch_youtube_data(
     url: str,
     *,
     cookies_from_browser: str | None = None,
+    preferred_langs: list[str] | None = None,
 ) -> tuple[dict[str, Any], str]:
     if not shutil.which("yt-dlp"):
         raise VideoSummaryError("yt-dlp가 필요합니다: brew install yt-dlp")
+
+    # 사용자가 언어를 강제하면 원본 감지(추가 호출)를 건너뛴다.
+    original_language = (
+        None
+        if preferred_langs
+        else probe_original_language(url, cookies_from_browser=cookies_from_browser)
+    )
+    languages = build_subtitle_language_order(preferred_langs, original_language)
 
     metadata_template = (
         '{"id":%(id)j,"title":%(title)j,"channel":%(channel)j,'
@@ -605,7 +659,7 @@ def fetch_youtube_data(
     )
     errors: list[str] = []
     with tempfile.TemporaryDirectory(prefix="video-summary-") as temp_dir:
-        for language in ("ko", "en"):
+        for language in languages:
             command = [
                 "yt-dlp",
                 "--skip-download",
@@ -658,7 +712,7 @@ def fetch_youtube_data(
 
     detail = errors[-1] if errors else ""
     raise VideoSummaryError(
-        f"사용 가능한 한국어 또는 영어 자막을 가져오지 못했습니다. {detail}".strip()
+        f"자막을 가져오지 못했습니다 (시도한 언어: {', '.join(languages)}). {detail}".strip()
     )
 
 
@@ -823,6 +877,13 @@ SOURCE_RULES = """
 
 def summary_version_for_mode(summary_mode: str) -> str:
     return DETAILED_SUMMARY_VERSION if summary_mode == "detailed" else SUMMARY_VERSION
+
+
+def note_version(summarize: bool, summary_mode: str) -> str:
+    """저장 노트의 버전. 요약을 만들지 않으면 raw 전사 버전을 쓴다."""
+    if not summarize:
+        return RAW_TRANSCRIPT_VERSION
+    return summary_version_for_mode(summary_mode)
 
 
 def final_summary_prompt(transcript: str, summary_mode: str) -> str:
@@ -1008,17 +1069,23 @@ def yaml_string(value: Any) -> str:
     return json.dumps("" if value is None else str(value), ensure_ascii=False)
 
 
-def render_markdown(metadata: dict[str, Any], summary: dict[str, Any]) -> str:
+def render_markdown(
+    metadata: dict[str, Any],
+    summary: dict[str, Any] | None = None,
+    *,
+    transcript: str | None = None,
+) -> str:
     video_id = str(metadata["video_id"])
     canonical_url = f"https://youtu.be/{video_id}"
+    note_type = "video-summary" if summary is not None else "video-transcript"
     lines = [
         "---",
-        "type: video-summary",
+        f"type: {note_type}",
         f"video_id: {yaml_string(video_id)}",
         f"source_url: {yaml_string(metadata.get('source_url', canonical_url))}",
-            f"title: {yaml_string(metadata.get('title', ''))}",
-            f"channel: {yaml_string(metadata.get('channel', ''))}",
-            f"availability: {yaml_string(metadata.get('availability', ''))}",
+        f"title: {yaml_string(metadata.get('title', ''))}",
+        f"channel: {yaml_string(metadata.get('channel', ''))}",
+        f"availability: {yaml_string(metadata.get('availability', ''))}",
     ]
     if metadata.get("published_at"):
         lines.append(f"published_at: {yaml_string(metadata['published_at'])}")
@@ -1028,6 +1095,7 @@ def render_markdown(metadata: dict[str, Any], summary: dict[str, Any]) -> str:
             f"transcript_hash: {yaml_string(metadata['transcript_hash'])}",
             f"summary_version: {yaml_string(metadata['summary_version'])}",
             f"summary_mode: {yaml_string(metadata.get('summary_mode', 'standard'))}",
+            f"has_transcript: {'true' if transcript else 'false'}",
             f"strategy: {yaml_string(metadata.get('strategy', ''))}",
             f"model: {yaml_string(metadata.get('model', 'codex-default'))}",
             f"reasoning_effort: {yaml_string(metadata.get('reasoning_effort', ''))}",
@@ -1036,34 +1104,43 @@ def render_markdown(metadata: dict[str, Any], summary: dict[str, Any]) -> str:
             f"output_tokens: {int(metadata.get('output_tokens', 0))}",
             f"reasoning_tokens: {int(metadata.get('reasoning_tokens', 0))}",
             "tags:",
-            "  - video-summary",
+            f"  - {note_type}",
             "---",
             "",
             f"# {metadata.get('title', '영상 요약')}",
-            "",
-            "## 전체 요약",
-            "",
-            summary["overview"].strip(),
-            "",
-            "## 핵심 내용",
         ]
     )
 
-    for point in summary["key_points"]:
-        start = point["start"]
-        end = point["end"]
-        start_seconds = display_timestamp_to_seconds(start)
-        link = f"{canonical_url}?t={start_seconds}"
+    if summary is not None:
         lines.extend(
             [
                 "",
-                f"### {point['title'].strip()}",
+                "## 전체 요약",
                 "",
-                point["summary"].strip(),
+                summary["overview"].strip(),
                 "",
-                f"- 구간: [{start}–{end}]({link})",
+                "## 핵심 내용",
             ]
         )
+        for point in summary["key_points"]:
+            start = point["start"]
+            end = point["end"]
+            start_seconds = display_timestamp_to_seconds(start)
+            link = f"{canonical_url}?t={start_seconds}"
+            lines.extend(
+                [
+                    "",
+                    f"### {point['title'].strip()}",
+                    "",
+                    point["summary"].strip(),
+                    "",
+                    f"- 구간: [{start}–{end}]({link})",
+                ]
+            )
+
+    if transcript:
+        lines.extend(["", "## 전체 전사", "", transcript.strip()])
+
     lines.append("")
     return "\n".join(lines)
 
@@ -1379,6 +1456,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="요약 밀도 (기본값: 일반 standard, 회원 전용 detailed)",
     )
+    parser.add_argument(
+        "--sub-langs",
+        metavar="en,ko,…",
+        default=None,
+        help="자막 언어 우선순위를 강제(쉼표 구분). 기본: 영상 원본 언어를 자동 감지해 우선",
+    )
+    parser.add_argument(
+        "--summarize",
+        action="store_true",
+        help="raw 전사 저장에 더해 Codex 요약(전체 요약·핵심 내용)까지 생성 "
+        "(기본: 전사만 저장, 모델 호출 없음)",
+    )
     parser.add_argument("--force", action="store_true", help="캐시가 있어도 다시 요약")
     parser.add_argument(
         "--dry-run",
@@ -1417,7 +1506,7 @@ def process_video(
         if (
             existing
             and existing_metadata.get("summary_version")
-            == summary_version_for_mode(args.summary_mode)
+            == note_version(args.summarize, args.summary_mode)
             and availability_matches
         ):
             return {
@@ -1427,9 +1516,15 @@ def process_video(
                 "path": str(existing),
             }
 
+    preferred_langs = (
+        [code.strip() for code in args.sub_langs.split(",") if code.strip()]
+        if args.sub_langs
+        else None
+    )
     raw_metadata, vtt = fetch_youtube_data(
         url,
         cookies_from_browser=args.cookies_from_browser,
+        preferred_langs=preferred_langs,
     )
     video_id = str(raw_metadata.get("id") or requested_video_id)
     cues = parse_vtt(vtt)
@@ -1440,7 +1535,7 @@ def process_video(
     transcript = transcript_text(segments)
     digest = transcript_hash(transcript)
     estimated_tokens = estimate_tokens(transcript)
-    summary_version = summary_version_for_mode(args.summary_mode)
+    summary_version = note_version(args.summarize, args.summary_mode)
     cached = find_cached_summary(
         args.output_dir,
         video_id=video_id,
@@ -1472,8 +1567,9 @@ def process_video(
             "subtitle_cues": len(cues),
             "compacted_segments": len(segments),
             "estimated_transcript_tokens": estimated_tokens,
-            "summary_mode": args.summary_mode,
-            "strategy": planned_strategy,
+            "will_summarize": args.summarize,
+            "summary_mode": args.summary_mode if args.summarize else "none",
+            "strategy": planned_strategy if args.summarize else "raw",
             "cache_hit": str(cached) if cached else None,
         }
 
@@ -1485,18 +1581,25 @@ def process_video(
             "path": str(cached),
         }
 
-    duration_value = raw_metadata.get("duration")
-    duration = float(duration_value) if isinstance(duration_value, (int, float)) else None
-    summary, usage, strategy = summarize_transcript(
-        segments,
-        duration=duration,
-        model=args.model,
-        codex_command=args.codex_command,
-        single_pass_max_tokens=args.single_pass_max_tokens,
-        chunk_tokens=args.chunk_tokens,
-        summary_mode=args.summary_mode,
-        reasoning_effort=args.reasoning_effort,
-    )
+    if args.summarize:
+        duration_value = raw_metadata.get("duration")
+        duration = (
+            float(duration_value)
+            if isinstance(duration_value, (int, float))
+            else None
+        )
+        summary, usage, strategy = summarize_transcript(
+            segments,
+            duration=duration,
+            model=args.model,
+            codex_command=args.codex_command,
+            single_pass_max_tokens=args.single_pass_max_tokens,
+            chunk_tokens=args.chunk_tokens,
+            summary_mode=args.summary_mode,
+            reasoning_effort=args.reasoning_effort,
+        )
+    else:
+        summary, usage, strategy = None, {}, "raw"
 
     existing = find_existing_summary(args.output_dir, video_id)
     output_path = existing or args.output_dir / safe_filename(title, video_id)
@@ -1510,10 +1613,10 @@ def process_video(
         "summarized_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "transcript_hash": digest,
         "summary_version": summary_version,
-        "summary_mode": args.summary_mode,
+        "summary_mode": args.summary_mode if summary is not None else "none",
         "strategy": strategy,
-        "model": args.model or "codex-default",
-        "reasoning_effort": args.reasoning_effort,
+        "model": (args.model or "codex-default") if summary is not None else "",
+        "reasoning_effort": args.reasoning_effort if summary is not None else "",
         "input_tokens": usage.get("input_tokens", 0),
         "cached_input_tokens": usage.get("cached_input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
@@ -1521,11 +1624,13 @@ def process_video(
             "reasoning_output_tokens", usage.get("reasoning_tokens", 0)
         ),
     }
-    write_atomic(output_path, render_markdown(metadata, summary))
+    write_atomic(
+        output_path, render_markdown(metadata, summary, transcript=transcript)
+    )
     return {
         "video_id": video_id,
         "title": title,
-        "status": "summarized",
+        "status": "summarized" if summary is not None else "transcribed",
         "path": str(output_path),
         "tokens": {
             "input": metadata["input_tokens"],
@@ -1544,6 +1649,9 @@ def print_single_result(result: dict[str, Any]) -> None:
         print(f"cache hit: {result['path']}")
     elif status == "filtered":
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif status == "transcribed":
+        print(result["path"])
+        print("전사 저장 완료 (모델 호출 없음)")
     else:
         print(result["path"])
         tokens = result["tokens"]
@@ -1712,7 +1820,11 @@ def run_channel(args: argparse.Namespace) -> int:
     ]
     has_problem = bool(counts.get("failed") or critical_warnings)
     if args.notify_slack:
-        completed = counts.get("summarized", 0) + counts.get("cached", 0)
+        completed = (
+            counts.get("summarized", 0)
+            + counts.get("transcribed", 0)
+            + counts.get("cached", 0)
+        )
         if has_problem:
             notify_slack(
                 "error",

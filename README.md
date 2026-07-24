@@ -32,7 +32,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
     * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
-    * `bin/video-summary` saves a YouTube video's dynamically sized Korean summary with timestamp links as an Obsidian Markdown note. It reuses unchanged summaries to avoid duplicate model calls.
+    * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work.
     * `.codex/skills/summarize-youtube-playlist` interactively collects a channel, playlist, named Codex account, browser profile, usage ceiling, and Slack preference before running the safe two-video gate and background playlist batch.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
@@ -297,21 +297,27 @@ exported.
 
 In a Codex session, invoke `$summarize-youtube-playlist` to be prompted for the missing channel, playlist, account, browser profile, usage stop threshold, and Slack preference instead of assembling the flags manually.
 
-`video-summary` uses `yt-dlp` for Korean or English subtitles and the authenticated Codex CLI for structured summarization. Check the transcript size and planned strategy without spending model tokens:
+`video-summary` uses `yt-dlp` for subtitles. It auto-detects the video's original spoken language and prefers that track (the untranslated `-orig` ASR) over YouTube's machine-translated captions, so an English video yields English and a Korean video yields Korean — no accidental auto-translation. Force a specific order with `--sub-langs en,ko`. By default it saves the full timestamped transcript (`type: video-transcript`, `has_transcript: true`) with no model call, preserving the raw material for later cross-video insight work. Check the transcript size without spending model tokens:
 
 ```bash
 video-summary 'https://www.youtube.com/watch?v=VIDEO_ID' --dry-run
 ```
 
-Create the summary:
+Save the raw transcript note (default, no model call):
 
 ```bash
 video-summary 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
+Add `--summarize` to also generate a Korean summary with timestamp links via the authenticated Codex CLI. The transcript is still embedded in the same note:
+
+```bash
+video-summary 'https://www.youtube.com/watch?v=VIDEO_ID' --summarize
+```
+
 After reloading `.zshrc`, the shorter `vsummary` alias runs the same command.
 
-By default, notes are saved under `~/.obsidian/yggdrasil/3. Resource/Video Summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
+By default, notes are saved under `~/.obsidian/yggdrasil/3-stash/video-summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
 
 For a channel membership, let `yt-dlp` read the signed-in browser profile directly. The cookie database is read at runtime and is never exported by `video-summary`. Discover member candidates across the Membership and Community tabs and every channel playlist, then verify their availability without fetching subtitles or calling Codex:
 
@@ -322,7 +328,7 @@ video-summary 'https://www.youtube.com/@CHANNEL' \
   --list-only
 ```
 
-`--discover-channel-members` implies channel and members-only mode. It keeps only entries whose resolved `yt-dlp` availability is `subscriber_only`, defaults to all matching videos, and uses `gpt-5.6-luna` with low reasoning in sequential mode. Detailed summaries preserve substantive claims, evidence, procedures, conditions, examples, numbers, exceptions, warnings, and Q&A. Use `--max-videos N` for a bounded first run. Check transcripts without model calls or note writes, then run the same command without `--dry-run` to create notes:
+`--discover-channel-members` implies channel and members-only mode. It keeps only entries whose resolved `yt-dlp` availability is `subscriber_only` and defaults to all matching videos. By default each member video is saved as a raw transcript note with no model call; add `--summarize` to also generate summaries, which then use `gpt-5.6-luna` with low reasoning in sequential mode. Detailed summaries preserve substantive claims, evidence, procedures, conditions, examples, numbers, exceptions, warnings, and Q&A. Use `--max-videos N` for a bounded first run. Check transcripts without model calls or note writes, then run the same command without `--dry-run` to create notes:
 
 ```bash
 video-summary 'https://www.youtube.com/@CHANNEL' \
