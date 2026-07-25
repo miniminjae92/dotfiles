@@ -38,6 +38,7 @@ If the user provides a path, use that path.
 5. Write the handoff note with the template below.
 6. Do not include secrets, credentials, auth tokens, private URLs, or raw logs unless the user explicitly asks and it is safe.
 7. Keep the file concise enough for the next session to read before acting.
+8. 결정은 이 노트에서 만들지 않는다 (D-015). 확정 결정은 정본(`agent-os/DECISIONS.md`의 D-번호, 프로젝트 repo는 `docs/adr/`)을 인용하고, 정본에 없는 것은 `미결`로 표기한다. 이 노트에 서술한 결정은 초안이며 다음 세션이 확정으로 인용해서는 안 된다. 승격할 값이 있다면 노트가 아니라 정본에 D-번호를 신설한다.
 
 ## Template
 
@@ -57,12 +58,10 @@ If the user provides a path, use that path.
 - What is intentionally not changed:
 - Important assumptions:
 
-## Key Decisions
+## Decisions (cite, do not restate)
 
-- Decision:
-  Reason:
-- Decision:
-  Reason:
+- 확정: `<D-번호>` — 한 줄 요약. 전문은 정본에 있으니 옮겨 적지 않는다.
+- 미결: `<쟁점>` — 정본에 D-번호 없음. 다음 세션이 판단할 것이며, 이 노트의 서술을 확정 결정으로 인용하지 말 것.
 
 ## Files To Read First
 
