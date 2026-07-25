@@ -5,6 +5,7 @@
 *.sw[a-z]
 .*.swp
 Session.vim
+nvim.log
 
 # nvim/vim spell check 데이터
 nvim/spell/
@@ -25,3 +26,5 @@ __pycache__/
 
 # GPG 키 관련 (보안)
 .gnupg/
+
+**/.claude/settings.local.json
