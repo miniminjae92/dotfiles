@@ -43,6 +43,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Agent OS runs, development knowledge, technical learning, service design, and productivity-friction notes go under `/Users/miniminjae/.obsidian/mimir`.
 - To find or cite past conversations across agents (Claude main/subagents + Codex), use `asx search <query>` / `asx list` / `asx show <id>` — one unified index over auto-recorded session logs.
 - 용어는 유비쿼터스 랭귀지 정본을 따른다: 정본은 해당 repo의 `CONTEXT.md`(+`docs/adr/`)다. 합의된 표준어를 쓰고 동의어는 표준어로 매핑한다. `term` 스킬은 즉석 의미 해명 전용(파일 쓰기 없음).
+- 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프·Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015).
 
 ## Skills
 
