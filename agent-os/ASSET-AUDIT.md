@@ -21,6 +21,7 @@
 
 ## Re-evaluate After Pilot
 
+- `agent-os/schemas/` (event/run): 2026-07-25 실측에서 소비자 0 확인. 계측 트랙의 규범 승격(구현 리포 CONTEXT.md/ADR) 시 채택 또는 폐기 판정.
 - Disable assets that are not used during the first 10 real tasks.
 - Promote only assets with evidence of saved time, reduced rework, or improved understanding.
 - Do not build compatibility layers solely to preserve an unused legacy workflow.

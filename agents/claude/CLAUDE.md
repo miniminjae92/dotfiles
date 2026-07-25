@@ -13,7 +13,7 @@
 
 ## 매트 포컷 스킬 시험 기간 (2026-07-24 ~ 재검토 전까지)
 
-`mattpocock-skills@mattpocock` 플러그인을 주력으로 쓴다. 기능이 겹치면 매트 스킬을 우선한다:
+매트 포컷 스킬은 `~/.dotfiles/agents/skills/`에 **벤더링**해 주력으로 쓴다(active 전량, 스킬별 VENDOR.md, 플러그인 구독은 2026-07-25 해지 — D-014). 갱신은 upstream diff를 보고 수동 반영한다. 기능이 겹치면 매트 스킬을 우선한다:
 
 - 세션 인계 → `/handoff` (`handoff-session` 대신. 단, Codex 등 타 CLI로 넘길 땐 기존 `handoff-session` 유지)
 - 구현 워크플로 → `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement` (`$work` 대신. 단일 세션 규모면 grill 후 바로 `/implement`)

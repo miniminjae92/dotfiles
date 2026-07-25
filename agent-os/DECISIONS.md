@@ -268,3 +268,21 @@
 ### 이유
 
 term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 사전, repo별 ubiquitous-language.md, CONTEXT.md)으로 갈라질 참이었다. 매트 domain-modeling이 UL 형성 도구로 더 정교하고(용어 확정 즉시 기록, 코드-주장 모순 대조, ADR 3중 관문), 산출물이 평범한 파일이라 어느 CLI든 읽는다 — 형성 도구는 Claude 전용이어도 정본은 공급자 중립이다.
+
+## D-014 dotfiles 에이전트 자산 재편 — 기능 축 + 공급자 어댑터, 스킬 벤더링
+
+- 상태: 확정
+- 날짜: 2026-07-25
+
+### 결정
+
+- 의미 규칙: `agents/` = **설비 세팅값**(고치면 에이전트가 다르게 일한다), `agent-os/` = **운전 일지·계측 규격서**(고쳐도 에이전트는 그대로다). 공통/개별은 agents 내부의 2차 구분 — 루트·`skills/`는 공급자 중립, `agents/<공급자>/`는 어댑터이며 어댑터 내부는 그 공급자의 홈 구조를 미러링한다.
+- 불변식: **agent-os/에서 홈으로 나가는 심링크 0.** (이관: hooks.json → agents/codex/) `dotfiles-doctor`가 install.sh의 링크 소스에 agent-os가 등장하는지 감시한다.
+- 2단 규약: 행동 변경은 DECISIONS.md 기록(결정)과 agents/ 반영(승격)으로 완성된다. 반영 없는 결정은 미집행이다.
+- 이동: `agy/`→`agents/gemini/`, `ai-tools/models.json`→`agents/models.json`(routing.json과 한 시스템인 라우팅 패키지), `conventions/`→`agents/conventions/`, `claude/`→`agents/claude/`, `.codex/`→`agents/codex/`, `scripts/` 해체(cleanclip→bin 승격, 나머지 은퇴→yggdrasil stash).
+- 스킬 벤더링: upstream 스킬은 자작과 함께 `agents/skills/`에 평면 동거하고, 출처는 스킬별 `VENDOR.md`에만 기록한다(폴더 분리·frontmatter 기입 금지 — 출신이 바뀌어도 이동이 없고 upstream diff가 깨끗하다). 매트 포컷 active 전량(28종)을 벤더링했고 플러그인 구독은 해지한다. 갱신은 VENDOR.md 기준 수동 diff. 대장은 `agent-os/upstreams.md`.
+- 재검토 조건: 지도(README Layout·CONTEXT.md) 정비 후에도 agents/agent-os 이름 혼란이 재발하면 단일 우산(C안)을 재검토한다.
+
+### 이유
+
+혼란의 원인은 축 혼재(기능 vs 공급자)·훅 3곳 분산·죽은 파일·지도 부재였다. 공급자는 부패 자원(D-009)이라 공급자 축은 자산을 중립화할 때마다 파일 이동을 강제한다 — 기능 축 + 얇은 어댑터만이 공급자 교체(S1)·새 자산 유형(S2)·중립화(S3)를 구조 변경 없이 흡수한다. 단일 우산(C안)은 불변식과 양립 불가(agent-os 안에서 링크가 나감)이고 경로 깊이 +1이 영구 비용이다. 벤더링은 "코드는 포크하되 지식은 구독한다"의 스킬판 — 수정 권리를 얻는 대신 갱신을 수동 diff로 통제한다.

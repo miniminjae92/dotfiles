@@ -240,6 +240,26 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 ---
 
+### Repository Layout
+
+의미 규칙 한 줄: **`agents/`는 설비 세팅값(고치면 에이전트가 다르게 일함, 전부 홈으로 설치됨), `agent-os/`는 운전 일지·계측 규격서(고쳐도 에이전트는 그대로, 홈 링크 0)**. 용어는 [CONTEXT.md](CONTEXT.md), 결정 배경은 `agent-os/DECISIONS.md` D-014.
+
+| 디렉터리 | 정체 | install.sh 링크 |
+| --- | --- | --- |
+| `agents/` | 에이전트가 읽는 실행 자산 전부 | 아래 전부 |
+| `agents/AGENTS.md` | 공급자 중립 공통 지침 | `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md` |
+| `agents/routing.json` + `models.json` | 라우팅 패키지 (역할→모델, 정형 태스크) | models.json → `~/.config/ai-tools/` |
+| `agents/skills/` | 스킬 — 자작 + 벤더(각 VENDOR.md, 대장: `agent-os/upstreams.md`) | `~/.claude/skills/*`, `~/.codex/skills/*` |
+| `agents/conventions/` | 커밋 메시지 규약 | `~/.config/commit-message-conventions/` |
+| `agents/claude/` | Claude 어댑터 (CLAUDE.md, settings 병합 조각) | `~/.claude/CLAUDE.md` |
+| `agents/codex/` | Codex 어댑터 (~/.codex 미러: hooks, agents toml, 전용 스킬) | `~/.codex/{hooks.json,agents,skills}` |
+| `agents/gemini/` | Gemini 어댑터 (알림 훅) | `~/.gemini/config/hooks.json` |
+| `agent-os/` | 운영 결정(DECISIONS)·상태·계약(paths.env)·상류 대장(upstreams) | 없음 — 불변식 |
+| `bin/` | CLI 도구 전부 | `~/.local/bin/*` |
+| `kman/` `man/` `style/` `tests/` `vscode/` | 에이전트와 무관한 일반 dotfiles 자산 | 일부 |
+
+---
+
 ### Korean Man Pages
 
 `kman` keeps the normal `man` command as the English source of truth and creates a
