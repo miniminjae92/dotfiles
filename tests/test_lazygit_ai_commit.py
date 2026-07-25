@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).parents[1] / "bin" / "lazygit-ai-commit"
-REGISTRY_PATH = Path(__file__).parents[1] / "ai-tools" / "models.json"
+REGISTRY_PATH = Path(__file__).parents[1] / "agents" / "models.json"
 CONVENTION_PATH = (
-    Path(__file__).parents[1] / "conventions" / "commit-message" / "korean-angularjs.md"
+    Path(__file__).parents[1] / "agents" / "conventions" / "commit-message" / "korean-angularjs.md"
 )
 
 

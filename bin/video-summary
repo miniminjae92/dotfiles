@@ -49,7 +49,7 @@ def configured_video_model() -> str | None:
         )
     ).expanduser()
     if not registry_path.is_file():
-        registry_path = Path.home() / ".dotfiles/ai-tools/models.json"
+        registry_path = Path.home() / ".dotfiles/agents/models.json"
     try:
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         task = registry["tasks"]["video_summary"]

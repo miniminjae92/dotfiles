@@ -3,8 +3,8 @@ set -euo pipefail
 
 CONVENTION_FILE="${LAZYGIT_AI_COMMIT_CONVENTION:-$HOME/.config/commit-message-conventions/korean-angularjs.md}"
 MODEL_REGISTRY="${AI_MODEL_REGISTRY:-$HOME/.config/ai-tools/models.json}"
-if [ ! -r "$MODEL_REGISTRY" ] && [ -r "$HOME/.dotfiles/ai-tools/models.json" ]; then
-  MODEL_REGISTRY="$HOME/.dotfiles/ai-tools/models.json"
+if [ ! -r "$MODEL_REGISTRY" ] && [ -r "$HOME/.dotfiles/agents/models.json" ]; then
+  MODEL_REGISTRY="$HOME/.dotfiles/agents/models.json"
 fi
 MAX_DIFF_CHARS="${LAZYGIT_AI_COMMIT_MAX_DIFF_CHARS:-18000}"
 COMPACT_DIFF_CHARS="${LAZYGIT_AI_COMMIT_COMPACT_DIFF_CHARS:-6000}"

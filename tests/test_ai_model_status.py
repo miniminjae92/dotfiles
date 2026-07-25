@@ -15,7 +15,7 @@ LOADER.exec_module(ai_model_status)
 
 class AiModelStatusTest(unittest.TestCase):
     def test_loads_all_task_bindings_from_registry(self):
-        registry_path = Path(__file__).parents[1] / "ai-tools" / "models.json"
+        registry_path = Path(__file__).parents[1] / "agents" / "models.json"
 
         registry = ai_model_status.load_registry(registry_path)
         bindings = ai_model_status.collect_bindings(registry)

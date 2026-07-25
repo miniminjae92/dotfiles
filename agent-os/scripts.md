@@ -28,6 +28,7 @@
 | `ai-model-status` | 제품 | 설정된 AI 모델 표시·라이브 프로브 |
 | `asx` | 제품 | 에이전트 세션 통합 탐색기(search/list/show) |
 | `claude-statusline` | 배관 | Claude Code statusLine 렌더러 |
+| `cleanclip` | 제품 | 클립보드 공백 정리 (tmux prefix+T) |
 | `codex-account` | 글루 | codex 계정 프로필 선택 실행 래퍼 |
 | `codex-account-login` | 글루 | codex 계정 로그인 헬퍼 |
 | `codex-account-usage` | 제품 | codex 계정별 사용량 조회 (launchd) |

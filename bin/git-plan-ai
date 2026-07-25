@@ -58,7 +58,7 @@ def model_registry_path() -> Path:
     installed = Path.home() / ".config/ai-tools/models.json"
     if installed.is_file():
         return installed
-    return Path.home() / ".dotfiles/ai-tools/models.json"
+    return Path.home() / ".dotfiles/agents/models.json"
 
 
 def registry_model(task: str, provider: str) -> str | None:

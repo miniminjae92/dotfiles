@@ -29,10 +29,10 @@ check_link "$HOME/.tmux.conf" "$DOTFILES_DIR/.tmux.conf"
 check_link "$HOME/.config/nvim" "$DOTFILES_DIR/.config/nvim"
 check_link "$HOME/.codex/AGENTS.md" "$DOTFILES_DIR/agents/AGENTS.md"
 check_link "$HOME/.gemini/GEMINI.md" "$DOTFILES_DIR/agents/AGENTS.md"
-check_link "$HOME/.claude/CLAUDE.md" "$DOTFILES_DIR/claude/CLAUDE.md"
-check_link "$HOME/.codex/hooks.json" "$DOTFILES_DIR/agent-os/hooks.json"
-check_link "$HOME/.gemini/config/hooks.json" "$DOTFILES_DIR/agy/hooks.json"
-check_link "$HOME/.config/ai-tools/models.json" "$DOTFILES_DIR/ai-tools/models.json"
+check_link "$HOME/.claude/CLAUDE.md" "$DOTFILES_DIR/agents/claude/CLAUDE.md"
+check_link "$HOME/.codex/hooks.json" "$DOTFILES_DIR/agents/codex/hooks.json"
+check_link "$HOME/.gemini/config/hooks.json" "$DOTFILES_DIR/agents/gemini/hooks.json"
+check_link "$HOME/.config/ai-tools/models.json" "$DOTFILES_DIR/agents/models.json"
 
 echo "== Tools =="
 for tool in git nvim tmux eza bat fzf fd rg gh zoxide pyenv lazygit jq yt-dlp alerter python3; do
@@ -107,6 +107,14 @@ else
   warn "hardcoded vault paths in $uncontracted file(s) without paths.env contract (D-012: 손댈 때 이관)"
 fi
 
+echo "== Layout invariant (D-014) =="
+# agents/=설비 세팅값(전부 설치), agent-os/=운전 일지(홈 링크 0). 위반은 구조 부패 신호.
+if grep -q 'DOTFILES_DIR/agent-os/' "$DOTFILES_DIR/install.sh"; then
+  bad "D-014 invariant broken: install.sh links agent-os/* into home (agent-os must stay uninstalled)"
+else
+  ok "D-014 invariant: agent-os has zero home links"
+fi
+
 echo "== Registry drift =="
 python3 - "$DOTFILES_DIR" <<'PY'
 import json, pathlib, re, sys
@@ -117,13 +125,13 @@ routing = json.loads((root / "agents" / "routing.json").read_text())
 routing_models = {entry["model"] for entry in routing["models"].values()}
 
 # Codex agent TOMLs must use models declared in routing.json.
-for toml_path in sorted((root / ".codex" / "agents").glob("*.toml")):
+for toml_path in sorted((root / "agents" / "codex" / "agents").glob("*.toml")):
     match = re.search(r'^model\s*=\s*"([^"]+)"', toml_path.read_text(), re.MULTILINE)
     if match and match.group(1) not in routing_models:
         failures.append(f"{toml_path.name}: model '{match.group(1)}' not in routing.json")
 
 # models.json (script-facing registry) must agree with routing.json.
-legacy = json.loads((root / "ai-tools" / "models.json").read_text())
+legacy = json.loads((root / "agents" / "models.json").read_text())
 for ref, name in legacy.get("models", {}).items():
     if ref in ("agy_gemini_fast", "ollama_local") and name not in routing_models:
         failures.append(f"models.json {ref}: '{name}' not in routing.json")
