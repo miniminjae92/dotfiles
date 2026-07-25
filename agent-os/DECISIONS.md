@@ -252,3 +252,19 @@
 ### 이유
 
 프레임워크가 아니라 계약+순환으로 시작한다. 측정은 기존 배관(doctor·ops-event·friction·다이제스트)에 얹어, 실험 장치 자체가 새 유지비가 되지 않게 한다.
+
+## D-013 용어 도구 재편 — term 축소, UL 형성은 매트 포컷 스킬로
+
+- 상태: 확정
+- 날짜: 2026-07-24
+
+### 결정
+
+- `term` 스킬은 **즉석 의미 해명 전용**으로 축소한다: 방금 쓰인 용어가 현재 컨텍스트에서 본질적으로 무슨 의미로 쓰였는지만 즉시 설명하고, 파일을 쓰지 않는다.
+- 유비쿼터스 랭귀지의 형성·합의·정착은 매트 포컷 스킬(`domain-modeling`, `/grill-with-docs`)이 담당한다. 정본은 해당 repo의 `CONTEXT.md`(용어집) + `docs/adr/`(결정 기록)이다.
+- 공통어 사전 `mimir/20 Knowledge/용어사전.md`는 폐기한다(마지막 상태는 mimir git 이력에 보존). 프로젝트 무관 공통어를 자동 축적하는 채널은 두지 않는다.
+- 기존 `docs/ubiquitous-language.md`(dref, agentos-monitor 2건)는 레거시로 두고, 각 repo에 다음 방문 시 `CONTEXT.md`로 변환한다.
+
+### 이유
+
+term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 사전, repo별 ubiquitous-language.md, CONTEXT.md)으로 갈라질 참이었다. 매트 domain-modeling이 UL 형성 도구로 더 정교하고(용어 확정 즉시 기록, 코드-주장 모순 대조, ADR 3중 관문), 산출물이 평범한 파일이라 어느 CLI든 읽는다 — 형성 도구는 Claude 전용이어도 정본은 공급자 중립이다.
