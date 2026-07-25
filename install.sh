@@ -52,18 +52,18 @@ link_file \
   "$HOME/.config/agent-notify/config.json"
 link_file "$DOTFILES_DIR/agents/AGENTS.md" "$HOME/.codex/AGENTS.md"
 link_file "$DOTFILES_DIR/agents/AGENTS.md" "$HOME/.gemini/GEMINI.md"
-link_file "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
-link_file "$DOTFILES_DIR/agent-os/hooks.json" "$HOME/.codex/hooks.json"
-link_file "$DOTFILES_DIR/agy/hooks.json" "$HOME/.gemini/config/hooks.json"
-if [ -d "$DOTFILES_DIR/.codex/agents" ]; then
-  for agent_path in "$DOTFILES_DIR"/.codex/agents/*.toml; do
+link_file "$DOTFILES_DIR/agents/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+link_file "$DOTFILES_DIR/agents/codex/hooks.json" "$HOME/.codex/hooks.json"
+link_file "$DOTFILES_DIR/agents/gemini/hooks.json" "$HOME/.gemini/config/hooks.json"
+if [ -d "$DOTFILES_DIR/agents/codex/agents" ]; then
+  for agent_path in "$DOTFILES_DIR"/agents/codex/agents/*.toml; do
     [ -f "$agent_path" ] || continue
     agent_name="$(basename "$agent_path")"
     link_file "$agent_path" "$HOME/.codex/agents/$agent_name"
   done
 fi
-if [ -d "$DOTFILES_DIR/.codex/skills" ]; then
-  for skill_dir in "$DOTFILES_DIR"/.codex/skills/*; do
+if [ -d "$DOTFILES_DIR/agents/codex/skills" ]; then
+  for skill_dir in "$DOTFILES_DIR"/agents/codex/skills/*; do
     [ -d "$skill_dir" ] || continue
     skill_name="$(basename "$skill_dir")"
     link_file "$skill_dir" "$HOME/.codex/skills/$skill_name"
@@ -86,13 +86,13 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
   done
 fi
 link_file \
-  "$DOTFILES_DIR/conventions/commit-message/angular.md" \
+  "$DOTFILES_DIR/agents/conventions/commit-message/angular.md" \
   "$HOME/.config/commit-message-conventions/angular.md"
 link_file \
-  "$DOTFILES_DIR/conventions/commit-message/korean-angularjs.md" \
+  "$DOTFILES_DIR/agents/conventions/commit-message/korean-angularjs.md" \
   "$HOME/.config/commit-message-conventions/korean-angularjs.md"
 link_file \
-  "$DOTFILES_DIR/ai-tools/models.json" \
+  "$DOTFILES_DIR/agents/models.json" \
   "$HOME/.config/ai-tools/models.json"
 link_file \
   "$DOTFILES_DIR/.config/lazygit/config.yml" \
@@ -157,7 +157,7 @@ fi
 # settings.json stays unlinked because Claude Code rewrites it at runtime
 # (model preference, theme); only missing keys and hook events are added,
 # and existing entries are never overwritten.
-python3 - "$DOTFILES_DIR/claude/settings-fragment.json" "$HOME/.claude/settings.json" <<'PY'
+python3 - "$DOTFILES_DIR/agents/claude/settings-fragment.json" "$HOME/.claude/settings.json" <<'PY'
 import json, pathlib, sys
 
 fragment_path, settings_path = map(pathlib.Path, sys.argv[1:3])

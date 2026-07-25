@@ -427,5 +427,5 @@ ai-model-status --probe codex
     * `-`: Split horizontally
 * **Resizing Panes**: Use prefix + `h`, `j`, `k`, `l` to resize panes. `m` to maximize/minimize.
 * **Reordering Windows**: Use prefix + `Shift+Left` or `Shift+Right` to swap the current window with its neighbor.
-* **Clipboard Cleanup**: Use prefix + `T` to trim leading/trailing whitespace from each clipboard line with `scripts/cleanclip trim`.
+* **Clipboard Cleanup**: Use prefix + `T` to trim leading/trailing whitespace from each clipboard line with `cleanclip trim` (installed from `bin/`).
 * **Vim Integration**: `<C-h>`, `<C-j>`, `<C-k>`, `<C-l>` to navigate between Vim/Neovim splits and tmux panes.
