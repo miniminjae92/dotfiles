@@ -190,6 +190,26 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     agent-notify slack test usage
     ```
 
+    Idle resources are reclaimed by background jobs instead of by remembering to clean up.
+    `agent-notify sweep` runs every minute: it acknowledges pending events older than
+    `pending_ttl_days`, projects the pending count to `pending.json` so the statusline can
+    warn once it passes ten, and reclaims any `alerter` that outlived its worker. Events
+    with both local and Slack delivery off are acknowledged the moment they are presented —
+    nothing will ever reach the user, so leaving them pending only grows a queue no click
+    can drain. Reclamation is scoped by ownership: only PIDs that `agent-notify` recorded
+    when spawning are eligible, and the executable path is re-checked immediately before
+    signalling, so a recycled PID or another tool's same-named process is never killed.
+    `persistent_seconds`, `temporary_seconds`, and `pending_ttl_days` live in
+    `.config/agent-notify/config.json`.
+
+    `simulator-reaper` runs every ten minutes and shuts down booted iOS simulators, which
+    survive both closing the Simulator window and quitting Xcode — a stuck `Booted` state
+    persists in `device.plist` and CoreSimulatorService revives it at launch, so simulators
+    reappear without Xcode ever being opened. Two of them held 463 processes and 29 GB for
+    nineteen hours before this job existed. It stays out of the way entirely while Xcode,
+    Simulator.app, `xcodebuild`, or `xctest` is running, and only reclaims devices idle past
+    its grace period (`SIMULATOR_REAPER_GRACE_SECONDS`, default 900).
+
     Personal operations run quietly in the background. The security job runs daily at
     10:00, establishes an external-listener baseline on its first run, and sends Slack only
     for new, changed, resolved, or failed checks. It inspects SIP, Gatekeeper, FileVault,
