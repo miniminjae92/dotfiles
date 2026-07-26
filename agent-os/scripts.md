@@ -49,6 +49,7 @@
 | `prfb-export` | 제품 | GitHub PR 피드백 → Obsidian 내보내기 |
 | `prfbo` | 글루 | 내보낸 PR 피드백 fzf 선택 → nvim 열기 |
 | `session-harvest` | 배관 | 세션 수확 파이프라인 2단계(마이닝+적재) |
+| `simulator-reaper` | 배관 | 유휴 iOS 시뮬레이터 회수 (launchd) |
 | `vault-ai-classify` | 제품 | 볼트 노트 AI 분류 |
 | `video-summary` | 제품 | YouTube 타임스탬프 요약 → Markdown 노트 |
 | `zcp` | 글루 | zoxide 질의 대상으로 cp |

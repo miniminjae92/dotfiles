@@ -75,7 +75,8 @@ fi
 echo "== LaunchAgents =="
 # personal-ops-weekly는 은퇴(2026-07-22, session-harvest-weekly로 대체) — install.sh가 bootout함
 for label in com.miniminjae.agent-notify-sweep com.miniminjae.agent-os-vault-snapshot \
-             com.miniminjae.codex-account-usage com.miniminjae.personal-ops-security; do
+             com.miniminjae.codex-account-usage com.miniminjae.personal-ops-security \
+             com.miniminjae.simulator-reaper; do
   if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
     ok "launchd: $label"
   else

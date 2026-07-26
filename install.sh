@@ -127,13 +127,18 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.ops-digest-daily.plist" \
     "$ops_digest_plist"
+  simulator_reaper_plist="$HOME/Library/LaunchAgents/com.miniminjae.simulator-reaper.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.simulator-reaper.plist" \
+    "$simulator_reaper_plist"
   mkdir -p \
     "$HOME/.local/state/agent-notify" \
     "$HOME/.local/state/agent-os" \
     "$HOME/.local/state/codex-account-usage" \
     "$HOME/.local/state/ops" \
     "$HOME/.local/state/personal-ops" \
-    "$HOME/.local/state/session-harvest"
+    "$HOME/.local/state/session-harvest" \
+    "$HOME/.local/state/simulator-reaper"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$notification_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
@@ -151,6 +156,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$harvest_weekly_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.ops-digest-daily" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$ops_digest_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.simulator-reaper" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$simulator_reaper_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.
