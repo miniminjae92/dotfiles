@@ -27,6 +27,8 @@ from typing import Any
 
 CCUSAGE_CACHE = Path.home() / ".cache" / "claude-statusline" / "ccusage-block.json"
 CCUSAGE_TTL_SECONDS = 60
+PENDING_SUMMARY = Path.home() / ".local" / "state" / "agent-notify" / "pending.json"
+PENDING_WARN_THRESHOLD = 20
 
 
 def load_payload() -> dict[str, Any]:
@@ -174,6 +176,21 @@ def ccusage_segment() -> str | None:
         return None
 
 
+def pending_segment() -> str | None:
+    """미확인 알림이 임계를 넘으면 알린다.
+
+    agent-notify sweep이 60초마다 갱신하는 요약 파일만 읽는다. 이벤트 디렉토리를
+    직접 세면 파일이 수천 개라 매 렌더마다 비용을 치르게 된다.
+    """
+    try:
+        count = json.loads(PENDING_SUMMARY.read_text()).get("count")
+        if not isinstance(count, int) or count < PENDING_WARN_THRESHOLD:
+            return None
+        return f"⚠ 알림 {count}"
+    except Exception:
+        return None
+
+
 def main() -> int:
     payload = load_payload()
 
@@ -184,6 +201,7 @@ def main() -> int:
             model_segment(payload),
             context_segment(payload),
             ccusage_segment(),
+            pending_segment(),
         )
         if segment
     ]
