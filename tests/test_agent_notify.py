@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -39,6 +40,20 @@ class AgentNotifyTest(unittest.TestCase):
 
     def save_event(self, event):
         agent_notify.atomic_write_json(agent_notify.event_path(event["id"]), event)
+
+    def fake_alerter_process(self, pid=4242, stdout="", returncode=0):
+        process = mock.Mock()
+        process.pid = pid
+        process.returncode = returncode
+        process.communicate.return_value = (stdout, "")
+        return process
+
+    def owned_alerter_event(self, pid=9001, path="/opt/homebrew/bin/alerter", cwd="/tmp/owned"):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": cwd})
+        event["alerter_pid"] = pid
+        event["alerter_path"] = path
+        self.save_event(event)
+        return event
 
     @mock.patch.object(agent_notify, "spawn_worker")
     def test_generic_source_uses_provider_neutral_schema(self, spawn_worker):
@@ -318,14 +333,15 @@ class AgentNotifyTest(unittest.TestCase):
         send_osascript.assert_not_called()
         self.assertEqual(agent_notify.load_event(event["id"])["notification_backend"], "off")
 
-    @mock.patch.object(agent_notify.subprocess, "run")
-    def test_alerter_uses_actions_and_timeout(self, run):
-        run.return_value = subprocess.CompletedProcess([], 0, stdout="@TIMEOUT\n")
+    @mock.patch.object(agent_notify.subprocess, "Popen")
+    def test_alerter_uses_actions_and_timeout(self, popen):
+        popen.return_value = self.fake_alerter_process(stdout="@TIMEOUT\n")
         event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        self.save_event(event)
 
         response = agent_notify.run_alerter(event, "/alerter")
 
-        command = run.call_args.args[0]
+        command = popen.call_args.args[0]
         self.assertIn("--actions", command)
         self.assertIn("확인,터미널로 이동", command)
         self.assertNotIn("--sender", command)
@@ -681,6 +697,190 @@ class AgentNotifyTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         remove_notification.assert_called_once()
+        self.assertIsNotNone(agent_notify.load_event(event["id"])["acknowledged_at"])
+
+    # --- alerter 소유권과 회수 ------------------------------------------------
+
+    @mock.patch.object(agent_notify.subprocess, "Popen")
+    def test_persistent_notification_is_bounded(self, popen):
+        process = self.fake_alerter_process(stdout="확인\n")
+        popen.return_value = process
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event["local_delivery"] = "persistent"
+        self.save_event(event)
+
+        agent_notify.run_alerter(event, "/alerter")
+
+        command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("--timeout") + 1], "1800")
+        self.assertEqual(process.communicate.call_args.kwargs["timeout"], 1810)
+
+    @mock.patch.object(agent_notify.subprocess, "Popen")
+    def test_alerter_ownership_recorded_while_waiting_then_released(self, popen):
+        process = self.fake_alerter_process(pid=4242)
+        popen.return_value = process
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        self.save_event(event)
+        observed = []
+
+        def observe(timeout=None):
+            observed.append(agent_notify.load_event(event["id"])["alerter_pid"])
+            return ("확인\n", "")
+
+        process.communicate.side_effect = observe
+
+        agent_notify.run_alerter(event, "/alerter")
+
+        # 대기하는 동안에는 디스크에 소유권이 남아 있어야 회수가 가능하다.
+        self.assertEqual(observed, [4242])
+        self.assertIsNone(agent_notify.load_event(event["id"])["alerter_pid"])
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    def test_reaper_ignores_alerter_it_does_not_own(self, process_table, kill):
+        # 다른 도구가 띄운 동명 프로세스. 상한을 한참 넘겼지만 우리 것이 아니다.
+        process_table.return_value = {
+            9001: (99999, 900 * 1024, "/opt/other-tool/alerter")
+        }
+        self.save_event(
+            agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        )
+
+        self.assertEqual(agent_notify.reap_runaway_alerters(), 0)
+        kill.assert_not_called()
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    def test_reaper_kills_owned_alerter_past_lifetime_limit(self, process_table, kill):
+        process_table.return_value = {
+            9001: (
+                agent_notify.ALERTER_MAX_LIFETIME_SECONDS + 1,
+                1024,
+                "/opt/homebrew/bin/alerter",
+            )
+        }
+        event = self.owned_alerter_event()
+
+        self.assertEqual(agent_notify.reap_runaway_alerters(), 1)
+        kill.assert_called_once_with(9001, signal.SIGKILL)
+        self.assertIsNone(agent_notify.load_event(event["id"])["alerter_pid"])
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    def test_reaper_kills_owned_alerter_past_memory_limit(self, process_table, kill):
+        process_table.return_value = {
+            9001: (10, agent_notify.ALERTER_MAX_RSS_KB + 1, "/opt/homebrew/bin/alerter")
+        }
+        self.owned_alerter_event()
+
+        self.assertEqual(agent_notify.reap_runaway_alerters(), 1)
+        kill.assert_called_once_with(9001, signal.SIGKILL)
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    def test_reaper_skips_recycled_pid(self, process_table, kill):
+        # PID가 재사용돼 전혀 다른 실행 파일을 돌리고 있다.
+        process_table.return_value = {9001: (99999, 900 * 1024, "/usr/bin/python3")}
+        event = self.owned_alerter_event()
+
+        self.assertEqual(agent_notify.reap_runaway_alerters(), 0)
+        kill.assert_not_called()
+        self.assertIsNone(agent_notify.load_event(event["id"])["alerter_pid"])
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    def test_reaper_leaves_alerter_under_limits(self, process_table, kill):
+        process_table.return_value = {
+            9001: (60, 10 * 1024, "/opt/homebrew/bin/alerter")
+        }
+        event = self.owned_alerter_event()
+
+        self.assertEqual(agent_notify.reap_runaway_alerters(), 0)
+        kill.assert_not_called()
+        self.assertEqual(agent_notify.load_event(event["id"])["alerter_pid"], 9001)
+
+    # --- pending 적재 방지 ----------------------------------------------------
+
+    @mock.patch.object(agent_notify, "alerter_path", return_value=None)
+    @mock.patch.object(agent_notify, "send_osascript")
+    def test_local_off_and_slack_off_is_acknowledged_immediately(self, _osascript, _alerter):
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event["local_delivery"] = "off"
+        event["slack_delivery"] = "off"
+        self.save_event(event)
+
+        agent_notify.run_worker(event["id"])
+
+        self.assertIsNotNone(agent_notify.load_event(event["id"])["acknowledged_at"])
+
+    def test_local_off_with_slack_delayed_stays_pending(self):
+        # Slack 지연 에스컬레이션 기회를 뺏으면 안 된다.
+        event = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/sample"})
+        event["local_delivery"] = "off"
+        event["slack_delivery"] = "delayed"
+        event["slack_immediate"] = False
+        self.save_event(event)
+
+        agent_notify.run_worker(event["id"])
+
+        self.assertIsNone(agent_notify.load_event(event["id"])["acknowledged_at"])
+
+    def test_sweep_expires_pending_past_ttl(self):
+        current_time = datetime(2026, 7, 26, 7, 0, tzinfo=timezone.utc)
+        stale = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/stale"})
+        stale["created_at"] = (current_time - timedelta(days=4)).isoformat()
+        fresh = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/fresh"})
+        fresh["created_at"] = (current_time - timedelta(days=1)).isoformat()
+        self.save_event(stale)
+        self.save_event(fresh)
+
+        agent_notify.sweep(current_time)
+
+        self.assertIsNotNone(agent_notify.load_event(stale["id"])["acknowledged_at"])
+        self.assertIsNone(agent_notify.load_event(fresh["id"])["acknowledged_at"])
+
+    def test_write_pending_summary_projects_pending_count(self):
+        pending = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/a"})
+        acknowledged = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/b"})
+        acknowledged["acknowledged_at"] = agent_notify.isoformat()
+        self.save_event(pending)
+        self.save_event(acknowledged)
+
+        self.assertEqual(agent_notify.write_pending_summary(), 1)
+
+        summary = json.loads(agent_notify.pending_summary_path().read_text())
+        self.assertEqual(summary["count"], 1)
+        self.assertEqual(summary["oldest_created_at"], pending["created_at"])
+
+    # --- 일괄 ack ------------------------------------------------------------
+
+    @mock.patch.object(agent_notify, "remove_notification")
+    def test_bulk_ack_never_calls_alerter_remove(self, remove_notification):
+        # alerter --remove는 건당 타임아웃까지 블로킹된다. 일괄 처리에서 쓰면 끝나지 않는다.
+        for index in range(3):
+            self.save_event(
+                agent_notify.normalize_event(
+                    "future-agent", "complete", {"cwd": f"/tmp/bulk-{index}"}
+                )
+            )
+
+        self.assertEqual(agent_notify.ack_command("--all"), 0)
+
+        remove_notification.assert_not_called()
+
+    @mock.patch.object(agent_notify.os, "kill")
+    @mock.patch.object(agent_notify, "process_table")
+    @mock.patch.object(agent_notify, "remove_notification")
+    def test_bulk_ack_terminates_owned_alerter(self, remove_notification, process_table, kill):
+        process_table.return_value = {
+            9001: (30, 1024, "/opt/homebrew/bin/alerter")
+        }
+        event = self.owned_alerter_event()
+
+        self.assertEqual(agent_notify.ack_command("--all"), 0)
+
+        kill.assert_called_once_with(9001, signal.SIGKILL)
+        remove_notification.assert_not_called()
         self.assertIsNotNone(agent_notify.load_event(event["id"])["acknowledged_at"])
 
 

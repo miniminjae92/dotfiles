@@ -27,8 +27,21 @@ from typing import Any
 
 CCUSAGE_CACHE = Path.home() / ".cache" / "claude-statusline" / "ccusage-block.json"
 CCUSAGE_TTL_SECONDS = 60
-PENDING_SUMMARY = Path.home() / ".local" / "state" / "agent-notify" / "pending.json"
-PENDING_WARN_THRESHOLD = 20
+PENDING_WARN_THRESHOLD = 10
+
+
+def pending_summary_path() -> Path:
+    """agent-notify의 state_root() 규약을 그대로 따른다.
+
+    producer가 AGENT_NOTIFY_STATE_DIR/XDG_STATE_HOME을 지원하는데 여기서만
+    경로를 고정하면, 상태 경로를 옮긴 순간 조용히 표시가 사라진다.
+    """
+    configured = os.environ.get("AGENT_NOTIFY_STATE_DIR")
+    if configured:
+        return Path(configured).expanduser() / "pending.json"
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    base = Path(xdg_state).expanduser() if xdg_state else Path.home() / ".local/state"
+    return base / "agent-notify" / "pending.json"
 
 
 def load_payload() -> dict[str, Any]:
@@ -183,7 +196,7 @@ def pending_segment() -> str | None:
     직접 세면 파일이 수천 개라 매 렌더마다 비용을 치르게 된다.
     """
     try:
-        count = json.loads(PENDING_SUMMARY.read_text()).get("count")
+        count = json.loads(pending_summary_path().read_text()).get("count")
         if not isinstance(count, int) or count < PENDING_WARN_THRESHOLD:
             return None
         return f"⚠ 알림 {count}"
