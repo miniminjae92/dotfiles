@@ -200,7 +200,7 @@ docs/conversation/2026-07-23-neovim-markdown-reader-handoff.md의 구현과 검�
   - `bin/agent-os-usage`
   - `bin/asx`
   - `tests/test_agent_notify.py`
-  - `agents/skills/lms-harvest/`
+  - `agents/skills/browser-harvest/` (당시 이름 `lms-harvest`)
   - `agents/skills/teach/`
   - `agents/skills/term/`
   - `nvim.log`
