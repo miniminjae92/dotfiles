@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Loop"
+  short_description: "문제 발견부터 측정까지 제품 개선 루프를 운영합니다"
+  default_prompt: "$product-loop로 이 제품의 다음 개선 사이클을 시작해줘."
