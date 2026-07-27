@@ -34,6 +34,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
     * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work.
     * `.codex/skills/summarize-youtube-playlist` interactively collects a channel, playlist, named Codex account, browser profile, usage ceiling, and Slack preference before running the safe two-video gate and background playlist batch.
+    * `bin/mdview` serves a directory of Markdown files as a local browsable site, reusing the Neovim `<leader>mp` preview stylesheet. `mdview .` opens a file tree plus a reader with adjustable font size, light/dark/auto theme, and content width, and reloads a document when its file changes.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
@@ -85,6 +86,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v prfb
     command -v prfbo
     command -v video-summary
+    command -v mdview
     ```
     Codex and `agy` completion notifications are enabled by the global hook links installed by this script. The provider-neutral entry point for another CLI is:
     ```bash
@@ -330,6 +332,39 @@ kman --export ./tmux.1.ko.md tmux
 
 Pages with unknown or unsupported redistribution terms remain local and are not
 exported.
+
+---
+
+### Markdown Directory Preview
+
+`mdview` is the shell counterpart of the Neovim `<leader>mp` Markdown preview. It serves a
+directory over `127.0.0.1` and renders it with the same reader stylesheet
+(`nvim/assets/markdown-reader.css`), adding a sidebar that walks the whole tree.
+
+```bash
+mdview .                 # serve the current directory
+mdview ~/.obsidian/mimir # serve a vault
+mdview README.md         # serve its parent directory and open this file
+```
+
+Reader controls live in the toolbar and persist per browser in `localStorage`: `A−`/`A+` for
+font size (13–26px), a slider for content width (600–1600px), and a button cycling
+auto/light/dark. The sidebar toggles with `b` or the `☰` button and its width is drag-resizable;
+the filter box searches file paths. Documents auto-reload when their file changes on disk, so a
+`:w` in Neovim refreshes the browser without losing scroll position.
+
+Rendering covers GitHub-flavored basics plus task lists, heading anchors, highlight.js syntax
+colors, and Mermaid diagrams that follow the current theme. Relative links between Markdown files
+navigate in place; relative images and other attachments are served from the same tree.
+
+Renderer assets are downloaded once from jsDelivr into `~/.cache/mdview/assets` (override with
+`MDVIEW_ASSET_DIR`); `--refresh-assets` re-fetches them. Without them the page still shows the raw
+Markdown source rather than failing.
+
+The server binds loopback and validates the `Host` header, so a web page cannot reach it through
+DNS rebinding. Only Markdown files under the served root are readable through the document API,
+and dotfiles and ignored directories (`node_modules`, `__pycache__`, `venv`) are excluded from
+every route. `--host` opts out of the loopback binding and prints an exposure warning.
 
 ---
 
