@@ -165,6 +165,28 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     The existing `normal`, `watch`, `away`, and `quiet` named modes remain available for compatibility, but direct settings are the recommended discovery path until a stable personal pattern emerges.
 
+    `AgentNotifyMenu` is the always-visible control surface for this state. The
+    menu bar icon prioritizes approval requests and attention events, keeps
+    pending work visible after an eight-second temporary banner disappears,
+    and exposes local/Slack mode controls, pane navigation, individual
+    acknowledgement, **완료 모두 확인**, and guarded **전체 확인**. The app is
+    intentionally a thin client over `agent-notify status --json`, `mode`,
+    `open`, and `ack`; the CLI and event store remain the source of truth, so
+    closing or rebuilding the app does not lose pending events.
+
+    `install.sh` builds the native AppKit app into
+    `~/Applications/AgentNotifyMenu.app` and starts it with the
+    `com.miniminjae.agent-notify-menu` LaunchAgent. Verify the app-to-CLI
+    contract without opening the UI:
+
+    ```bash
+    ~/Applications/AgentNotifyMenu.app/Contents/MacOS/AgentNotifyMenu --check
+    ```
+
+    Codex `PermissionRequest` hooks create priority attention events without
+    storing the requested command or tool input. After changing the hook file,
+    open `/hooks` once in Codex to review and trust the new hook hash.
+
     For bulk work that would flood notifications, scope a named mode to one process tree with the `AGENT_NOTIFY_POLICY` environment variable instead of changing the global mode. Hooks inherit the agent CLI's environment, so only events from that command stay quiet while other sessions keep notifying; there is no global state to restore afterwards:
     ```bash
     AGENT_NOTIFY_POLICY=quiet <bulk-command>
