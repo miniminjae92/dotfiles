@@ -64,8 +64,9 @@ Agent adapters:
   event --source NAME ...   Enqueue a normalized event for any agent CLI
 
 Pending events:
-  status                    List pending events
-  ack <id|--all>            Acknowledge pending events
+  status [--json]           List pending events
+  ack <id|--completed|--all>
+                            Acknowledge one, completed, or all pending events
   open <id>                 Open the recorded terminal/tmux target and acknowledge
 
 Slack escalation:
@@ -468,12 +469,36 @@ def normalize_event(
     }
 
 
+def provider_event_key(source: str, payload: dict[str, Any]) -> str | None:
+    """같은 공급자 hook이 여러 config layer에서 중복 실행돼도 한 이벤트로 합친다."""
+    turn_id = payload.get("turn_id")
+    if not isinstance(turn_id, str) or not turn_id:
+        return None
+    session_id = session_from_payload(payload) or ""
+    hook_event = payload.get("hook_event_name") or payload.get("type") or ""
+    tool_use_id = payload.get("tool_use_id") or ""
+    material = f"{source}\0{session_id}\0{turn_id}\0{hook_event}\0{tool_use_id}"
+    return hashlib.sha256(material.encode()).hexdigest()[:32]
+
+
 def event_from_codex(payload: dict[str, Any], *, hook: bool) -> dict[str, Any] | None:
     expected_field = "hook_event_name" if hook else "type"
-    expected_value = "Stop" if hook else "agent-turn-complete"
-    if payload.get(expected_field) != expected_value:
+    hook_event = payload.get(expected_field)
+    expected_values = {"Stop", "PermissionRequest"} if hook else {"agent-turn-complete"}
+    if hook_event not in expected_values:
         return None
-    return normalize_event("codex", "complete", payload)
+    if hook_event == "PermissionRequest":
+        event = normalize_event(
+            "codex", "attention", payload, label="Codex 승인 대기"
+        )
+        event["kind"] = "permission_request"
+    else:
+        event = normalize_event("codex", "complete", payload)
+        event["kind"] = "turn_complete"
+    event_key = provider_event_key("codex", payload)
+    if event_key:
+        event["provider_event_key"] = event_key
+    return event
 
 
 def event_from_claude(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -532,16 +557,33 @@ def spawn_worker(event_id: str) -> None:
 
 def enqueue_event(event: dict[str, Any], policy: dict[str, Any] | None = None) -> str:
     ensure_private_directory(events_dir())
-    if policy is None:
-        policy = environment_policy()
-    if policy is None:
-        claim_delivery_policy(event)
-    else:
-        apply_delivery_policy(event, policy)
-    supersede_matching(event)
-    atomic_write_json(event_path(event["id"]), event)
-    spawn_worker(event["id"])
-    return event["id"]
+    provider_key = event.get("provider_event_key")
+    lock_name = provider_key or event["dedupe_key"]
+    lock_path = events_dir() / f".enqueue-{lock_name}.lock"
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(descriptor, "r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if provider_key:
+            duplicate = next(
+                (
+                    existing
+                    for existing in list_events()
+                    if existing.get("provider_event_key") == provider_key
+                ),
+                None,
+            )
+            if duplicate:
+                return str(duplicate["id"])
+        if policy is None:
+            policy = environment_policy()
+        if policy is None:
+            claim_delivery_policy(event)
+        else:
+            apply_delivery_policy(event, policy)
+        supersede_matching(event)
+        atomic_write_json(event_path(event["id"]), event)
+        spawn_worker(event["id"])
+        return event["id"]
 
 
 def notification_text(event: dict[str, Any]) -> tuple[str, str]:
@@ -1231,12 +1273,69 @@ def sweep(current_time: datetime | None = None) -> int:
     return 1 if failures else 0
 
 
-def print_status() -> int:
+def status_snapshot() -> dict[str, Any]:
     pending = [event for event in list_events() if is_pending(event)]
+    priority = {"permission_request": 0, "error": 1, "attention": 2, "complete": 3}
+    pending.sort(
+        key=lambda event: (
+            0
+            if event.get("kind") == "permission_request"
+            else priority.get(event.get("status"), 9),
+            event.get("created_at", ""),
+        )
+    )
+    settings = runtime_settings()
+    mode = active_policy(settings)
+    next_policy = settings.get("next_policy")
+    return {
+        "schema_version": 1,
+        "updated_at": isoformat(),
+        "counts": {
+            "pending": len(pending),
+            "permission_requests": sum(
+                event.get("kind") == "permission_request" for event in pending
+            ),
+            "attention": sum(
+                event.get("kind") != "permission_request"
+                and event.get("status") in {"attention", "error"}
+                for event in pending
+            ),
+            "complete": sum(event.get("status") == "complete" for event in pending),
+        },
+        "mode": {
+            "name": mode["name"],
+            "local": mode["local"],
+            "slack": mode["slack"],
+            "until": mode.get("until"),
+            "next": next_policy.get("name") if valid_policy(next_policy) else None,
+        },
+        "events": [
+            {
+                "id": event["id"],
+                "source": event["source"],
+                "source_label": event["source_label"],
+                "status": event["status"],
+                "kind": event.get("kind"),
+                "project": event["project"],
+                "created_at": event["created_at"],
+                "escalated": bool(event.get("escalated_at")),
+                "can_open": bool(event.get("tmux_target")),
+            }
+            for event in pending
+        ],
+    }
+
+
+def print_status(*, json_output: bool = False) -> int:
+    snapshot = status_snapshot()
+    if json_output:
+        print(json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")))
+        return 0
+    pending = snapshot["events"]
     if not pending:
         print("pending 알림이 없습니다.")
     for event in pending:
-        marker = "slack" if event.get("escalated_at") else "local"
+        marker = "slack" if event["escalated"] else "local"
         print(
             f"{event['id'][:8]}  {event['source']:<12} {event['status']:<9} "
             f"{marker:<5}  {event['project']}"
@@ -1260,10 +1359,15 @@ def dismiss_notification(event: dict[str, Any], bulk: bool = False) -> None:
 
 def ack_command(identifier: str) -> int:
     bulk = identifier == "--all"
+    completed = identifier == "--completed"
     matched = 0
     for event in list_events():
-        if is_pending(event) and (bulk or event["id"].startswith(identifier)):
-            dismiss_notification(event, bulk=bulk)
+        if is_pending(event) and (
+            bulk
+            or (completed and event.get("status") == "complete")
+            or event["id"].startswith(identifier)
+        ):
+            dismiss_notification(event, bulk=bulk or completed)
             acknowledge_event(event["id"])
             matched += 1
     if matched == 0:
@@ -1571,8 +1675,8 @@ def main(arguments: list[str] | None = None, stdin: str | None = None) -> int:
             return run_worker(arguments[0])
         if command == "sweep":
             return sweep()
-        if command == "status":
-            return print_status()
+        if command == "status" and arguments in ([], ["--json"]):
+            return print_status(json_output=arguments == ["--json"])
         if command == "ack" and len(arguments) == 1:
             return ack_command(arguments[0])
         if command == "open" and len(arguments) == 1:

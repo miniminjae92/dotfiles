@@ -35,6 +35,32 @@ link_file() {
   ln -sfn "$source" "$target"
 }
 
+build_agent_notify_menu() {
+  local source="$DOTFILES_DIR/agent-notify-menu/AgentNotifyMenu.swift"
+  local plist="$DOTFILES_DIR/agent-notify-menu/Info.plist"
+  local app="$HOME/Applications/AgentNotifyMenu.app"
+  local contents="$app/Contents"
+  local executable="$contents/MacOS/AgentNotifyMenu"
+  local temporary_executable="${executable}.tmp.$$"
+  local module_cache="${TMPDIR:-/private/tmp}/agent-notify-menu-module-cache"
+
+  if ! command -v xcrun >/dev/null 2>&1; then
+    printf 'skip: xcrun unavailable; AgentNotifyMenu was not built\n' >&2
+    return
+  fi
+
+  mkdir -p "$contents/MacOS" "$module_cache"
+  cp "$plist" "$contents/Info.plist"
+  CLANG_MODULE_CACHE_PATH="$module_cache" \
+    SWIFT_MODULECACHE_PATH="$module_cache" \
+    xcrun swiftc "$source" -o "$temporary_executable" -framework AppKit
+  mv "$temporary_executable" "$executable"
+  chmod 755 "$executable"
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --sign - "$app" >/dev/null
+  fi
+}
+
 link_file "$DOTFILES_DIR/.gitconfig" "$HOME/.gitconfig"
 link_file "$DOTFILES_DIR/.gitignore" "$HOME/.gitignore"
 link_file "$DOTFILES_DIR/.vimrc" "$HOME/.vimrc"
@@ -99,6 +125,11 @@ link_file \
   "$HOME/Library/Application Support/lazygit/config.yml"
 
 if [ "$(uname -s)" = "Darwin" ]; then
+  build_agent_notify_menu
+  menu_plist="$HOME/Library/LaunchAgents/com.miniminjae.agent-notify-menu.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-notify-menu.plist" \
+    "$menu_plist"
   notification_plist="$HOME/Library/LaunchAgents/com.miniminjae.agent-notify-sweep.plist"
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.agent-notify-sweep.plist" \
@@ -141,6 +172,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
     "$HOME/.local/state/simulator-reaper"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$notification_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-menu" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$menu_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$snapshot_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.codex-account-usage" >/dev/null 2>&1 || true

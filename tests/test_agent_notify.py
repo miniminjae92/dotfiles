@@ -152,7 +152,28 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertNotIn("secret answer", serialized)
 
     @mock.patch.object(agent_notify, "spawn_worker")
-    def test_codex_hook_ignores_non_stop_event(self, spawn_worker):
+    def test_codex_permission_request_becomes_priority_attention(self, _spawn_worker):
+        payload = {
+            "hook_event_name": "PermissionRequest",
+            "cwd": "/Users/test/projects/sample",
+            "session_id": "codex-session-1",
+            "turn_id": "turn-1",
+            "tool_name": "Bash",
+            "tool_input": {"command": "secret command"},
+        }
+
+        result = agent_notify.main(["codex-hook"], json.dumps(payload))
+
+        self.assertEqual(result, 0)
+        event = agent_notify.list_events()[0]
+        self.assertEqual(event["source"], "codex")
+        self.assertEqual(event["status"], "attention")
+        self.assertEqual(event["kind"], "permission_request")
+        self.assertEqual(event["source_label"], "Codex 승인 대기")
+        self.assertNotIn("secret command", json.dumps(event))
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_codex_hook_ignores_other_event(self, spawn_worker):
         payload = {"hook_event_name": "PreToolUse", "cwd": "/tmp/sample"}
 
         result = agent_notify.main(["codex-hook"], json.dumps(payload))
@@ -160,6 +181,21 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(agent_notify.list_events(), [])
         spawn_worker.assert_not_called()
+
+    @mock.patch.object(agent_notify, "spawn_worker")
+    def test_duplicate_hook_delivery_for_same_turn_enqueues_once(self, spawn_worker):
+        payload = {
+            "hook_event_name": "Stop",
+            "cwd": "/Users/test/projects/sample",
+            "session_id": "codex-session-1",
+            "turn_id": "turn-1",
+        }
+
+        agent_notify.main(["codex-hook"], json.dumps(payload))
+        agent_notify.main(["codex-hook"], json.dumps(payload))
+
+        self.assertEqual(len(agent_notify.list_events()), 1)
+        spawn_worker.assert_called_once()
 
     @mock.patch.object(agent_notify, "spawn_worker")
     def test_claude_hook_stores_only_metadata(self, _spawn_worker):
@@ -852,6 +888,30 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertEqual(summary["count"], 1)
         self.assertEqual(summary["oldest_created_at"], pending["created_at"])
 
+    def test_status_json_prioritizes_permission_requests_and_includes_mode(self):
+        complete = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/complete"}
+        )
+        permission = agent_notify.normalize_event(
+            "codex", "attention", {"cwd": "/tmp/approval"}
+        )
+        permission["kind"] = "permission_request"
+        self.save_event(complete)
+        self.save_event(permission)
+        output = io.StringIO()
+
+        with mock.patch("sys.stdout", output):
+            self.assertEqual(agent_notify.main(["status", "--json"], ""), 0)
+
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["counts"]["pending"], 2)
+        self.assertEqual(result["counts"]["permission_requests"], 1)
+        self.assertEqual(result["counts"]["attention"], 0)
+        self.assertEqual(result["events"][0]["kind"], "permission_request")
+        self.assertEqual(result["mode"]["local"], "temporary")
+        self.assertEqual(result["mode"]["slack"], "delayed")
+
     # --- 일괄 ack ------------------------------------------------------------
 
     @mock.patch.object(agent_notify, "remove_notification")
@@ -866,6 +926,23 @@ class AgentNotifyTest(unittest.TestCase):
 
         self.assertEqual(agent_notify.ack_command("--all"), 0)
 
+        remove_notification.assert_not_called()
+
+    @mock.patch.object(agent_notify, "remove_notification")
+    def test_ack_completed_all_keeps_attention_pending(self, remove_notification):
+        complete = agent_notify.normalize_event(
+            "future-agent", "complete", {"cwd": "/tmp/complete"}
+        )
+        attention = agent_notify.normalize_event(
+            "future-agent", "attention", {"cwd": "/tmp/attention"}
+        )
+        self.save_event(complete)
+        self.save_event(attention)
+
+        self.assertEqual(agent_notify.ack_command("--completed"), 0)
+
+        self.assertIsNotNone(agent_notify.load_event(complete["id"])["acknowledged_at"])
+        self.assertIsNone(agent_notify.load_event(attention["id"])["acknowledged_at"])
         remove_notification.assert_not_called()
 
     @mock.patch.object(agent_notify.os, "kill")
