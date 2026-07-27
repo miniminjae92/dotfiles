@@ -1,4 +1,6 @@
 :root {
+	/* 본문 폭 조절 손잡이: 넓히려면 값만 키우면 된다 */
+	--reader-measure: 920px;
 	--reader-canvas: #f7f3eb;
 	--reader-surface: #fffdf8;
 	--reader-text: #332d27;
@@ -62,7 +64,7 @@ main {
 }
 
 #page-header {
-	max-width: 760px;
+	max-width: var(--reader-measure);
 	margin: 0 auto;
 	background: var(--reader-surface);
 	border-color: var(--reader-border);
@@ -83,9 +85,9 @@ main {
 }
 
 .markdown-body {
-	max-width: 760px;
+	max-width: var(--reader-measure);
 	margin: 0 auto;
-	padding: 52px 58px 64px;
+	padding: 52px 72px 64px;
 	border: 1px solid var(--reader-border);
 	border-top: 0;
 	border-radius: 0 0 12px 12px;
@@ -386,6 +388,16 @@ main {
 	cursor: pointer;
 	color: var(--reader-heading);
 	font-weight: 650;
+}
+
+@media (max-width: 900px) {
+	#page-ctn {
+		padding: 40px 20px 60px;
+	}
+
+	.markdown-body {
+		padding: 44px 40px 52px;
+	}
 }
 
 @media (max-width: 640px) {
