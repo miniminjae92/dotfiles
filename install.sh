@@ -168,6 +168,10 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.mirror-to-imac.plist" \
     "$mirror_imac_plist"
+  mirror_from_imac_plist="$HOME/Library/LaunchAgents/com.miniminjae.mirror-from-imac.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.mirror-from-imac.plist" \
+    "$mirror_from_imac_plist"
   mkdir -p \
     "$HOME/.local/state/agent-notify" \
     "$HOME/.local/state/agent-os" \
@@ -200,6 +204,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$simulator_reaper_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.mirror-to-imac" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$mirror_imac_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.mirror-from-imac" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$mirror_from_imac_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.

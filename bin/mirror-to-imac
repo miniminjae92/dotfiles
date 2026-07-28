@@ -74,7 +74,7 @@ mirror() { # mirror <src-dir> <remote-subpath> [extra rsync args...]
   shift 2
   [ -d "$src" ] || return 0
   # ${@+"$@"} — launchd 기본 PATH가 bash 3.2를 잡을 때 빈 "$@" 가 set -u 에서 터지는 것을 피한다.
-  if rsync -a --delete -e "ssh $SSH_OPTS" ${@+"$@"} "$src/" "$REMOTE:$MIRROR_ROOT/$dst/" 2>/dev/null; then
+  if rsync -a --delete --delete-excluded -e "ssh $SSH_OPTS" ${@+"$@"} "$src/" "$REMOTE:$MIRROR_ROOT/$dst/" 2>/dev/null; then
     synced=$((synced + 1))
   else
     failed=$((failed + 1))
@@ -86,10 +86,14 @@ mirror "$CLAUDE_SRC" claude-projects
 
 # Codex — 홈에는 auth.json·config.toml 이 함께 있다. 세션 디렉터리만 고른다.
 # --prune-empty-dirs 로 계정 홈의 빈 껍데기가 남지 않게 한다.
-codex_filter=(--prune-empty-dirs --include='*/' --include='sessions/***'
-              --include='archived_sessions/***' --exclude='*')
-mirror "$CODEX_SRC" codex "${codex_filter[@]}"
-mirror "$CODEX_ACCOUNTS_SRC" codex-accounts "${codex_filter[@]}"
+# 패턴 앞의 '/' 는 전송 루트 기준 앵커다. 앵커가 없으면 sessions/ 가 아무 깊이에서나
+# 매치돼 ~/.codex/browser/sessions/ 같은 무관한 디렉터리까지 딸려온다.
+mirror "$CODEX_SRC" codex --prune-empty-dirs \
+  --include='/sessions/***' --include='/archived_sessions/***' \
+  --include='*/' --exclude='*'
+mirror "$CODEX_ACCOUNTS_SRC" codex-accounts --prune-empty-dirs \
+  --include='/*/sessions/***' --include='/*/archived_sessions/***' \
+  --include='*/' --exclude='*'
 
 # 운영 상태 — 대시보드가 읽는 집계 원천.
 mirror "$HOME/.local/state/ops/events" state/ops/events

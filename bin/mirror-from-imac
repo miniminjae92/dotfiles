@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 아이맥의 에이전트 원천을 맥북으로 당겨온다(mirror-to-imac 의 역방향).
+# 이걸로 두 기기 모두 자기 로컬만 읽고도 양쪽 대화를 검색할 수 있다(asx).
+#
+# 계약:
+#   - pull 방향인 이유: 아이맥은 24시간 켜져 있고 맥북은 자주 잠든다. 깨어 있는
+#     쪽이 당겨오는 편이 자연스럽고, 맥북이 자면 그 회차만 건너뛰면 된다.
+#   - 순환 금지: 아이맥의 ~/mirror/ 는 절대 가져오지 않는다. 원천 경로만 명시해
+#     미러의 미러가 생기는 것을 구조적으로 막는다.
+#   - 인증 파일은 가져오지 않는다. codex 홈에서 sessions/archived_sessions 만 고른다.
+#   - best-effort: 아이맥이 꺼져 있거나 네트워크가 없으면 조용히 종료한다.
+
+REMOTE="${MIRROR_REMOTE:-imac}"
+MIRROR_ROOT="${MIRROR_FROM_ROOT:-$HOME/mirror/imac}"
+SSH_OPTS="${MIRROR_SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto -o ControlPath=$HOME/.ssh/cm-%r@%h-%p -o ControlPersist=30}"
+
+remote_host="$(ssh $SSH_OPTS "$REMOTE" hostname 2>/dev/null || true)"
+if [ -z "$remote_host" ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source mirror-from-imac --kind skip --severity info \
+      reason=remote-unreachable remote="$REMOTE" 2>/dev/null || true
+  exit 0
+fi
+
+# dotfiles 는 두 기기 공용이라 이 잡이 아이맥에도 설치된다. 거기서 돌면 자기
+# 세션을 자기 미러 디렉터리로 복사하게 되므로 아무 의미가 없다.
+if [ "$remote_host" = "$(hostname)" ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source mirror-from-imac --kind skip --severity info \
+      reason=remote-is-self host="$remote_host" 2>/dev/null || true
+  exit 0
+fi
+
+mkdir -p "$MIRROR_ROOT"/{claude-projects,codex,codex-accounts}
+
+synced=0
+failed=0
+
+fetch() { # fetch <원격 경로> <로컬 하위 디렉터리> [extra rsync args...]
+  local src="$1" dst="$2"
+  shift 2
+  # ${@+"$@"} — launchd 기본 PATH 가 bash 3.2 를 잡을 때 빈 "$@" 가 터지는 것을 피한다.
+  if rsync -a --delete --delete-excluded -e "ssh $SSH_OPTS" ${@+"$@"} \
+       "$REMOTE:$src/" "$MIRROR_ROOT/$dst/" 2>/dev/null; then
+    synced=$((synced + 1))
+  else
+    failed=$((failed + 1))
+  fi
+}
+
+# 원천 경로를 하나씩 명시한다. 아이맥 홈 전체를 긁으면 거기 있는 ~/mirror/macbook/
+# (= 이 맥북의 세션 사본)까지 되돌아와 무한 증식한다.
+fetch '$HOME/.claude/projects' claude-projects
+
+# 패턴 앞의 '/' 는 전송 루트 기준 앵커다. 앵커가 없으면 sessions/ 가 아무 깊이에서나
+# 매치돼 ~/.codex/browser/sessions/ 같은 무관한 디렉터리까지 딸려온다.
+fetch '$HOME/.codex' codex --prune-empty-dirs \
+  --include='/sessions/***' --include='/archived_sessions/***' \
+  --include='*/' --exclude='*'
+fetch '$HOME/.codex-accounts' codex-accounts --prune-empty-dirs \
+  --include='/*/sessions/***' --include='/*/archived_sessions/***' \
+  --include='*/' --exclude='*'
+
+ops_event="$(command -v ops-event 2>/dev/null || true)"
+if [ -z "$ops_event" ]; then
+  ops_event="$HOME/.local/bin/ops-event"
+fi
+if [ -x "$ops_event" ]; then
+  sev=info
+  [ "$failed" -gt 0 ] && sev=low
+  "$ops_event" --source mirror-from-imac --kind run --severity "$sev" \
+    synced="$synced" failed="$failed" remote="$REMOTE" 2>/dev/null || true
+fi

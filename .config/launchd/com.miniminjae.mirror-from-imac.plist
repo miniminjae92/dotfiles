@@ -3,16 +3,16 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.miniminjae.mirror-to-imac</string>
+  <string>com.miniminjae.mirror-from-imac</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/miniminjae/.local/bin/mirror-to-imac</string>
+    <string>/Users/miniminjae/.local/bin/mirror-from-imac</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <!-- 1시간. 변경이 없어도 회당 2717개 파일을 대조하느라 4.5초가 든다.
-       5분 주기면 하루 288회(21.6분), 1시간이면 24회(1.8분)다.
-       즉시 필요하면 mirror-to-imac 을 직접 부르면 된다. -->
+       대시보드·세션 검색 모두 실시간성이 낮아 이 지연이 문제되지 않는다.
+       즉시 필요하면 mirror-from-imac 을 직접 부르면 된다. -->
   <key>StartInterval</key>
   <integer>3600</integer>
   <key>EnvironmentVariables</key>
@@ -21,8 +21,8 @@
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/miniminjae/.local/state/mirror-to-imac/mirror.log</string>
+  <string>/Users/miniminjae/.local/state/mirror-to-imac/from-imac.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/miniminjae/.local/state/mirror-to-imac/mirror.error.log</string>
+  <string>/Users/miniminjae/.local/state/mirror-to-imac/from-imac.error.log</string>
 </dict>
 </plist>
