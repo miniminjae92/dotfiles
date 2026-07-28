@@ -32,6 +32,7 @@ committed=0
 pushed=0
 skipped=0
 push_failed=0
+conflicted=0
 
 for vault in "${vaults[@]}"; do
   if ! git -C "$vault" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -49,6 +50,20 @@ for vault in "${vaults[@]}"; do
 
   if git -C "$vault" remote get-url origin >/dev/null 2>&1; then
     branch="$(git -C "$vault" symbolic-ref --quiet --short HEAD || echo HEAD)"
+
+    # 다른 기기(맥북↔아이맥)의 커밋을 먼저 당긴다. 이게 없으면 뒤처진 쪽의
+    # push 가 non-fast-forward 로 거부되고, 거부될수록 더 뒤처지는 교착에 빠진다.
+    # 충돌 시에는 반드시 abort 한다 — 무인 잡이 저장소를 rebase 중간 상태로
+    # 남기면 다음 실행까지 연쇄로 깨지고 볼트에 충돌 마커가 노출된다.
+    if git -C "$vault" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      if ! git -C "$vault" pull --rebase --quiet origin "$branch" 2>/dev/null; then
+        git -C "$vault" rebase --abort >/dev/null 2>&1 || true
+        printf 'agent-os-vault-snapshot: pull conflict, manual merge needed: %s\n' "$vault" >&2
+        conflicted=$((conflicted + 1))
+        continue
+      fi
+    fi
+
     if ! git -C "$vault" push --quiet origin "$branch"; then
       printf 'agent-os-vault-snapshot: push skipped (offline/auth): %s\n' "$vault" >&2
       push_failed=$((push_failed + 1))
@@ -68,7 +83,12 @@ if [ -x "$ops_event" ]; then
   if [ "$push_failed" -gt 0 ]; then
     sev=low
   fi
+  # 충돌은 사람이 풀어줄 때까지 그 볼트의 동기화가 멈춘다 — push 실패보다 위다.
+  if [ "$conflicted" -gt 0 ]; then
+    sev=medium
+  fi
   "$ops_event" --source vault-snapshot --kind run --severity "$sev" \
     committed="$committed" pushed="$pushed" skipped="$skipped" push_failed="$push_failed" \
+    conflicted="$conflicted" \
     2>/dev/null || true
 fi
