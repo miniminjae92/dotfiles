@@ -16,10 +16,6 @@
 - 수정 현황: `obsidian-vault` 1건 (자동 발동 봉인 — VENDOR.md에 사유 기록). 나머지 27종 무수정.
 - 플러그인 구독은 2026-07-25 해지 (이중 로드 방지).
 
-### 자작 워크플로 중 재설계 예정
-
-- 세션 아카이브 파이프라인 5종(`agents/codex/skills/`: archive-session, raw-extract, keyword-extract, structure-compose, source-refine) — **PostgreSQL 투영(계측 트랙) 구축 시 재설계.** 입력 전제가 "세션 원문"에서 "구조화된 투영"으로 바뀌므로 그 전에 손질하지 않는다(발행>배관).
-
 ## 표준 (예약 — 트리거 도달 시 등재)
 
 | 후보 | 트리거 |

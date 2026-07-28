@@ -211,8 +211,8 @@
 ## 7. 기존 자산 감사
 
 - [x] 전역 `.codex/AGENTS.md`를 안전·라우팅 규칙만 남도록 검토한다.
-- [x] `work` 스킬을 명시 호출형 Builder로 유지한다.
-- [x] `arc`와 아카이브 스킬은 고비용 수동 워크플로로만 유지한다.
+- [x] `work` 스킬을 명시 호출형 Builder로 유지한다. (2026-07-28: D-018로 삭제)
+- [x] `arc`와 아카이브 스킬은 고비용 수동 워크플로로만 유지한다. (2026-07-28: D-018로 삭제)
 - [x] `vault-ai-classify`와 자동 아카이브 체인을 기본 경로 제외 후보로 분류한다.
 - [x] 유지할 자산을 Worker·Reviewer·Builder 역할과 연결한다.
 - [x] 기존 자산을 위한 호환 기능을 추가하지 않는다.
@@ -228,7 +228,7 @@
 - [x] Obsidian Properties와 Bases를 구성한다.
 - [x] 볼트의 자동 쓰기 권한 범위를 `/Users/miniminjae/.obsidian/developer-os`로 설정한다.
 - [x] Architect 워크플로를 `developer-agent-os`에 구현한다.
-- [x] Builder 워크플로를 `developer-agent-os`와 `work`에 구현한다.
+- [x] Builder 워크플로를 `developer-agent-os`와 `work`에 구현한다. (2026-07-28: `work`는 D-018로 삭제)
 - [x] Tutor 워크플로를 완료 후 이해 확인 방식으로 구현한다.
 - [x] Maintainer 리뷰 워크플로와 결정적 기한 판정기를 구현한다.
 - [x] Reviewer를 고위험 조건부 읽기 전용 에이전트로 구현한다.

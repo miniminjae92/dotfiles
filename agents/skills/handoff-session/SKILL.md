@@ -24,7 +24,6 @@ This is not a full transcript archive. Prefer actionable continuity over complet
 Create or update:
 
 - `docs/conversation/handoff.md` when working inside a project repository
-- `.codex/work/HANDOFF.md` when the project already uses `.codex/work`
 - otherwise ask the user for a destination
 
 If the user provides a path, use that path.

@@ -32,8 +32,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
     * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
-    * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work.
-    * `.codex/skills/summarize-youtube-playlist` interactively collects a channel, playlist, named Codex account, browser profile, usage ceiling, and Slack preference before running the safe two-video gate and background playlist batch.
+    * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work. Large playlist/channel batches follow the batch procedure in the `vsummary` skill (two-video gate, detached LaunchAgent run, quota stop).
     * `bin/mdview` serves a directory of Markdown files as a local browsable site, reusing the Neovim `<leader>mp` preview stylesheet. `mdview .` opens a file tree plus a reader with adjustable font size, light/dark/auto theme, and content width, and reloads a document when its file changes.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
@@ -44,7 +43,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
 * **VSCode**: Configuration files to make VSCode feel more like Neovim.
 * **Agent CLI notifications**: Global Codex, `agy`, and Claude Code `Stop` hooks call `agent-notify`, so completion notifications do not depend on terminal or tmux focus. Claude Code additionally reports `Notification` events (permission prompts, idle waits) as attention-level alerts through the same pipeline. `alerter` provides actionable alerts and click-to-focus navigation to the recorded tmux window and pane. Local presentation and Slack delivery are independent policies, and unacknowledged events can use delayed Slack fallback. Prompts, responses, model names, and detailed errors are excluded from notification state.
-* **Shared agent instructions**: `agents/AGENTS.md` is the provider-neutral instruction core (hard cap 50 lines; conditional workflows live in skills). Codex reads it via the `~/.codex/AGENTS.md` symlink and Gemini/agy via `~/.gemini/GEMINI.md`. AGY stores its OAuth session in one macOS Keychain item; use `agy` directly. `agents/routing.json` declares model and account routing as logical roles (planner/worker/reviewer/mechanical); it is a human-facing registry checked for drift by tooling, not an automatic router. `agents/skills/` holds provider-neutral skills (`work`, `developer-agent-os`, `handoff-session`) linked into both `~/.codex/skills/` and `~/.claude/skills/`, while Codex-specific skills stay under `.codex/skills/`. `handoff-session` writes the compact continuation note that carries work context across sessions, providers, and machines.
+* **Shared agent instructions**: `agents/AGENTS.md` is the provider-neutral instruction core (hard cap 50 lines; conditional workflows live in skills). Codex reads it via the `~/.codex/AGENTS.md` symlink and Gemini/agy via `~/.gemini/GEMINI.md`. AGY stores its OAuth session in one macOS Keychain item; use `agy` directly. `agents/routing.json` declares model and account routing as logical roles (planner/worker/reviewer/mechanical); it is a human-facing registry checked for drift by tooling, not an automatic router. `agents/skills/` holds provider-neutral skills (`developer-agent-os`, `handoff-session`, the vendored Matt Pocock engineering chain) linked into both `~/.codex/skills/` and `~/.claude/skills/`, while Codex-specific skills stay under `agents/codex/skills/`. `handoff-session` writes the compact continuation note that carries work context across sessions, providers, and machines.
 * **Claude Code**: `claude/CLAUDE.md` is linked to `~/.claude/CLAUDE.md` and imports the shared agent instructions with an `@` import, keeping a thin Claude-specific section (model routing defaults) below the neutral core. Managed settings (`claude/settings-fragment.json`: hooks and the status line) are merged into the machine-local `~/.claude/settings.json` by `install.sh` because Claude Code rewrites that file at runtime; only missing keys and hook events are added, and existing entries are never overwritten. The status line (`bin/claude-statusline`) shows directory, model, and context-window usage as an always-on gauge for judging handoff timing, and a `PreCompact` hook raises an attention alert when auto-compaction is imminent — the signal that a handoff point was missed.
 * **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The local sandbox policy uses `workspace-write` with broad personal work roots (`~/.dotfiles`, `~/.obsidian`, `~/projects`, common document folders, and the iCloud Obsidian vault) plus `on-request` approval for protected or exceptional paths, so normal work proceeds without exposing the entire home directory. The global Agent OS hook source lives at `agent-os/hooks.json` so it is not loaded again as a project-local hook while working in this repository.
 
@@ -105,15 +104,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
     Codex helper commands become available after opening a new shell:
     ```bash
-    work "implement the requested change"
-    work
-    arc
     agent-os-usage               # 현재 Codex 세션(정확한 thread id)
     agent-os-usage --latest      # 명시적으로 가장 최근 캡처
-    arc 019e4830
-    arc docs/conversation/2026-05-21-agent-session.md
     ```
-    `arc` without an argument exports the latest Codex session from `~/.codex/sessions` into `docs/conversation/YYYY-MM-DD-agent-session.md`, then runs the archive workflow. Pass a resume code or session id fragment to archive a specific session.
     `agent-os-usage` reports the current Codex thread only when `CODEX_THREAD_ID` matches captured events.
     It never substitutes another provider/session; use `--latest` only when that fallback is intentional.
     Claude usage is reported unavailable until its Stop hook emits the same usage schema.
@@ -392,7 +385,7 @@ every route. `--host` opts out of the loopback binding and prints an exposure wa
 
 ### YouTube Video Summaries
 
-In a Codex session, invoke `$summarize-youtube-playlist` to be prompted for the missing channel, playlist, account, browser profile, usage stop threshold, and Slack preference instead of assembling the flags manually.
+In an agent session, invoke the `vsummary` skill (`/vsummary` in Claude, `$vsummary` in Codex) instead of assembling the flags manually. Its batch procedure covers playlist-name resolution, the account/auth gate, the two-video gate, and the detached LaunchAgent run for large playlists.
 
 `video-summary` uses `yt-dlp` for subtitles. It auto-detects the video's original spoken language and prefers that track (the untranslated `-orig` ASR) over YouTube's machine-translated captions, so an English video yields English and a Korean video yields Korean — no accidental auto-translation. Force a specific order with `--sub-langs en,ko`. By default it saves the full timestamped transcript (`type: video-transcript`, `has_transcript: true`) with no model call, preserving the raw material for later cross-video insight work. Check the transcript size without spending model tokens:
 

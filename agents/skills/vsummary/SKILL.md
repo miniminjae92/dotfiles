@@ -81,6 +81,62 @@ video-summary '<채널 URL>' --discover-channel-members \
 - 완료/주의 결과를 Slack으로 받으려면 `--notify-slack`.
 - **배치는 전사만 저장하고 자동 비판 평가는 하지 않는다** (토큰 폭발 방지). 특정 영상 평가는 요청 시에만.
 
+## 대형 배치 — 세션에서 분리해 돌린다 (구 summarize-youtube-playlist 흡수, D-018)
+
+수십 편 이상 재생목록·채널 배치는 대화 세션에서 폴링하지 않는다. 순서대로:
+
+1. **동시 배치 확인** — 기존 배치가 돌고 있으면 새로 시작하지 않고 상태·로그 위치만 보고한다.
+   우선순위를 바꾸려면 기존 작업 중단이 필요함을 설명하고 승인 후에만 중단한다.
+
+   ```bash
+   launchctl print "gui/$(id -u)" | rg 'video-summary-'
+   ```
+
+2. **재생목록 이름 → URL 해석** — 이름만 받으면 회원 인벤토리에서 찾는다. 정확 일치 우선,
+   후보가 여럿이면 제시 후 선택 요청, 없으면 URL을 요청한다. 전수 재탐색(`--refresh-inventory`)은
+   명시 요청 시에만.
+
+   ```bash
+   inventory="${VIDEO_SUMMARY_DIR:-$HOME/.obsidian/yggdrasil/3-stash/video-summaries}/Playlists/.member-inventory.json"
+   jq -r '.videos[].playlists[]? | [.title, .url] | @tsv' "$inventory" | sort -u
+   ```
+
+3. **요약 배치라면 계정·인증 게이트** — `--summarize` 배치는 Codex 쿼터를 쓴다. 계정 래퍼
+   (`gcodex`/`ncodex`)를 추정하지 말고 반드시 받고, plain `codex`로 대체하지 않는다.
+   `<account> usage`로 마스킹 이메일·사용량을 확인하고, 최소 호출로 실인증을 검증한다 —
+   `AUTH_OK`가 아니면 시작하지 않는다. **전사만 하는 배치는 모델 호출이 0이므로 이 게이트가 필요 없다.**
+
+   ```bash
+   <account> exec --ephemeral --sandbox read-only \
+     -c 'model_reasoning_effort="low"' --json 'Reply with exactly: AUTH_OK'
+   ```
+
+4. **2편 게이트** — 전체 실행 전에 같은 플래그 + `--max-videos 2 --dry-run`으로 범위를 확인하고,
+   성공하면 `--dry-run`만 빼고 실제 2편을 돌린다. 실패 0건·노트 2개(또는 유효 캐시)·인덱스 생성을
+   확인한 뒤에만 전체 배치로 간다. 한 편이라도 실패하면 원인과 복구 명령을 보고하고 멈춘다.
+
+5. **LaunchAgent 분리 실행** — 전체 배치는 macOS 사용자 LaunchAgent로 세션과 독립 실행한다.
+   로그는 `~/.local/state/video-summary/` 아래. `SAFE_ID`는 재생목록 ID의 영숫자·하이픈·밑줄만.
+
+   ```bash
+   launchctl submit -l "com.miniminjae.video-summary-playlist.<SAFE_ID>" \
+     -o "<LOG_PATH>" -e "<LOG_PATH>" \
+     -- /usr/bin/env 'PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin' \
+     "$HOME/.local/bin/video-summary" '<PLAYLIST_URL>' --channel \
+     --cookies-from-browser '<BROWSER_PROFILE>' --notify-slack
+     # 회원 전용이면 --members-only 추가.
+     # 요약 배치면 --summarize --codex-command "$HOME/.local/bin/<ACCOUNT>" --stop-at-used-percent 75 추가.
+     #   (--stop-at-used-percent는 <ACCOUNT>의 usage 조회를 쓰므로 계정 래퍼 없이 붙이면 시작 즉시 실패한다)
+   launchctl kickstart "gui/$(id -u)/com.miniminjae.video-summary-playlist.<SAFE_ID>"
+   ```
+
+   시작 직후 한 번만 확인한다: state=running, 로그에 첫 항목, 즉시 인증 오류 없음.
+   이후에는 세션에서 주기 확인하지 않는다 — 완료·오류·쿼터 중단은 Slack과 로그로 안다.
+
+배치 안전 규칙: 쿠키 파일·인증 토큰을 내보내거나 출력하지 않는다. 실행 중 LaunchAgent·auth·기존
+노트·인벤토리를 자동 삭제하지 않는다. `--force`는 사용자가 명시한 경우에만. 요약 배치는
+`--stop-at-used-percent` 없이 돌리지 않는다. `--members-only` 추가/제거는 범위 변경이므로 먼저 알린다.
+
 ## 마무리
 
 - 단일 영상: 저장 경로를 보고한 뒤, 위 형식대로 비판적 평가를 이어서 내놓는다.

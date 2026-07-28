@@ -58,10 +58,14 @@ description: "Run a full product improvement loop when the user wants to overhau
 
 ## 기존 스킬 연결
 
-- Grill에서는 `grilling`을 사용하고, 합의된 도메인어가 바뀔 때만 `domain-modeling`을 함께 사용한다.
+매트 엔지니어링 체인(grill→spec→tickets→implement)은 연속 실행하지 않는다. 4~5단계와 10~11단계에 나눠 꽂고, 사이의 6~9단계 게이트를 건너뛰지 않는다 (D-018).
+
+- Grill에서는 `grill-with-docs`를 사용한다(`grilling` 인터뷰 + 도메인어가 바뀌면 `domain-modeling`이 repo `CONTEXT.md`·`docs/adr/`에 기록).
+- PRD에서는 `to-spec`으로 스펙을 합성한다. PRD 정본은 to-spec 산출물 하나이며 `LOOP.md`에는 링크만 남긴다.
 - Wireframe과 Prototype test에서는 답하려는 질문이 명확할 때 `prototype`을 사용한다.
 - UI design에서는 저장된 취향 근거가 필요하면 `dref-consult`를 사용한다.
-- 구현에서는 승인된 PRD와 Issues를 입력으로 저장소의 구현 스킬을 사용한다. 사용자가 `$work`를 명시하면 전체 코딩 워크플로를 따른다.
+- Issues에서는 `to-tickets`로 수직 슬라이스 티켓을 만든다. 외부 트래커 게시는 게이트대로 사용자 승인 뒤에만 한다.
+- 구현에서는 승인된 PRD와 Issues를 입력으로 `implement`를 사용한다.
 - 구현 검토는 고정점과 PRD가 있을 때 `code-review`를 사용한다.
 
 연결된 스킬의 산출물을 `LOOP.md`에서 링크한다. 같은 내용을 여러 문서에 복사하지 않는다.
