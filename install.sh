@@ -162,10 +162,17 @@ if [ "$(uname -s)" = "Darwin" ]; then
   link_file \
     "$DOTFILES_DIR/.config/launchd/com.miniminjae.simulator-reaper.plist" \
     "$simulator_reaper_plist"
+  # 원천 미러링(맥북 → 아이맥). 두 기기 공용이라 아이맥에도 설치되지만,
+  # 스크립트가 원격=자기자신을 감지해 no-op 으로 끝낸다.
+  mirror_imac_plist="$HOME/Library/LaunchAgents/com.miniminjae.mirror-to-imac.plist"
+  link_file \
+    "$DOTFILES_DIR/.config/launchd/com.miniminjae.mirror-to-imac.plist" \
+    "$mirror_imac_plist"
   mkdir -p \
     "$HOME/.local/state/agent-notify" \
     "$HOME/.local/state/agent-os" \
     "$HOME/.local/state/codex-account-usage" \
+    "$HOME/.local/state/mirror-to-imac" \
     "$HOME/.local/state/ops" \
     "$HOME/.local/state/personal-ops" \
     "$HOME/.local/state/session-harvest" \
@@ -191,6 +198,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$ops_digest_plist"
   launchctl bootout "gui/$(id -u)/com.miniminjae.simulator-reaper" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$(id -u)" "$simulator_reaper_plist"
+  launchctl bootout "gui/$(id -u)/com.miniminjae.mirror-to-imac" >/dev/null 2>&1 || true
+  launchctl bootstrap "gui/$(id -u)" "$mirror_imac_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.

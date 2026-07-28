@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 맥북의 에이전트 원천(세션 로그·운영 상태)을 아이맥으로 단방향 미러링한다.
+# agentos-monitor를 아이맥에서 24시간 돌리려면 원천이 거기 있어야 하는데,
+# 세션 로그는 작업한 머신에만 쌓이기 때문이다. (docs/imac-migration.md Phase 1)
+#
+# 계약:
+#   - 방향은 맥북 → 아이맥 단방향. 아이맥 미러는 언제든 재생성 가능한 사본이다.
+#     --delete 를 쓰는 이유이기도 하다 — 미러를 백업으로 착각하면 안 된다.
+#   - 인증 파일은 절대 보내지 않는다. codex 홈에서 sessions/archived_sessions 만 고른다.
+#   - 볼트(mimir·yggdrasil)는 이 잡의 대상이 아니다. git 으로 이미 동기화된다
+#     (agent-os-vault-snapshot). 중복 트랙을 만들지 말 것.
+#   - best-effort: 아이맥이 꺼져 있거나 네트워크가 없으면 조용히 종료한다.
+export GIT_TERMINAL_PROMPT=0
+
+REMOTE="${MIRROR_REMOTE:-imac}"
+MIRROR_ROOT="${MIRROR_ROOT:-\$HOME/mirror/macbook}"  # 원격에서 전개될 문자열
+SSH_OPTS="${MIRROR_SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10}"
+
+# 경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값(fallback 시 이벤트)
+paths_file="${DOTFILES_DIR:-$HOME/.dotfiles}/agent-os/paths.env"
+paths_fallback=0
+read_contract() {
+  grep -m1 "^$1=" "$paths_file" 2>/dev/null | cut -d= -f2- || true
+}
+claude_home="$(read_contract CLAUDE_SESSION_HOME)"
+codex_home="$(read_contract CODEX_DEFAULT_HOME)"
+codex_accounts="$(read_contract CODEX_ACCOUNTS_HOME)"
+if [ -z "$claude_home" ] || [ -z "$codex_home" ] || [ -z "$codex_accounts" ]; then
+  paths_fallback=1
+  claude_home="${claude_home:-\$HOME/.claude/projects}"
+  codex_home="${codex_home:-\$HOME/.codex}"
+  codex_accounts="${codex_accounts:-\$HOME/.codex-accounts}"
+fi
+CLAUDE_SRC="${claude_home/\$HOME/$HOME}"
+CODEX_SRC="${codex_home/\$HOME/$HOME}"
+CODEX_ACCOUNTS_SRC="${codex_accounts/\$HOME/$HOME}"
+
+if [ "$paths_fallback" = 1 ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source mirror-to-imac --kind error --severity low \
+      reason=paths-contract-fallback 2>/dev/null || true
+fi
+
+# 아이맥이 안 깨어 있으면 이번 회차는 건너뛴다. 실패가 아니라 정상 경로다.
+remote_host="$(ssh $SSH_OPTS "$REMOTE" hostname 2>/dev/null || true)"
+if [ -z "$remote_host" ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source mirror-to-imac --kind skip --severity info \
+      reason=remote-unreachable remote="$REMOTE" 2>/dev/null || true
+  exit 0
+fi
+
+# dotfiles 는 두 기기 공용이라 이 잡이 아이맥에도 설치된다. 거기서 돌면 자기 자신에게
+# 미러링하면서 --delete 로 원천을 훼손할 수 있다. 설치 조건 분기 대신 스크립트가
+# 직접 막는다 — 어느 기기에 설치되든 안전하도록.
+if [ "$remote_host" = "$(hostname)" ]; then
+  command -v ops-event >/dev/null 2>&1 &&
+    ops-event --source mirror-to-imac --kind skip --severity info \
+      reason=remote-is-self host="$remote_host" 2>/dev/null || true
+  exit 0
+fi
+
+ssh $SSH_OPTS "$REMOTE" "mkdir -p $MIRROR_ROOT/{claude-projects,codex,codex-accounts,state}" 2>/dev/null || true
+
+synced=0
+failed=0
+
+mirror() { # mirror <src-dir> <remote-subpath> [extra rsync args...]
+  local src="$1" dst="$2"
+  shift 2
+  [ -d "$src" ] || return 0
+  # ${@+"$@"} — launchd 기본 PATH가 bash 3.2를 잡을 때 빈 "$@" 가 set -u 에서 터지는 것을 피한다.
+  if rsync -a --delete -e "ssh $SSH_OPTS" ${@+"$@"} "$src/" "$REMOTE:$MIRROR_ROOT/$dst/" 2>/dev/null; then
+    synced=$((synced + 1))
+  else
+    failed=$((failed + 1))
+  fi
+}
+
+# Claude 세션 — 디렉터리 전체가 세션 jsonl 이라 통째로 보낸다.
+mirror "$CLAUDE_SRC" claude-projects
+
+# Codex — 홈에는 auth.json·config.toml 이 함께 있다. 세션 디렉터리만 고른다.
+# --prune-empty-dirs 로 계정 홈의 빈 껍데기가 남지 않게 한다.
+codex_filter=(--prune-empty-dirs --include='*/' --include='sessions/***'
+              --include='archived_sessions/***' --exclude='*')
+mirror "$CODEX_SRC" codex "${codex_filter[@]}"
+mirror "$CODEX_ACCOUNTS_SRC" codex-accounts "${codex_filter[@]}"
+
+# 운영 상태 — 대시보드가 읽는 집계 원천.
+mirror "$HOME/.local/state/ops/events" state/ops/events
+mirror "$HOME/.local/state/codex-account-usage" state/codex-account-usage
+mirror "$HOME/.cache/claude-statusline" state/claude-statusline
+
+# 구조화 이벤트 1줄 (ops-digest 수집용). 텔레메트리 실패가 잡을 깨뜨리면 안 됨.
+ops_event="$(command -v ops-event 2>/dev/null || true)"
+if [ -z "$ops_event" ]; then
+  ops_event="$HOME/.local/bin/ops-event"
+fi
+if [ -x "$ops_event" ]; then
+  sev=info
+  [ "$failed" -gt 0 ] && sev=low
+  "$ops_event" --source mirror-to-imac --kind run --severity "$sev" \
+    synced="$synced" failed="$failed" remote="$REMOTE" 2>/dev/null || true
+fi
