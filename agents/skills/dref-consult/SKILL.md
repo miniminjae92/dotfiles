@@ -1,17 +1,17 @@
 ---
 name: dref-consult
-description: "Use when the user asks a design question that should draw on their personal reference library — e.g. '다크모드 대시보드 레퍼런스 보여줘', '가격표 섹션 어떻게 잡을까', 'dref에서 …찾아줘', or any UI/visual design consultation. Searches ~/projects/my/dref/library (markdown + screenshots) and answers grounded in saved references."
+description: "Use when the user asks a design question that should draw on their personal reference library — e.g. '다크모드 대시보드 레퍼런스 보여줘', '가격표 섹션 어떻게 잡을까', 'dref에서 …찾아줘', or any UI/visual design consultation. Searches ~/projects/dref/library (markdown + screenshots) and answers grounded in saved references."
 ---
 
 # dref-consult
 
 사용자의 개인 디자인 레퍼런스 라이브러리를 근거로 디자인 질문에 답한다.
-라이브러리 = `~/projects/my/dref/library/items/**/item.md` (frontmatter: type/tags + 본문 "왜 좋은가").
+라이브러리 = `~/projects/dref/library/items/**/item.md` (frontmatter: type/tags + 본문 "왜 좋은가").
 
 ## 절차
 
 1. **검색** — 두 경로 중 편한 쪽(둘 다 가능):
-   - 파일: `rg -il '<키워드>' ~/projects/my/dref/library/items --glob 'item.md'`
+   - 파일: `rg -il '<키워드>' ~/projects/dref/library/items --glob 'item.md'`
      축/태그 필터: `rg -l 'type: dashboard' …`
    - FTS API: `curl -s 'http://127.0.0.1:4180/api/items?q=<검색어>&type=<축>&status=approved'`
 2. **읽기** — 맞는 아이템의 `item.md`를 Read. 시각 판단이 필요하면 같은 디렉터리의 `shot.jpg`도 Read(이미지 지원).

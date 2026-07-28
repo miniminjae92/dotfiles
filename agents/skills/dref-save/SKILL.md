@@ -5,7 +5,7 @@ description: "Use when the user asks to save a URL/design reference to dref duri
 
 # dref-save
 
-디자인 레퍼런스를 로컬 dref 라이브러리(`~/projects/my/dref/library`)에 저장한다.
+디자인 레퍼런스를 로컬 dref 라이브러리(`~/projects/dref/library`)에 저장한다.
 
 ## 절차
 
