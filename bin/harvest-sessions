@@ -27,8 +27,51 @@ def emit_ops_event(source, kind, severity="info", **fields):
         pass
 
 
-CODEX = os.path.expanduser("~/.codex/sessions")
-CLAUDE = os.path.expanduser("~/.claude/projects")
+def contract(key, default):
+    """경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값."""
+    env = os.environ.get(f"HARVEST_{key}")
+    if env:
+        return os.path.expanduser(env)
+    paths_file = os.environ.get("AGENT_OS_PATHS") or os.path.expanduser(
+        "~/.dotfiles/agent-os/paths.env")
+    try:
+        with open(paths_file, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    return line.split("=", 1)[1].replace("$HOME", str(HOME))
+    except OSError:
+        pass
+    return os.path.expanduser(default)
+
+
+def session_globs():
+    """수집 대상 (소스, glob) 목록.
+
+    계정 격리 홈(~/.codex-accounts/*/sessions)을 포함한다 — gcodex/ncodex 로 만든
+    세션이 여기 쌓이는데 종전에는 통째로 누락돼 있었다.
+
+    아이맥에는 맥북 원천이 ~/mirror/macbook/ 으로 미러링돼 있다(mirror-to-imac).
+    존재하면 자동으로 포함하므로 기기별 설정 분기가 필요 없다 — 미러가 있는 기기
+    한 대만 잡을 돌리면 두 기기의 세션을 모두 수확한다.
+    """
+    claude = contract("CLAUDE_SESSION_HOME", "~/.claude/projects")
+    codex = contract("CODEX_DEFAULT_HOME", "~/.codex")
+    accounts = contract("CODEX_ACCOUNTS_HOME", "~/.codex-accounts")
+    pairs = [
+        ("claude", f"{claude}/*/*.jsonl"),
+        ("codex", f"{codex}/sessions/*/*/*/*.jsonl"),
+        ("codex", f"{accounts}/*/sessions/*/*/*/*.jsonl"),
+    ]
+    mirror = os.path.expanduser(
+        os.environ.get("HARVEST_MIRROR_ROOT", "~/mirror/macbook"))
+    if os.path.isdir(mirror):
+        pairs += [
+            ("claude", f"{mirror}/claude-projects/*/*.jsonl"),
+            ("codex", f"{mirror}/codex/sessions/*/*/*/*.jsonl"),
+            ("codex", f"{mirror}/codex-accounts/*/sessions/*/*/*/*.jsonl"),
+        ]
+    return pairs
 NOISE = re.compile(r"local-command|command-name|stdout|caveat|system-reminder|<antml|tool_use_id|permissions instructions", re.I)
 
 
@@ -117,15 +160,19 @@ def main():
     since_ts = since.timestamp()
 
     os.makedirs(args.out, exist_ok=True)
-    files = glob.glob(f"{CODEX}/*/*/*/*.jsonl") + glob.glob(f"{CLAUDE}/*/*.jsonl")
-    files = [f for f in files if "/subagents/" not in f and os.path.getmtime(f) >= since_ts]
+    # 소스 판정은 경로 문자열이 아니라 어느 glob 에서 왔는지로 한다 — 미러 경로에는
+    # "/.codex/" 같은 표식이 없어 경로 매칭은 오분류를 낸다.
+    files = []
+    for source, pattern in session_globs():
+        files.extend((source, f) for f in glob.glob(pattern))
+    files = [(s, f) for s, f in files
+             if "/subagents/" not in f and os.path.getmtime(f) >= since_ts]
 
     tot_msg = tot_char = written = 0
-    for f in sorted(files):
+    for src, f in sorted(files, key=lambda pair: pair[1]):
         users = extract(f)
         if not users:
             continue
-        src = "codex" if "/.codex/" in f else "claude"
         body = "\n\n".join(f"- {u}" for u in users)
         tot_msg += len(users)
         tot_char += len(body)
