@@ -16,7 +16,9 @@ export GIT_TERMINAL_PROMPT=0
 
 REMOTE="${MIRROR_REMOTE:-imac}"
 MIRROR_ROOT="${MIRROR_ROOT:-\$HOME/mirror/macbook}"  # 원격에서 전개될 문자열
-SSH_OPTS="${MIRROR_SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10}"
+# ControlMaster 로 SSH 연결을 재사용한다. rsync 를 여러 번 부르는데 매번 새 연결을
+# 열면 변경이 없어도 회당 8초가 든다 — 연결 수립이 비용의 대부분이다.
+SSH_OPTS="${MIRROR_SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o ControlMaster=auto -o ControlPath=$HOME/.ssh/cm-%r@%h-%p -o ControlPersist=30}"
 
 # 경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값(fallback 시 이벤트)
 paths_file="${DOTFILES_DIR:-$HOME/.dotfiles}/agent-os/paths.env"
