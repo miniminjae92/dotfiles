@@ -32,7 +32,7 @@
 | `codex-account` | 글루 | codex 계정 프로필 선택 실행 래퍼 |
 | `codex-account-login` | 글루 | codex 계정 로그인 헬퍼 |
 | `codex-account-usage` | 제품 | codex 계정별 사용량 조회 (launchd) |
-| `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 |
+| `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 (은퇴 예정 — D-019, `asx export` 구현 시 삭제) |
 | `dotfiles-doctor` | 배관 | dotfiles·에이전트 환경 read-only 헬스체크 |
 | `gcodex` | 글루 | google 계정 codex 래퍼 |
 | `git-ai-commit` | 제품 | AI 커밋 계획 수립·검증·적용 |

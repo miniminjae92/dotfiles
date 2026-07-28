@@ -5,7 +5,7 @@
 | Asset | Role | Constraint |
 | --- | --- | --- |
 | `.codex/AGENTS.md` | global safety and routing | keep concise; no project-specific workflow |
-| `codex-session-export` | manual raw-session export | use only when a durable archive is explicitly needed |
+| `codex-session-export` | manual raw-session export | use only when a durable archive is explicitly needed; retirement pending (D-019) |
 | `fast_worker` | bounded low-cost delegation | use only when handoff saves net context |
 | `critical_reviewer` | independent high-risk review | read-only and conditional |
 

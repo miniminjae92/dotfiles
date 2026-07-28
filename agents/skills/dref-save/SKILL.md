@@ -16,8 +16,11 @@ description: "Use when the user asks to save a URL/design reference to dref duri
 2. 저장:
    ```sh
    curl -sX POST http://127.0.0.1:4180/api/items -H 'content-type: application/json' \
-     -d '{"url":"<URL>","title":"<제목>","type":"<type>","tags":["…"],"note":"<왜 좋은가>","source":"claude-session"}'
+     -d '{"url":"<URL>","title":"<제목>","type":"<type>","tags":["…"],"note":"<왜 좋은가>","source":"claude-session","user_verdict":"saved"}'
    ```
+   `user_verdict:"saved"` = 사용자가 직접 고른 자료라는 표시(직접 저장 탭에 들어감). 서버도
+   `claude-session`이면 saved를 기본값으로 주지만 명시가 정본. **사용자 지시 없이 에이전트
+   판단으로 저장할 때는 `source:"agent-session"`을 쓰고 user_verdict를 생략**(미검토 후보로 들어감).
 3. 응답 처리:
    - `201 {"id": …}` → 저장됨. 스크린샷은 서버가 배경에서 캡처한다고 알린다.
    - `409 duplicate url` → 이미 있음. `curl -s 'http://127.0.0.1:4180/api/items?q=<검색어>'`로 기존 아이템을 찾아 보여준다.
