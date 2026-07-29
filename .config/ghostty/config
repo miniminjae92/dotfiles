@@ -18,3 +18,6 @@
 
 # --- Ergonomics (uncomment if wanted) ---
 # macos-option-as-alt = true
+
+# Keep Ghostty SSH sessions compatible with hosts lacking xterm-ghostty terminfo.
+shell-integration-features = cursor,no-sudo,title,ssh-env,no-ssh-terminfo,path
