@@ -2,68 +2,62 @@
 
 ## Context
 
-- Date: 2026-07-25
-- Repository: ~/.dotfiles
-- Branch: main (origin 동기화: `fe6a589..26d4251` push 완료)
-- User goal: 에이전트 자산 구조 재편(grilling 방식 합의) + 매트 포컷 스킬 전량 벤더링 — **이번 세션에서 실행·검증까지 완료**. 다음 세션은 후속 관찰과 잔여 트랙.
+- Date: 2026-07-29
+- Repository: `/Users/miniminjae/.dotfiles`
+- Branch: `main`
+- User goal: iMac의 일반 대화형 판단 요청용 `agent-notify` 실험을 철회하고, 실행 요소는 롤백한 뒤 실패 기록만 남긴다.
 
 ## Current State
 
-- 완료 (커밋 8건):
-  - 구조 재편: 최상위 20+→13개. `agents/`=설비 세팅값(전부 홈 설치), `agent-os/`=운전 일지·계측 규격서(홈 링크 0). 공급자 어댑터 `agents/{claude,codex,gemini}/`, 어댑터 내부는 공급자 홈 미러
-  - 매트 스킬 27종 신규 벤더(+기존 teach=active 28종), 스킬별 `VENDOR.md`. `mattpocock-skills` 플러그인은 **disable**(uninstall 아님 — `claude plugin enable`로 복귀 가능)
-  - 문서: 루트 `CONTEXT.md`(용어 정본), README "Repository Layout" 절, D-014, `agent-os/upstreams.md`
-  - 정리: scripts/ 해체(cleanclip→bin), test.md·은퇴 스크립트→yggdrasil 3-stash 보관 후 삭제, agy.old 154MB·docker-pb*·c_formatter_42 제거, nvim.log 삭제+ignore
-- 의도적으로 안 한 것:
-  - **다른 세션 WIP 2건 미커밋 보존**: `.config/nvim/assets/markdown-reader.css`, `docs/conversation/2026-07-23-neovim-markdown-reader-handoff.md` — 되돌리지 말 것
-  - 아카이브 파이프라인 5종(`agents/codex/skills/`) 무수정 동결 — PostgreSQL 투영 구축 시 재설계(upstreams.md 명기)
-  - doctor의 은퇴 launchd 검사(personal-ops-weekly WARN) 제거 — 다음에 doctor 손댈 때
-- 가정: 벤더 스킬 완전 로드는 새 세션부터 (이번 세션 중 부분 로드는 실증됨, obsidian-vault 봉인 작동도 확인)
+- `agent-notify decision` 실험은 실사용 알림이 도착하지 않아 실패로 판정하고 롤백했다.
+- 제거 완료:
+  - `agents/AGENTS.md`의 판단 질문 전 알림 호출 규칙
+  - `bin/agent-notify`의 `decision` 명령
+  - Codex execpolicy 정본과 `~/.codex/rules/agent-notify.rules` 심볼릭 링크
+  - `install.sh`, `dotfiles-doctor`, 단위 테스트, README의 실험 연결
+- 유지:
+  - 기존 `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` 정상 링크
+  - 기존 완료·CLI 권한 요청 알림과 `agent-notify` sweep
+  - D-016, D-017에 따른 기존 알림 자원 상한·회수 정책
+- 실험 이벤트 파일의 `alerter_pid`는 모두 `null`이며, 프로세스 목록에도 `agent-notify`·`alerter`·알림용 `osascript`가 남아 있지 않았다. iMac의 메뉴 막대 LaunchAgent는 설치돼 있지 않다.
+- sweep LaunchAgent는 매분 짧게 실행하고 종료하는 기존 작업이며 확인 시점 상태는 `not running`, 마지막 종료 코드는 0이었다.
+- 커밋과 push는 하지 않았다.
 
-## Key Decisions
+## Decisions (cite, do not restate)
 
-- Decision: 의미 규칙(agents=설비 세팅값/agent-os=운전 일지) + 홈 링크 0 불변식 + 2단 규약(결정→승격) + 축 A.
-  Reason: 공급자는 부패 자원이라 기능 축+어댑터만 미래 변경(교체·신유형·중립화)을 흡수. 전문: `agent-os/DECISIONS.md` D-014.
-- Decision: 벤더링은 단일 skills/ + 스킬별 VENDOR.md (frontmatter 기입·폴더 분리 금지), 갱신은 수동 diff.
-  Reason: 스킬 파일을 upstream과 바이트 동일하게 유지해 갱신 diff를 깨끗하게. 수정 1건뿐: obsidian-vault 자동 발동 봉인(매트 볼트 규약 하드코딩).
-- Decision: Codex 스킬 감사는 계측 트랙의 '자산 활용'(스킬 호출 분포) 측정 가동 후 데이터 기반으로.
-  Reason: 측정 문법(질문→지표→결정)의 첫 실전 사례로 삼기 위해. 태스크 백로그 등록됨.
+- 확정: `D-016`, `D-017` — 기존 `agent-notify` 자원 회수와 관제 정책.
+- 철회: `일반 대화형 판단 요청용 agent-notify decision + Codex execpolicy` — 실사용 전달 실패와 불필요한 복잡성 때문에 D-번호로 승격하지 않고 제거했다.
 
 ## Files To Read First
 
-- `CONTEXT.md`: 이 레포 용어 정본 (설비 세팅값, 어댑터, 벤더링, 불변식…)
-- `agent-os/DECISIONS.md`: D-014 (재검토 조건 포함)
-- `agent-os/upstreams.md`: 벤더 현황·갱신법·재설계 예약
-- `README.md` "Repository Layout" 절: 폴더→역할→설치 지도
+- `/Users/miniminjae/.obsidian/mimir/40 Reviews/Runs/2026-07-29-agent-notify-decision-alert-rollback.md`
+- `/Users/miniminjae/.obsidian/mimir/40 Reviews/Runs/2026-07-29-agent-notify-decision-approval-loop-fix.md`
+- `agent-os/DECISIONS.md`의 D-016, D-017
 
 ## Work In Progress
 
-- Changed files: 위 다른 세션 WIP 2건만 (이 세션 산출물 아님)
-- Untracked files: 없음
-- Known dirty state that should not be reverted: 그 2건
+- 저장소 실행 코드와 설정은 실험 전 상태로 복구됐다.
+- 남은 저장소 변경은 문서뿐이다:
+  - `README.md`: 이미 존재하는 Codex 훅 정본과 `PermissionRequest` 동작을 정확히 반영
+  - `docs/conversation/handoff.md`: 실패·롤백 기록
+- 저장소 밖에는 세 Run과 사용자 friction 기록이 남는다.
 
 ## Verification
 
-- Command: `dotfiles-doctor`
-  Result: 40 pass / 3 warn / 0 fail — D-014 불변식 검사 신설 후 첫 통과. warn 3은 기존 항목(ollama 선택 설치, personal-ops-weekly 은퇴 잔재, D-012 하드코딩 6파일)
-- Command: `python3 -m unittest discover -s tests`
-  Result: 123 tests OK (경로 갱신 후 — 갱신 전 test_lazygit_ai_commit 1건 실패했다가 수정)
-- Command: `./install.sh` 재실행 + `find -L … -type l`(깨진 링크 탐색)
-  Result: 링크 재생성 완료, 깨진 링크 0, Claude 스킬 36·Codex 42
-- Command: `git push origin main`
-  Result: `fe6a589..26d4251` 성공
+- `agents/AGENTS.md`, `bin/agent-notify`, `bin/dotfiles-doctor`, `install.sh`, `tests/test_agent_notify.py`는 HEAD와 동일하다.
+- `~/.codex/rules/agent-notify.rules`와 저장소의 `agents/codex/rules/`는 제거됐다.
+- 실험 이벤트의 기록된 `alerter_pid`는 모두 `null`이다.
+- `python3 -m unittest tests.test_agent_notify`: 54개 통과.
+- `python3 -m py_compile bin/agent-notify`, `bash -n install.sh bin/dotfiles-doctor`, `git diff --check`: 통과.
+- 프로세스 목록 확인: 조회 명령 자체 외 `agent-notify`·`alerter`·알림용 `osascript` 0개.
 
 ## Next Steps
 
-1. 새 Claude 세션에서 벤더 스킬 발동 확인 (`/grilling`, `/to-spec` 등). 이상 시 즉시 복귀: `claude plugin enable mattpocock-skills@mattpocock`
-2. (원할 때) 벤더 갱신 실험: `github.com/mattpocock/skills` 받아 각 VENDOR.md 기준 diff → 선택 반영 → VENDOR.md 갱신
-3. 계측 트랙 재개 시: `mimir/00 Inbox/agent-handoffs/2026-07-25-agentos-measurement.md`의 "다음 작업" 1번(Claude JSONL 실측)부터
-4. doctor 손댈 때: personal-ops-weekly 은퇴 잡 검사 제거
+- 이 실험을 자동 재개하지 않는다.
+- 일반 대화형 판단 알림이 다시 필요해지면 새 요구와 자원 상한을 먼저 정의하고 별도 설계로 시작한다.
 
 ## Watch Outs
 
-- `agent-os/`에 홈으로 설치될 파일을 넣지 말 것 — 불변식 위반은 doctor가 FAIL로 잡음
-- 벤더 스킬을 수정하면 반드시 해당 `VENDOR.md`에 수정 사실 기록 (선례: obsidian-vault)
-- 행동 규칙 변경은 2단 규약 — DECISIONS.md 기록만 하고 agents/ 반영을 빼먹으면 미집행
-- `~/.claude/plugins` 캐시의 매트 1.2.0은 disable 상태로 잔존 — 참조용, 지우지 않아도 됨
-- 이전 핸드오프(2026-07-22: **imac SSH 미해결**, baby-monitor 배포 준비)는 이 파일의 git 이력에 보존 — imac SSH 복구됐는지 확인 필요
+- 기존 CLI `PermissionRequest` 훅과 일반 대화형 판단 알림 실험을 혼동하지 않는다.
+- 과거 두 Run의 구현 성공 문장은 당시 관찰 기록이며, 최종 판정은 이번 롤백 Run을 따른다.
+- 기존 pending 이벤트나 알림 상태 파일은 사용자 데이터이므로 이번 롤백에서 삭제하지 않았다.
