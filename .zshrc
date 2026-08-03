@@ -150,11 +150,10 @@ alias l="ls -la"
 
 
 # ---- git alias ----
+# 본체는 .config/zsh/git.zsh (install.sh가 ~/.config/zsh/ 로 링크한다).
+# oh-my-zsh git 플러그인 이름 규약을 따르되 omz 의존은 없다.
 
-alias gst="git status"
-alias gaa="git add ."
-alias gcmsg="git commit -m"
-alias gp="git push"
+[ -r "$HOME/.config/zsh/git.zsh" ] && source "$HOME/.config/zsh/git.zsh"
 
 # Created by `pipx` on 2025-05-04 06:36:44
 export PATH="$HOME/.local/bin:$PATH"
