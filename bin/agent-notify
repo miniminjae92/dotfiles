@@ -614,8 +614,20 @@ def send_osascript(title: str, message: str, sound: str) -> None:
     )
 
 
-def slack_enabled() -> bool:
-    return runtime_settings().get("slack_enabled") is True
+def slack_enabled(destination: str | None = None) -> bool:
+    """목적지별 Slack 전달 활성 상태를 돌려준다.
+
+    기존 상태 파일의 단일 ``slack_enabled`` 값은 그대로 읽어 하위 호환을
+    유지한다. 새 상태는 목적지마다 독립적으로 활성화한다. 한 Webhook만
+    등록된 Mac이 다른 목적지 이벤트를 계속 재시도하는 일을 막는다.
+    """
+    settings = runtime_settings()
+    destinations = settings.get("slack_destinations")
+    if isinstance(destinations, dict):
+        if destination is None:
+            return any(enabled is True for enabled in destinations.values())
+        return destinations.get(destination) is True
+    return settings.get("slack_enabled") is True
 
 
 def local_notification_backend() -> str:
@@ -1087,7 +1099,10 @@ def configure_slack(destination: str = "agent") -> int:
     if read_slack_webhook(destination) is None:
         print("agent-notify: Slack Webhook 형식이 올바르지 않아 활성화하지 않았습니다.", file=sys.stderr)
         return 1
-    update_runtime_settings(slack_enabled=True)
+    destinations = runtime_settings().get("slack_destinations")
+    enabled_destinations = dict(destinations) if isinstance(destinations, dict) else {}
+    enabled_destinations[destination] = True
+    update_runtime_settings(slack_enabled=True, slack_destinations=enabled_destinations)
     print(f"Slack {destination} 목적지가 활성화되었습니다.")
     return 0
 
@@ -1125,7 +1140,7 @@ def slack_text(event: dict[str, Any], current_time: datetime) -> str:
 
 def deliver_slack_event(event: dict[str, Any], current_time: datetime, webhook: str | None = None) -> bool:
     if (
-        not slack_enabled()
+        not slack_enabled(event.get("slack_destination", "agent"))
         or event.get("slack_delivery", "delayed") == "off"
         or not is_pending(event)
         or event.get("escalated_at")
@@ -1242,24 +1257,23 @@ def sweep(current_time: datetime | None = None) -> int:
     expired = expire_stale_pending(current_time, events)
     reaped = reap_runaway_alerters(events)
     failures = 0
-    if slack_enabled():
-        for event in events:
-            if not is_pending(event) or event.get("escalated_at"):
-                continue
-            slack_delivery = event.get("slack_delivery", "delayed")
-            if slack_delivery == "off":
-                continue
-            attempts = int(event.get("slack_attempts", 0))
-            if attempts >= 3:
-                continue
-            delay = (
-                0 if slack_delivery == "immediate" else int(event["slack_after_seconds"])
-            )
-            due_at = parse_time(event["created_at"]) + timedelta(seconds=delay)
-            if current_time < due_at:
-                continue
-            if not deliver_slack_event(event, current_time):
-                failures += 1
+    for event in events:
+        if not is_pending(event) or event.get("escalated_at"):
+            continue
+        slack_delivery = event.get("slack_delivery", "delayed")
+        if slack_delivery == "off":
+            continue
+        if not slack_enabled(event.get("slack_destination", "agent")):
+            continue
+        attempts = int(event.get("slack_attempts", 0))
+        if attempts >= 3:
+            continue
+        delay = 0 if slack_delivery == "immediate" else int(event["slack_after_seconds"])
+        due_at = parse_time(event["created_at"]) + timedelta(seconds=delay)
+        if current_time < due_at:
+            continue
+        if not deliver_slack_event(event, current_time):
+            failures += 1
     pending = write_pending_summary(events)
     emit_ops_event(
         "agent-notify-sweep",
@@ -1462,7 +1476,10 @@ def slack_command(arguments: list[str]) -> int:
             return 2
         return configure_slack(destination)
     if command == "disable":
-        update_runtime_settings(slack_enabled=False)
+        update_runtime_settings(
+            slack_enabled=False,
+            slack_destinations={name: False for name in KEYCHAIN_SERVICES},
+        )
         print("Slack 에스컬레이션을 비활성화했습니다. Keychain 항목은 보존했습니다.")
         return 0
     if command == "status":
@@ -1470,7 +1487,7 @@ def slack_command(arguments: list[str]) -> int:
         for name in destinations:
             configured = read_slack_webhook(name) is not None
             print(
-                f"destination={name} enabled={str(slack_enabled()).lower()} "
+                f"destination={name} enabled={str(slack_enabled(name)).lower()} "
                 f"configured={str(configured).lower()}"
             )
         return 0
@@ -1482,7 +1499,10 @@ def slack_command(arguments: list[str]) -> int:
             print("agent-notify: Keychain에 유효한 Webhook이 없습니다.", file=sys.stderr)
             return 1
         post_slack(webhook, f":white_check_mark: Agent Notify Slack 테스트 ({destination})")
-        print(f"Slack {destination} 테스트 메시지를 전송했습니다.")
+        print(
+            f"Slack {destination} 테스트 메시지를 HTTP로 전송했습니다. "
+            "데스크톱 표시는 Slack DND와 채널 알림 정책에서 별도로 확인하세요."
+        )
         return 0
     print("usage: agent-notify slack <configure|disable|status|test> [agent|usage]", file=sys.stderr)
     return 2

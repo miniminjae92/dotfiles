@@ -133,6 +133,23 @@ class AgentNotifyTest(unittest.TestCase):
         read_webhook.assert_called_once_with("usage")
         post_slack.assert_called_once()
 
+    @mock.patch.object(agent_notify, "post_slack")
+    @mock.patch.object(agent_notify, "read_slack_webhook")
+    def test_destination_disabled_does_not_deliver_or_read_webhook(self, read_webhook, post_slack):
+        event = agent_notify.normalize_event(
+            "codex-usage", "attention", {"cwd": "/tmp/sample"}
+        )
+        event.update(slack_destination="usage", slack_delivery="immediate")
+        self.save_event(event)
+        agent_notify.update_runtime_settings(
+            slack_enabled=True,
+            slack_destinations={"agent": True, "usage": False},
+        )
+
+        self.assertFalse(agent_notify.deliver_slack_event(event, datetime.now(timezone.utc)))
+        read_webhook.assert_not_called()
+        post_slack.assert_not_called()
+
     @mock.patch.object(agent_notify, "spawn_worker")
     def test_codex_stores_only_metadata(self, _spawn_worker):
         payload = {
@@ -692,6 +709,8 @@ class AgentNotifyTest(unittest.TestCase):
         self.assertEqual(command[-1], "-w")
         self.assertNotIn("https://hooks.slack.com", " ".join(command))
         self.assertTrue(agent_notify.slack_enabled())
+        self.assertTrue(agent_notify.slack_enabled("agent"))
+        self.assertFalse(agent_notify.slack_enabled("usage"))
 
     @mock.patch.object(agent_notify, "tmux_executable", return_value="/opt/homebrew/bin/tmux")
     @mock.patch.object(agent_notify.subprocess, "run")
