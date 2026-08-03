@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Engineering"
+  short_description: "모바일 지원 범위와 실기기 출시 게이트를 설계합니다"
+  default_prompt: "Use $mobile-engineering to define the support contract and verification gates for this mobile change."
