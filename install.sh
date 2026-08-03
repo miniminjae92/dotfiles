@@ -4,6 +4,7 @@ set -euo pipefail
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 REPLACE_EXISTING=0
 SKIPPED_LINKS=()
+LAUNCHD_FAILURES=()
 
 if [ "${1:-}" = "--replace" ]; then
   REPLACE_EXISTING=1
@@ -33,6 +34,39 @@ link_file() {
   fi
 
   ln -sfn "$source" "$target"
+}
+
+# launchd 잡 하나를 내렸다가 다시 올린다.
+#
+# `launchctl bootout` 은 반환해도 해체가 끝난 게 아니다. 곧바로 bootstrap 하면
+# EIO(5, "Input/output error") 로 실패한다. 그래서 해체 완료를 확인한 뒤 올리고,
+# 그래도 실패하면 몇 번 더 시도한다.
+#
+# 실패해도 스크립트를 죽이지 않는다. set -e 아래에서 bootstrap 하나가 죽으면
+# 이후 심볼릭 링크·설정 병합·bat 캐시까지 통째로 건너뛰는 사고가 실제로 있었다.
+# 잡 재적재는 설치의 마지막 단계이지 전제 조건이 아니다.
+reload_agent() {
+  local label="$1"
+  local plist="$2"
+  local domain="gui/$(id -u)"
+  local attempt
+
+  launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    launchctl print "$domain/$label" >/dev/null 2>&1 || break
+    sleep 0.2
+  done
+
+  for attempt in 1 2 3; do
+    if launchctl bootstrap "$domain" "$plist" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  printf 'warn: launchctl bootstrap failed: %s\n' "$label" >&2
+  LAUNCHD_FAILURES+=("$label")
 }
 
 build_agent_notify_menu() {
@@ -189,31 +223,20 @@ if [ "$(uname -s)" = "Darwin" ]; then
     "$HOME/.local/state/personal-ops" \
     "$HOME/.local/state/session-harvest" \
     "$HOME/.local/state/simulator-reaper"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-sweep" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$notification_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-notify-menu" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$menu_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.agent-os-vault-snapshot" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$snapshot_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.codex-account-usage" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$usage_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-security" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$security_plist"
+  reload_agent com.miniminjae.agent-notify-sweep "$notification_plist"
+  reload_agent com.miniminjae.agent-notify-menu "$menu_plist"
+  reload_agent com.miniminjae.agent-os-vault-snapshot "$snapshot_plist"
+  reload_agent com.miniminjae.codex-account-usage "$usage_plist"
+  reload_agent com.miniminjae.personal-ops-security "$security_plist"
   # 은퇴: personal-ops-weekly → session-harvest-weekly로 대체(2026-07-22). bootout만, 재부트스트랩 안 함.
   launchctl bootout "gui/$(id -u)/com.miniminjae.personal-ops-weekly" >/dev/null 2>&1 || true
   rm -f "$HOME/Library/LaunchAgents/com.miniminjae.personal-ops-weekly.plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.session-harvest-daily" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$harvest_daily_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.session-harvest-weekly" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$harvest_weekly_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.ops-digest-daily" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$ops_digest_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.simulator-reaper" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$simulator_reaper_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.mirror-to-imac" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$mirror_imac_plist"
-  launchctl bootout "gui/$(id -u)/com.miniminjae.mirror-from-imac" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$(id -u)" "$mirror_from_imac_plist"
+  reload_agent com.miniminjae.session-harvest-daily "$harvest_daily_plist"
+  reload_agent com.miniminjae.session-harvest-weekly "$harvest_weekly_plist"
+  reload_agent com.miniminjae.ops-digest-daily "$ops_digest_plist"
+  reload_agent com.miniminjae.simulator-reaper "$simulator_reaper_plist"
+  reload_agent com.miniminjae.mirror-to-imac "$mirror_imac_plist"
+  reload_agent com.miniminjae.mirror-from-imac "$mirror_from_imac_plist"
 fi
 
 # Merge managed Claude Code settings into the machine-local settings file.
@@ -259,4 +282,10 @@ if [ "${#SKIPPED_LINKS[@]}" -gt 0 ]; then
   printf 'Skipped regular files that were not replaced:\n' >&2
   printf '  %s\n' "${SKIPPED_LINKS[@]}" >&2
   printf 'Run with --replace to back them up and restore symlinks.\n' >&2
+fi
+
+if [ "${#LAUNCHD_FAILURES[@]}" -gt 0 ]; then
+  printf 'LaunchAgents that failed to load:\n' >&2
+  printf '  %s\n' "${LAUNCHD_FAILURES[@]}" >&2
+  printf 'Re-run install.sh, or inspect one with: launchctl print gui/$(id -u)/<label>\n' >&2
 fi

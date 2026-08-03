@@ -75,9 +75,14 @@ fi
 
 echo "== LaunchAgents =="
 # personal-ops-weekly는 은퇴(2026-07-22, session-harvest-weekly로 대체) — install.sh가 bootout함
-for label in com.miniminjae.agent-notify-sweep com.miniminjae.agent-os-vault-snapshot \
-             com.miniminjae.codex-account-usage com.miniminjae.personal-ops-security \
-             com.miniminjae.simulator-reaper; do
+# install.sh 가 reload_agent 로 올리는 잡 전체와 일치시킨다. 목록이 부분집합이면
+# 안 올라온 잡을 doctor 가 통과시킨다 — agent-notify-menu 가 그렇게 새어나갔다.
+for label in com.miniminjae.agent-notify-sweep com.miniminjae.agent-notify-menu \
+             com.miniminjae.agent-os-vault-snapshot com.miniminjae.codex-account-usage \
+             com.miniminjae.personal-ops-security com.miniminjae.session-harvest-daily \
+             com.miniminjae.session-harvest-weekly com.miniminjae.ops-digest-daily \
+             com.miniminjae.simulator-reaper com.miniminjae.mirror-to-imac \
+             com.miniminjae.mirror-from-imac; do
   if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
     ok "launchd: $label"
   else
