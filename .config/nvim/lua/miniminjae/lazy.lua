@@ -17,6 +17,7 @@ require("lazy").setup({
 	{ import = "miniminjae.plugins" },
 	{ import = "miniminjae.plugins.ui" },
 	{ import = "miniminjae.plugins.editor" },
+	{ import = "miniminjae.plugins.coding" },
 }, {
 	install = { colorscheme = { "solarized-osaka", "habamax" } },
 	checker = { enabled = true, notify = false },

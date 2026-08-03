@@ -23,6 +23,10 @@ for _, path in ipairs(vim.fn.glob(vim.fn.stdpath("config") .. "/lsp/*.lua", true
 	vim.lsp.config(vim.fn.fnamemodify(path, ":t:r"), dofile(path))
 end
 
+-- 완성 엔진이 지원하는 기능(스니펫·추가 텍스트 편집 등)을 모든 서버에 알린다.
+-- 이게 빠지면 완성으로 클래스를 고를 때 import가 자동으로 안 붙는다.
+vim.lsp.config("*", { capabilities = require("blink.cmp").get_lsp_capabilities(nil, true) })
+
 vim.lsp.enable({
 	"lua_ls",
 	"ts_ls",

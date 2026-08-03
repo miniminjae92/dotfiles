@@ -1,0 +1,40 @@
+{
+  "front-matter": {
+    "prefix": "fm",
+    "description": "front-matter 기본 템플릿 (slug=폴더명, date=지금)",
+    "body": [
+      "---",
+      "title: \"${1:제목}\"",
+      "slug: $DIRNAME",
+      "date: $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE $CURRENT_HOUR:$CURRENT_MINUTE",
+      "description: \"${2:설명}\"",
+      "tags:",
+      "  - ${3:태그}",
+      "---",
+      ""
+    ]
+  },
+  "image-div": {
+    "prefix": "dimg",
+    "description": "이미지 중앙 정렬 Div",
+    "body": [
+      "<div className=\"mx-auto max-w-sm\">",
+      "  ![${2:설명}](${1:경로})",
+      "</div>"
+    ]
+  },
+  "video-div": {
+    "prefix": "dvideo",
+    "description": "MP4를 GIF처럼 자동재생 (video 태그)",
+    "body": [
+      "<div className=\"mx-auto max-w-sm\">",
+      "  <video src=\"${1:비디오파일경로.mp4}\" autoPlay loop muted playsInline className=\"w-full rounded-lg\"></video>",
+      "</div>"
+    ]
+  },
+  "spacer": {
+    "prefix": "sp",
+    "description": "MDX 세로 여백",
+    "body": ["<Spacer y={ ${1:4} } />"]
+  }
+}
