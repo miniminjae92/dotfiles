@@ -32,11 +32,8 @@ local packages = mason .. "/packages"
 
 -- 번들: 디버그 어댑터 + 테스트 러너.
 -- java-test의 두 jar는 넣으면 안 된다고 공식 README가 못박고 있다(러너 셰이딩 jar와 커버리지 에이전트).
-local bundles = vim.fn.glob(
-	packages .. "/java-debug-adapter/extension/server/com.microsoft.java.debug.plugin-*.jar",
-	true,
-	true
-)
+local bundles =
+	vim.fn.glob(packages .. "/java-debug-adapter/extension/server/com.microsoft.java.debug.plugin-*.jar", true, true)
 local excluded = {
 	["com.microsoft.java.test.runner-jar-with-dependencies.jar"] = true,
 	["jacocoagent.jar"] = true,
@@ -52,8 +49,7 @@ local extended = vim.deepcopy(jdtls.extendedClientCapabilities)
 extended.resolveAdditionalTextEditsSupport = true
 
 -- 셸에 잡힌 JDK를 우선 쓰고, 없을 때만 설치 경로로 떨어진다(JDK를 올릴 때 이 폴백을 같이 고칠 것).
-local java_home = vim.env.JAVA_HOME
-	or vim.fn.expand("~/Library/Java/JavaVirtualMachines/temurin-21.0.9/Contents/Home")
+local java_home = vim.env.JAVA_HOME or vim.fn.expand("~/Library/Java/JavaVirtualMachines/temurin-21.0.9/Contents/Home")
 
 local function on_attach(_, bufnr)
 	local function map(mode, lhs, rhs, desc)
