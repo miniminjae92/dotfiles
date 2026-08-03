@@ -17,6 +17,11 @@ export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$(brew --prefix)}"
 fpath=("$HOMEBREW_PREFIX/share/zsh/site-functions" $fpath)
 autoload -Uz compinit && compinit
 
+# Completion matching, restored from oh-my-zsh's lib/completion.zsh (dropped with omz).
+# 'l:|=* r:|=*' is the substring rule: `cd api<TAB>` → delivery-discount-api/.
+zstyle ':completion:*' matcher-list 'm:{[:lower:][:upper:]}={[:upper:][:lower:]}' 'r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' menu select
+
 # Autosuggestions (syntax-highlighting is sourced last, at end of file).
 source "$HOMEBREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
@@ -28,6 +33,9 @@ else
   # To customize the p10k prompt, run `p10k configure` or edit ~/.p10k.zsh.
   [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 fi
+
+# Shell behavior
+unsetopt beep
 
 # history setup
 HISTFILE=$HOME/.zhistory
