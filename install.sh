@@ -95,6 +95,13 @@ if [ -d "$DOTFILES_DIR/agents/codex/skills" ]; then
     link_file "$skill_dir" "$HOME/.codex/skills/$skill_name"
   done
 fi
+if [ -d "$DOTFILES_DIR/agents/claude/skills" ]; then
+  for skill_dir in "$DOTFILES_DIR"/agents/claude/skills/*; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    link_file "$skill_dir" "$HOME/.claude/skills/$skill_name"
+  done
+fi
 if [ -d "$DOTFILES_DIR/agents/skills" ]; then
   for skill_dir in "$DOTFILES_DIR"/agents/skills/*; do
     [ -d "$skill_dir" ] || continue

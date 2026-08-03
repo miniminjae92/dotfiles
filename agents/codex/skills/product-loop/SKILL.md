@@ -7,17 +7,17 @@ description: "Run a full product improvement loop when the user wants to overhau
 
 제품 개선을 한 번의 거대한 작업이 아니라 증거가 다음 판단을 여는 **한 바퀴**로 운영한다. 한 바퀴는 여러 세션에 걸쳐도 되며, 프로젝트의 `LOOP.md`가 진행 상태의 정본이다.
 
-현재는 Codex 전용 실험 스킬이다. 완료된 한 바퀴에서 단계 누락을 막고, 중복 문서를 만들지 않으며, 매번 다음 행동을 명확히 했다는 사용자 판단을 받은 뒤에만 provider-neutral 스킬로 승격한다.
+Codex 구현이다. 단계와 게이트는 공통 개념 파일에 있고 Claude 구현(`agents/claude/skills/product-loop`)이 같은 파일을 가리킨다. 완료된 한 바퀴에서 단계 누락을 막고, 중복 문서를 만들지 않으며, 매번 다음 행동을 명확히 했다는 사용자 판단을 받은 뒤에만 두 구현을 provider-neutral 스킬 하나로 승격한다.
 
 ## 시작 또는 재개
 
 1. 저장소의 `AGENTS.md`, `CONTEXT.md`, `docs/adr/`와 제품 문서를 확인한다.
 2. `docs/product-loop/**/LOOP.md`에서 `status: active`인 사이클을 찾는다.
    - 하나면 그 사이클을 재개한다.
-   - 없으면 `assets/cycle.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다.
+   - 없으면 `~/.dotfiles/agents/conventions/product-loop/LOOP-template.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다.
    - 둘 이상이면 가장 최근 파일을 임의 선택하지 말고 충돌을 사용자에게 알린다.
 3. `current_stage`, `next_owner`, `next_action`을 읽고 지금 할 일 하나를 먼저 보여준다.
-4. 현재 단계에 해당하는 `references/stage-gates.md` 절만 읽고 실행한다.
+4. 현재 단계에 해당하는 `STAGES.md` 절만 읽고 실행한다.
 
 완료 기준: 활성 사이클 하나와 현재 단계 하나가 식별되고, 사용자가 해야 할 일과 에이전트가 할 일이 분리되어 있다.
 
@@ -34,27 +34,9 @@ description: "Run a full product improvement loop when the user wants to overhau
 
 완료 기준: 현재 단계가 증거와 함께 통과했거나, 통과에 필요한 다음 행동의 소유자와 관찰 가능한 완료 조건이 한 개로 좁혀져 있다.
 
-## 단계 순서
+## 단계 순서와 게이트
 
-순서는 아래를 정본으로 사용한다. 뒤 단계에서 가정이 깨지면 깨진 증거가 처음 영향을 주는 단계로 돌아가고, 그 이유를 `LOOP.md`에 남긴다.
-
-1. 문제 발견
-2. 사용자 조사
-3. UX 문제 정의
-4. Grill
-5. PRD
-6. UX flow
-7. Wireframe
-8. Prototype test
-9. UI design
-10. Issues
-11. 구현
-12. Functional QA
-13. Design QA
-14. 출시
-15. 측정
-16. UX 개선 가설
-17. 다음 바퀴의 문제 발견
+정본은 `~/.dotfiles/agents/conventions/product-loop/STAGES.md`다 — Claude 구현과 공유하는 공통 개념이며, 되돌아가기 규칙도 거기에 있다.
 
 ## 기존 스킬 연결
 
