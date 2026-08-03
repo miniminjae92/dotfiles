@@ -6,9 +6,10 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 * **Terminal & Zsh**
     * **iTerm2 Theme**: Uses the [Catppuccin Mocha](https://github.com/catppuccin/iterm) color scheme.
-    * **Shell**: Managed by `Oh My Zsh`.
-    * **Prompt**: Styled with `Powerlevel10k`.
+    * **Shell**: A plain `.zshrc` with no framework. Every component is a Homebrew formula sourced directly.
+    * **Prompt**: `Starship` under Ghostty, `Powerlevel10k` elsewhere, selected by `$TERM_PROGRAM`.
     * **Plugins**: `zsh-syntax-highlighting` (command validation) and `zsh-autosuggestions` (history-based completion).
+    * **Git abbreviations**: `.config/zsh/git.zsh` — Oh My Zsh naming, no Oh My Zsh.
 * **Neovim**: A robust Neovim setup managed by `lazy.nvim`.
     * **Theming**: Uses `solarized-osaka.nvim` for a clean, dark color scheme.
     * **Keymaps**: A consistent keybinding system with `<leader>` set to `space`, for easy navigation, window management, and text manipulation.
@@ -66,7 +67,18 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     mv ~/.config/nvim ~/.config/nvim.bak
     ```
 
-3.  **Create symbolic links**
+3.  **Install Homebrew packages**
+    ```bash
+    brew bundle --file ~/.dotfiles/Brewfile
+    ```
+    The Brewfile is the single definition of required CLI tools and casks.
+
+    This step comes **before** `install.sh`, not after. `install.sh` finishes by
+    rebuilding the `bat` cache, and `.zshrc` sources Starship, Powerlevel10k,
+    `zsh-autosuggestions`, and `zsh-syntax-highlighting` from the Homebrew prefix.
+    None of that exists yet on a fresh machine.
+
+4.  **Create symbolic links**
     ```bash
     ~/.dotfiles/install.sh
     ```
@@ -115,35 +127,50 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     Use `gcodex usage` or `ncodex usage` for an immediate account report; the masked ChatGPT email in the report verifies which account the wrapper actually resolved. A LaunchAgent runs explicitly at 09:00 and every 15 minutes, sends one daily Slack report per account after 09:00, warns when usage crosses 75%, 90%, 95%, or 100%, and reports resets when usage drops by at least 20 percentage points. It also warns when both wrappers resolve to the same ChatGPT email, when an account query fails twice consecutively, or when a failure follows 30 minutes without a successful check. Each account recovers its missed daily report independently. It never falls back to plain `codex`, switches accounts, or consumes a reset credit.
     AI model names are managed in `ai-tools/models.json`, linked to `~/.config/ai-tools/models.json`. The registry contains task assignments and model names only, never credentials. Existing model environment variables remain temporary overrides, and `ai-model-status` reports the effective override when one is set.
 
-4.  **Install Oh My Zsh and Plugins**
+5.  **Verify the installation**
+    ```bash
+    dotfiles-doctor
+    ```
+    Read-only health check over symlinks, required tools, agent CLI auth, launchd
+    jobs, and model-registry drift. It never changes state; the exit code is the
+    number of `FAIL` findings. `WARN` lines are usually the per-machine steps in
+    step 6 that have not been done yet.
 
-    * **Install Oh My Zsh:**
-        ```bash
-        sh -c "$(curl -fsSL [https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh](https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh))"
-        ```
-        (If it asks to overwrite `~/.zshrc`, you can say no, as we've already symlinked it.)
+    `install.sh` prints its own failure report at the end — skipped symlinks and
+    LaunchAgents that would not load. An empty report plus `Installed dotfile links.`
+    is what a clean run looks like.
 
-    * **Install Powerlevel10k Theme:**
+6.  **Per-machine setup that no script performs**
+
+    * **Shell environment.** Oh My Zsh is **not** used and must not be installed.
+        It was removed in favour of Starship (Ghostty) and Powerlevel10k (iTerm2),
+        selected at runtime by `$TERM_PROGRAM`. The prompt, `zsh-autosuggestions`,
+        and `zsh-syntax-highlighting` all come from the Brewfile in step 3. Git
+        abbreviations live in `.config/zsh/git.zsh`, which keeps the Oh My Zsh
+        naming convention without depending on Oh My Zsh.
+
+    * **Powerlevel10k configuration.** `~/.p10k.zsh` is machine-local and not in
+        this repository. Run `p10k configure` once, or copy the file across.
+
+    * **fzf-git keybindings.** `.zshrc` sources `~/fzf-git.sh/fzf-git.sh`:
         ```bash
-        git clone --depth=1 [https://github.com/romkatv/powerlevel10k.git](https://github.com/romkatv/powerlevel10k.git) ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+        git clone https://github.com/junegunn/fzf-git.sh.git ~/fzf-git.sh
         ```
 
-    * **Install Zsh Plugins (for OMZ):**
-        ```bash
-        git clone [https://github.com/zsh-users/zsh-syntax-highlighting.git](https://github.com/zsh-users/zsh-syntax-highlighting.git) ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-        git clone [https://github.com/zsh-users/zsh-autosuggestions.git](https://github.com/zsh-users/zsh-autosuggestions.git) ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-        ```
+    * **Obsidian vaults.** Nothing bootstraps these. `agent-os/paths.env` is the
+        contract: `YGGDRASIL_VAULT=$HOME/.obsidian/yggdrasil` and
+        `DEVELOPER_OS_VAULT=$HOME/.obsidian/mimir`. Restore both vaults at those
+        paths, or override the variables. A skeleton for a new vault is in
+        `agent-os/vault-template/`.
 
-    * **Install Other CLI Tools (via Homebrew):**
-        ```bash
-        brew bundle --file ~/.dotfiles/Brewfile
-        ```
-        The Brewfile is the single definition of required CLI tools and casks. After
-        installing, verify the whole environment (symlinks, tools, agent CLI auth,
-        launchd jobs, and model-registry drift) with the read-only health check:
-        ```bash
-        dotfiles-doctor
-        ```
+    * **Secrets.** Nothing secret is in this repository, so nothing secret is
+        restored by it: `~/.gemini.env`, the Slack webhook and `agy` session in the
+        macOS Keychain, and `~/.codex-accounts/{google,naver}/auth.json` (mode 600)
+        are all per-machine.
+
+    * **A different macOS username breaks the LaunchAgents.** Every plist in
+        `.config/launchd/` hardcodes `/Users/miniminjae/…`. On a machine with
+        another username they load and then fail silently. Rewrite the paths first.
 
     `alerter` returns the selected action to `agent-notify`. Temporary alerts close automatically after eight seconds; persistent alerts wait for an explicit action up to `persistent_seconds` (default 1800), then close. The bound is not a preference: `alerter` does not exit on its own under macOS 26, and an unbounded wait leaks memory until the machine runs out. `agent-notify` records the PID of every `alerter` it spawns, so the `sweep` watchdog can reclaim one that outlived its worker without touching a same-named process owned by another tool. Clicking the alert body or **터미널로 이동** acknowledges the event, selects its recorded tmux client/window/pane, and brings the terminal app forward. **확인** acknowledges without changing focus. **나중에** leaves the event pending, so delayed Slack fallback can still run. AppleScript remains a degraded fallback when `alerter` is unavailable, but its click is owned by Script Editor and cannot focus a tmux pane or acknowledge an event.
 
@@ -261,18 +288,18 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         ```
         Stage files or hunks, then run `git ai-commit message` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. Every provider uses a compact diff prompt by default; pass `--full` for more context or set `LAZYGIT_AI_COMMIT_CODEX_MODEL=gpt-5.5` for harder Codex changes. The older `git cm-ai` entry point remains compatible.
 
-5.  **Install iTerm2 Theme**
+7.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).
     * In iTerm2, go to **Preferences (`Cmd + ,`) > Profiles > Colors**.
     * Click **Color Presets... > Import...** and select the downloaded file.
     * Select `Catppuccin Mocha` from the `Color Presets...` list to apply.
 
-6.  **Install Neovim plugins**
+8.  **Install Neovim plugins**
     * Open Neovim (`nvim`).
     * Run `:Lazy` to install all plugins listed in the config.
     * Run `:MasonInstallAll` to install all the LSP servers, linters, formatters, and debuggers.
 
-7.  **Setup VSCode (Optional)**
+9.  **Setup VSCode (Optional)**
     * Follow the instructions in the `vscode/README.md` to create symbolic links for your VSCode settings and keybindings.
 
 ---
