@@ -8,6 +8,7 @@ return {
 			{ "<leader>d", group = "디버그" },
 			{ "<leader>e", group = "탐색기" },
 			{ "<leader>f", group = "찾기" },
+			{ "<leader>g", group = "git 리뷰 (diffview)" },
 			{ "<leader>h", group = "git 헝크" },
 			{ "<leader>j", group = "자바" },
 			{ "<leader>k", group = "HTTP (kulala)" },

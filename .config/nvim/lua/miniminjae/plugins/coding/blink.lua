@@ -45,7 +45,14 @@ return {
 
 		sources = {
 			default = { "lazydev", "lsp", "path", "snippets", "buffer" },
+			-- SQL 버퍼에서는 접속된 DB의 테이블·컬럼이 후보로 뜬다(dadbod가 스키마를 안다).
+			per_filetype = {
+				sql = { "dadbod", "snippets", "buffer" },
+				mysql = { "dadbod", "snippets", "buffer" },
+				plsql = { "dadbod", "snippets", "buffer" },
+			},
 			providers = {
+				dadbod = { name = "Dadbod", module = "vim_dadbod_completion.blink" },
 				-- nvim 설정 lua에서만 붙는 타입 소스. LSP보다 앞세워야 vim.* 후보가 위로 온다.
 				lazydev = { name = "LazyDev", module = "lazydev.integrations.blink", score_offset = 100 },
 				snippets = {
