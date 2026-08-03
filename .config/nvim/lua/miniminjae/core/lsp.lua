@@ -40,6 +40,8 @@ vim.lsp.enable({
 	"marksman",
 	"mdx_analyzer",
 	"clangd",
+	"jsonls",
+	"yamlls",
 })
 
 -- 이동 계열은 결과가 여러 개일 때 목록이 필요하다. fzf-lua가 있으면 피커로, 없으면 내장으로 떨어진다.

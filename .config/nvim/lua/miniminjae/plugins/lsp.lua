@@ -30,6 +30,8 @@ return {
 					"marksman",
 					"mdx-analyzer",
 					"clangd",
+					"json-lsp",
+					"yaml-language-server",
 					"jdtls",
 					-- 디버그·테스트 번들 (jdtls가 init_options로 물고 들어간다)
 					"java-debug-adapter",
@@ -52,6 +54,8 @@ return {
 		-- 서버별 기본값(cmd·root_markers·filetypes) 데이터베이스로만 쓴다. setup() 호출은 하지 않는다.
 		"neovim/nvim-lspconfig",
 		event = { "BufReadPre", "BufNewFile" },
+		-- lsp/jsonls.lua·lsp/yamlls.lua가 스키마 목록을 여기서 가져간다
+		dependencies = { "b0o/schemastore.nvim" },
 		config = function()
 			require("miniminjae.core.lsp")
 		end,
