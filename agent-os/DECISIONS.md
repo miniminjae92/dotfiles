@@ -417,6 +417,7 @@ term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 �
 
 - 상태: 확정
 - 날짜: 2026-08-04
+- 개정: 2026-08-04 — P2 위생 집행. battery(제3자 plist)의 stdout을 /dev/null로 돌려 분당 3줄 적재를 차단(진단용 stderr→battery.log는 유지, battery CLI가 maintain 재설정 시 plist를 다시 써 되돌아갈 수 있음), 잔여 로그 18MB 정리. dref는 chrome-* 잔해 240MB 삭제·WAL 4.4MB 즉시 체크포인트했고, 재발 방지(재색인 로그 변화·지연 시에만, 재색인 직후 체크포인트, 수확 오류 severity medium+message)는 dref repo 커밋으로 처리 — 서버 재시작은 개편 WIP를 활성화할 위험이 있어 다음 자연 재시작부터 적용된다.
 
 ### 결정
 
