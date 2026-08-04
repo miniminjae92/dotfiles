@@ -16,7 +16,7 @@ return {
 			{ "<leader>o", group = "옵시디언" },
 			{ "<leader>r", group = "이름 바꾸기·재시작" },
 			{ "<leader>s", group = "창 분할·치환" },
-			{ "<leader>t", group = "탭·토글" },
+			{ "<leader>t", group = "탭·토글·번역" },
 			{ "<leader>T", group = "테스트" },
 			{ "<leader>w", group = "세션" },
 			{ "<leader>x", group = "진단 목록" },
