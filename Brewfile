@@ -8,6 +8,7 @@ tap "vjeantet/tap"
 brew "git"
 brew "git-delta"
 brew "neovim"
+brew "tree-sitter-cli"         # nvim-treesitter main API가 파서를 로컬 컴파일한다. 없으면 파서 0개
 brew "tmux"
 brew "eza"
 brew "bat"
