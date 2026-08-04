@@ -10,7 +10,8 @@
     <string>--days</string>
     <string>7</string>
     <string>--out</string>
-    <string>/Users/miniminjae/.local/state/ops/digest-latest.md</string>
+    <string>/Users/miniminjae/.obsidian/mimir/40 Reviews/백그라운드 잡 다이제스트.md</string>
+    <string>--notify</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>

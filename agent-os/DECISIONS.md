@@ -391,3 +391,24 @@ term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 �
 ### 이유
 
 같은 세션 로그를 읽는 도구가 셋(asx, codex-session-export, harvest-sessions)으로 갈라져 각자 파싱하고 있었고, 단독 스크립트는 이미 드리프트했다 — codex-session-export는 계정 분리(gcodex/ncodex) 이전에 만들어져 `~/.codex/sessions`만 읽고 `~/.codex-accounts/*` 세션을 보지 못한다. asx만이 3소스(Claude 본대화·서브에이전트·다계정 Codex)를 정규화하고 paths.env 계약(D-012)을 따르는 현역이라 공통 계층의 정본 자격이 있다. 내보내기를 지금 만들지 않는 것은 유일한 셸 소비자(arc)가 D-018로 사라졌고 계측 트랙 투영이 입력 전제를 바꿀 예정이기 때문이다 — 소비자 없는 배관은 아카이브 파이프라인의 전철(66일 휴면 후 삭제)을 밟는다.
+
+## D-020 보안점검·다이제스트 신호 복원 — 오탐 채널 수술과 소비 경로 연결
+
+- 상태: 파일럿
+- 날짜: 2026-08-04
+
+### 결정
+
+- `personal-ops security`의 리스너 식별자는 `프로세스명:포트`가 아니라 **프로세스명**이다. Apple 상주 데몬(rapportd·ControlCenter·sharingd)은 관찰 대상에서 제외한다. 기준선은 자동 갱신하지 않고 `personal-ops security --accept [ID …]`로만 승인한다 — 알림은 변화 시 1회, 미승인 발견은 활성 목록에 정직하게 남는다.
+- 즉시 Slack은 **high 전용**이다. medium 이하 변화는 리포트와 ops-digest 경유로만 가고, 해소-만 있는 변화는 알리지 않는다. 늘 무해한 알림은 채널 자체를 죽인다.
+- `softwareupdate` 검사는 주 1회로 내리고, 사이 실행은 직전 결과를 이월한다(이월 없인 검사일마다 new/resolved 출렁임).
+- 신규 상시 체크 3종: launchd 퍼시스턴스 diff(사용자·시스템 plist 집합), 자격증명 권한 스윕(ssh 키·gh·claude·aws·netrc·codex), 백업 경로 부재(tmutil).
+- ops-digest 산출물은 mimir `40 Reviews/백그라운드 잡 다이제스트.md`에 쓰고, 신호(오류·주의 발견·침묵)가 있을 때만 agent-notify 1줄을 보낸다. message류 키가 없는 이벤트는 payload를 k=v로 폴백 렌더하고, 동일 (source·severity·message)는 ×N으로 접는다.
+- 발신 규약: 백그라운드 잡의 실패는 `kind=error|finding` + 사람이 읽을 `message`를 포함한다. run/low로 위장한 실패(세션 수확 2세대)가 관측을 장님으로 만들었다. 부분 실패(codex-account-usage 프로파일 일부 고장)는 finding으로 낸다.
+- 테스트는 실제 이벤트 스트림에 쓰지 않는다 — emit mock 또는 `OPS_STATE_DIR` 격리. (과거 오류 버스트 일부는 테스트 실행 오염이었다.)
+- gitleaks 공개 레포 시크릿 스캔은 이 수술에 넣지 않고 포트폴리오 레포 추출 절차의 공개 전 게이트로 미룬다.
+- 재검토 조건: 프로세스명 단위 식별이 실제 이상을 놓친 사례가 나오면 실행경로·코드서명 기반 식별을 검토한다. digest 알림이 무행동 소음이 되면(주 3회 이상 열람 없이 넘김) 발신 조건을 조인다.
+
+### 이유
+
+2026-08-04 감사. 22개 리포트 전수에서 정적 검사(SIP·Gatekeeper·FileVault·인증 권한) 발화 0회, 활성 이상 11건 전원 오탐 — 역대 고유 발견 37건 중 20건이 재부팅마다 포트를 바꾸는 rapportd였고, 원인은 최초 1회 후 갱신 수단이 없는 기준선과 포트 단위 식별이다. digest는 발신부가 넣지 않는 키(message)를 렌더가 찾아 오류·발견 섹션이 구조적 공백이었고, 산출물은 vault 밖에서 14일간 소비 0였다. 수술 직후 첫 실행이 방치된 `python -m http.server`(전 인터페이스 바인드, 25시간 경과)와 백업 경로 부재를 즉시 잡았다 — 오탐을 걷어내면 같은 검사가 실제 신호를 낸다.

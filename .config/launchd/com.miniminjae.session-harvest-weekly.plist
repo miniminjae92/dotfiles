@@ -10,6 +10,16 @@
     <string>--days</string>
     <string>7</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- D-020 ⓐ: default 프로파일(~/.codex)이 고장이라 마이닝을 google 계정 래퍼로.
+         PATH는 래퍼 체인(gcodex→codex-account→bare codex)이 launchd에서 homebrew
+         codex를 찾지 못해 조용히 실패하는 것을 막는다. -->
+    <key>PERSONAL_OPS_CODEX</key>
+    <string>/Users/miniminjae/.local/bin/gcodex</string>
+    <key>PATH</key>
+    <string>/Users/miniminjae/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Weekday</key><integer>0</integer>

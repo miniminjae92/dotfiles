@@ -23,7 +23,10 @@ import datetime as _dt
 import glob
 import json
 import os
+import shutil
+import subprocess
 import sys
+import urllib.parse
 from collections import defaultdict
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
@@ -140,6 +143,40 @@ def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
     }
 
 
+def event_message(ev: dict) -> str:
+    """사람이 읽을 한 줄. message류 키가 없으면 payload를 k=v로 압축한다.
+
+    발신부가 message를 안 넣으면 이 섹션들이 통째로 공백이 되던 문제의
+    방어선(2026-08-04 감사: 오류 34줄·발견 13줄 전부 빈 텍스트).
+    """
+    for key in ("message", "detail", "error", "title"):
+        value = ev.get(key)
+        if value:
+            return str(value)
+    reserved = {"schema_version", "ts", "source", "kind", "severity"}
+    pairs = [f"{k}={ev[k]}" for k in ev if k not in reserved]
+    return " ".join(pairs[:8])
+
+
+def grouped(events: list[dict]) -> list[tuple[str, str, str, int, str]]:
+    """(source, severity, message)로 묶어 건수 내림차순 목록을 만든다.
+
+    만성 실패(예: 15분 주기 잡의 동일 오류)가 수백 줄로 다른 신호를
+    덮지 않게 '같은 얘기 ×N'으로 접는다.
+    """
+    groups: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    for ev in events:
+        key = (ev.get("source", "?"), ev.get("severity", "info"), event_message(ev))
+        groups[key].append(ev.get("ts", ""))
+    return sorted(
+        (
+            (src, sev, msg, len(ts_list), max(ts_list))
+            for (src, sev, msg), ts_list in groups.items()
+        ),
+        key=lambda item: -item[3],
+    )
+
+
 def render_markdown(d: dict) -> str:
     lines = []
     lines.append(f"# 백그라운드 잡 다이제스트 — 최근 {d['window_days']}일")
@@ -155,16 +192,15 @@ def render_markdown(d: dict) -> str:
         lines.append("")
     if d["errors"]:
         lines.append(f"## 🔴 오류 {len(d['errors'])}건")
-        for ev in d["errors"][:10]:
-            msg = ev.get("message") or ev.get("detail") or ev.get("error") or ""
-            lines.append(f"- `{ev.get('source','?')}` {ev.get('ts','')[:19]} — {msg}")
+        for src, _sev, msg, count, last in grouped(d["errors"])[:10]:
+            suffix = f" ×{count}" if count > 1 else ""
+            lines.append(f"- `{src}` {last[:19]} — {msg}{suffix}")
         lines.append("")
     if d["findings_attention"]:
         lines.append(f"## 🟡 주의 필요 발견 {len(d['findings_attention'])}건")
-        for ev in d["findings_attention"][:15]:
-            sev = ev.get("severity", "?")
-            title = ev.get("title") or ev.get("detail") or ""
-            lines.append(f"- [{sev}] `{ev.get('source','?')}` — {title}")
+        for src, sev, msg, count, last in grouped(d["findings_attention"])[:15]:
+            suffix = f" ×{count}" if count > 1 else ""
+            lines.append(f"- [{sev}] `{src}` {last[:19]} — {msg}{suffix}")
         lines.append("")
 
     lines.append("## 잡별 요약")
@@ -202,12 +238,53 @@ def render_markdown(d: dict) -> str:
     return "\n".join(lines)
 
 
+def notify_digest(d: dict, out_path: str | None) -> None:
+    """신호(오류·주의 발견·침묵)가 있을 때만 agent-notify로 1줄 알린다.
+
+    0건인 날은 조용히 — 매일 오는 무신호 알림은 그 자체가 새 소음이다.
+    알림 실패가 다이제스트 생성을 깨뜨리면 안 된다.
+    """
+    errors = len(d["errors"])
+    findings = len(d["findings_attention"])
+    silent = len(d["sources_silent"])
+    if not (errors or findings or silent):
+        return
+    executable = shutil.which("agent-notify") or os.path.expanduser(
+        "~/.local/bin/agent-notify"
+    )
+    if not os.access(executable, os.X_OK):
+        return
+    message = f"잡 다이제스트: 오류 {errors} · 발견 {findings} · 침묵 {silent}"
+    if out_path:
+        encoded = urllib.parse.quote(out_path, safe="")
+        message += f" · <obsidian://open?path={encoded}|열기>"
+    try:
+        subprocess.run(
+            [
+                executable, "event",
+                "--source", "ops-digest",
+                "--label", "Ops Digest",
+                "--status", "attention" if errors or silent else "complete",
+                "--project", message,
+                "--local", "off",
+                "--slack", "immediate",
+            ],
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ops-digest")
     parser.add_argument("--days", type=int, default=7)
     parser.add_argument("--json", action="store_true", help="마크다운 대신 JSON 출력")
     parser.add_argument("--out", default=None, help="stdout 외에 이 경로로도 기록")
     parser.add_argument("--now", default=None, help="iso8601 기준시각 override (테스트용)")
+    parser.add_argument(
+        "--notify", action="store_true", help="신호가 있을 때만 agent-notify 1줄 발신"
+    )
     args = parser.parse_args()
 
     now = _dt.datetime.fromisoformat(args.now) if args.now else _dt.datetime.now().astimezone()
@@ -216,11 +293,14 @@ def main() -> int:
 
     out = json.dumps(digest, ensure_ascii=False, indent=2) if args.json else render_markdown(digest)
     sys.stdout.write(out + "\n")
+    out_path = None
     if args.out:
-        path = os.path.expanduser(args.out)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
+        out_path = os.path.expanduser(args.out)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(out + "\n")
+    if args.notify:
+        notify_digest(digest, out_path)
     return 0
 
 

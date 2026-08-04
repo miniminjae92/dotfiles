@@ -35,6 +35,26 @@ STATE_ROOT = Path(
 SECURITY_STATE = STATE_ROOT / "security.json"
 MAX_SOURCE_CHARS = 60_000
 
+# 포트가 아니라 프로세스가 식별자다(2026-08-04 감사: 역대 발견 37건 중 20건이
+# 재부팅마다 포트를 바꾸는 rapportd였다). Apple 상주 데몬은 관찰 대상이 아니다.
+LISTENER_IGNORED_PROCESSES = {"rapportd", "ControlCe", "sharingd"}
+# softwareupdate는 느리고 macOS가 자체 알림도 준다 — 주 1회면 충분하다.
+SOFTWARE_UPDATE_INTERVAL = timedelta(days=6, hours=12)
+LAUNCHD_WATCH_DIRS = (
+    HOME / "Library/LaunchAgents",
+    Path("/Library/LaunchAgents"),
+    Path("/Library/LaunchDaemons"),
+)
+CREDENTIAL_PATHS = (
+    HOME / ".codex/auth.json",
+    HOME / ".claude/.credentials.json",
+    HOME / ".netrc",
+    HOME / ".aws/credentials",
+    HOME / ".config/gh/hosts.yml",
+)
+# 승인(accept)으로 기준선에 넘길 수 있는 발견 — 설정 이상(SIP 등)은 승인 불가.
+ACCEPTABLE_PREFIXES = ("listener:", "launchd:")
+
 
 def now_local() -> datetime:
     override = os.environ.get("PERSONAL_OPS_NOW")
@@ -148,11 +168,12 @@ def command_check(
         findings[identifier] = finding("high", title, output[:300] or "기대 상태가 아닙니다.")
 
 
-def external_listeners() -> tuple[set[str], bool]:
+def external_listeners() -> tuple[dict[str, set[str]], bool]:
+    """외부 인터페이스에 바인드된 리스너를 {프로세스명: 포트집합}으로 수집한다."""
     code, output = run(["/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN"])
     if code != 0:
-        return set(), False
-    listeners: set[str] = set()
+        return {}, False
+    listeners: dict[str, set[str]] = {}
     for line in output.splitlines()[1:]:
         columns = line.split()
         if len(columns) < 9:
@@ -162,11 +183,115 @@ def external_listeners() -> tuple[set[str], bool]:
             continue
         if ":" not in endpoint:
             continue
-        listeners.add(f"{columns[0]}:{endpoint.rsplit(':', 1)[-1]}")
+        name = columns[0]
+        if name in LISTENER_IGNORED_PROCESSES:
+            continue
+        listeners.setdefault(name, set()).add(endpoint.rsplit(":", 1)[-1])
     return listeners, True
 
 
-def collect_security_findings(previous: dict[str, Any]) -> tuple[dict[str, dict[str, str]], set[str]]:
+def normalized_listener_baseline(raw: Any) -> set[str]:
+    """기준선을 프로세스명 집합으로 읽는다. 구형 '프로세스:포트' 항목은 이월한다."""
+    names: set[str] = set()
+    for entry in raw or []:
+        head, _, tail = str(entry).rpartition(":")
+        names.add(head if head and tail.isdigit() else str(entry))
+    return names - LISTENER_IGNORED_PROCESSES
+
+
+def launchd_plists() -> set[str]:
+    """사용자·시스템 launchd 등록 plist 경로 집합 — 퍼시스턴스 드리프트 감지용."""
+    plists: set[str] = set()
+    for directory in LAUNCHD_WATCH_DIRS:
+        try:
+            plists.update(str(path) for path in directory.glob("*.plist"))
+        except OSError:
+            continue
+    return plists
+
+
+def credential_paths() -> tuple[Path, ...]:
+    ssh_dir = HOME / ".ssh"
+    keys: tuple[Path, ...] = ()
+    if ssh_dir.is_dir():
+        keys = tuple(
+            path for path in sorted(ssh_dir.glob("id_*")) if path.suffix != ".pub"
+        )
+    return CREDENTIAL_PATHS + keys
+
+
+def credential_findings(findings: dict[str, dict[str, str]]) -> None:
+    for path in credential_paths():
+        if not path.is_file():
+            continue
+        permissions = stat.S_IMODE(path.stat().st_mode)
+        if permissions & 0o077:
+            try:
+                label = path.relative_to(HOME)
+            except ValueError:
+                label = path
+            findings[f"cred-permissions:{label}"] = finding(
+                "high",
+                "자격증명 파일 권한이 너무 넓습니다",
+                f"{path}: 현재 {permissions:03o}; 권장: 600",
+            )
+
+
+def backup_findings(findings: dict[str, dict[str, str]]) -> None:
+    code, output = run(["/usr/bin/tmutil", "destinationinfo"])
+    if code == 124:
+        findings["check-failed:backup"] = finding(
+            "medium", "백업 검사 실패", "tmutil을 실행하지 못했습니다."
+        )
+    elif code != 0 or "No destinations configured" in output:
+        findings["backup-missing"] = finding(
+            "medium",
+            "기기 백업 경로가 없습니다",
+            "Time Machine 대상 미설정 — FileVault는 도난 대비일 뿐, 디스크 고장·분실 시 복구 수단이 없습니다.",
+        )
+
+
+def software_update_findings(
+    findings: dict[str, dict[str, str]], previous: dict[str, Any]
+) -> str:
+    """주 1회만 실제 검사하고, 사이 실행에서는 직전 결과를 이월한다.
+
+    이월 없이 건너뛰면 검사일마다 같은 발견이 new/resolved로 출렁여 소음이 된다.
+    """
+    checked_at = previous.get("softwareUpdateCheckedAt")
+    if checked_at:
+        try:
+            if now_local() - datetime.fromisoformat(checked_at) < SOFTWARE_UPDATE_INTERVAL:
+                active = previous.get("active") or {}
+                for identifier in ("macos-updates", "check-failed:software-update"):
+                    if identifier in active:
+                        findings[identifier] = dict(active[identifier])
+                return checked_at
+        except (ValueError, TypeError):
+            pass
+    update_code, update_output = run(["/usr/sbin/softwareupdate", "-l"], timeout=180)
+    if update_code == 124:
+        findings["check-failed:software-update"] = finding(
+            "medium", "macOS 업데이트 검사 실패", "업데이트 확인 제한 시간을 초과했습니다."
+        )
+    elif update_code != 0:
+        findings["check-failed:software-update"] = finding(
+            "medium", "macOS 업데이트 검사 실패", "softwareupdate가 정상 종료되지 않았습니다."
+        )
+    elif "No new software available" not in update_output:
+        labels = re.findall(r"^\* Label:\s*(.+)$", update_output, flags=re.MULTILINE)
+        if labels:
+            findings["macos-updates"] = finding(
+                "medium",
+                "권장 macOS 업데이트가 있습니다",
+                ", ".join(labels[:5]),
+            )
+    return now_local().isoformat()
+
+
+def collect_security_findings(
+    previous: dict[str, Any],
+) -> tuple[dict[str, dict[str, str]], dict[str, Any]]:
     findings: dict[str, dict[str, str]] = {}
     command_check(
         findings,
@@ -196,47 +321,44 @@ def collect_security_findings(previous: dict[str, Any]) -> tuple[dict[str, dict[
         "enabled",
         "macOS 방화벽이 비활성 상태입니다",
     )
-
-    auth_path = HOME / ".codex/auth.json"
-    if auth_path.exists():
-        permissions = stat.S_IMODE(auth_path.stat().st_mode)
-        if permissions & 0o077:
-            findings["codex-auth-permissions"] = finding(
-                "high",
-                "Codex 인증 파일 권한이 너무 넓습니다",
-                f"현재 권한: {permissions:03o}; 권장: 600",
-            )
-
-    update_code, update_output = run(["/usr/sbin/softwareupdate", "-l"], timeout=180)
-    if update_code == 124:
-        findings["check-failed:software-update"] = finding(
-            "medium", "macOS 업데이트 검사 실패", "업데이트 확인 제한 시간을 초과했습니다."
-        )
-    elif update_code != 0:
-        findings["check-failed:software-update"] = finding(
-            "medium", "macOS 업데이트 검사 실패", "softwareupdate가 정상 종료되지 않았습니다."
-        )
-    elif "No new software available" not in update_output:
-        labels = re.findall(r"^\* Label:\s*(.+)$", update_output, flags=re.MULTILINE)
-        if labels:
-            findings["macos-updates"] = finding(
-                "medium",
-                "권장 macOS 업데이트가 있습니다",
-                ", ".join(labels[:5]),
-            )
+    credential_findings(findings)
+    backup_findings(findings)
+    software_checked_at = software_update_findings(findings, previous)
 
     current_listeners, listeners_ok = external_listeners()
     if not listeners_ok:
         findings["check-failed:listeners"] = finding(
             "medium", "네트워크 리스너 검사 실패", "lsof가 정상 종료되지 않았습니다."
         )
-    baseline = set(previous.get("listenerBaseline", []))
-    if baseline:
-        for listener in sorted(current_listeners - baseline):
-            findings[f"listener:{listener}"] = finding(
-                "medium", "새 외부 TCP 리스너가 감지되었습니다", listener
-            )
-    return findings, current_listeners
+    listener_baseline = normalized_listener_baseline(previous.get("listenerBaseline"))
+    if not listener_baseline and listeners_ok:
+        listener_baseline = set(current_listeners)  # 최초 실행: 현재를 조용히 기준선으로
+    for name in sorted(set(current_listeners) - listener_baseline):
+        ports = ", ".join(sorted(current_listeners[name]))
+        findings[f"listener:{name}"] = finding(
+            "medium",
+            "새 외부 TCP 리스너 프로세스가 감지되었습니다",
+            f"{name} (포트 {ports}) — 확인 후 `personal-ops security --accept listener:{name}`",
+        )
+
+    launchd_baseline = set(previous.get("launchdBaseline") or [])
+    current_launchd = launchd_plists()
+    if not launchd_baseline and current_launchd:
+        launchd_baseline = set(current_launchd)  # 최초 실행: 현재를 조용히 기준선으로
+    for path in sorted(current_launchd - launchd_baseline):
+        findings[f"launchd:{path}"] = finding(
+            "medium",
+            "새 launchd 등록이 감지되었습니다",
+            f"{path} — 확인 후 `personal-ops security --accept 'launchd:{path}'`",
+        )
+
+    observations = {
+        "listenerBaseline": sorted(listener_baseline),
+        "launchdBaseline": sorted(launchd_baseline),
+        "softwareUpdateCheckedAt": software_checked_at,
+        "listenerCount": sum(len(ports) for ports in current_listeners.values()),
+    }
+    return findings, observations
 
 
 def security_report(
@@ -290,7 +412,7 @@ def security_report(
 
 def security_command() -> int:
     previous = read_json(SECURITY_STATE, {})
-    current, listeners = collect_security_findings(previous)
+    current, observations = collect_security_findings(previous)
     old = previous.get("active", {}) if isinstance(previous.get("active", {}), dict) else {}
     new_ids = sorted(set(current) - set(old))
     resolved_ids = sorted(set(old) - set(current))
@@ -301,32 +423,65 @@ def security_command() -> int:
     )
     new_ids.extend(identifier for identifier in changed_ids if identifier not in new_ids)
 
-    state = {
-        "checkedAt": now_local().isoformat(),
-        "active": current,
-        "listenerBaseline": previous.get("listenerBaseline") or sorted(listeners),
-    }
+    state = {"checkedAt": now_local().isoformat(), "active": current, **observations}
     atomic_write(SECURITY_STATE, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
 
     new_severities = {current[identifier]["severity"] for identifier in new_ids if identifier in current}
     finding_severity = "high" if "high" in new_severities else "medium" if "medium" in new_severities else "info"
+    headline = current[new_ids[0]]["title"] if new_ids and new_ids[0] in current else ""
+    summary = f"새 {len(new_ids)} · 해소 {len(resolved_ids)} · 활성 {len(current)}"
     emit_ops_event(
         "personal-ops-security", "finding", severity=finding_severity,
         active=len(current), new=len(new_ids), resolved=len(resolved_ids),
-        changed=len(changed_ids), listeners=len(listeners),
+        changed=len(changed_ids), listeners=observations.get("listenerCount", 0),
+        message=f"{summary} · {headline}" if headline else summary,
     )
 
     if not new_ids and not resolved_ids:
         return 0
     path = security_report(current, new_ids, resolved_ids, now_local())
-    parts = []
-    if new_ids:
-        parts.append(f"새 이상 {len(new_ids)}건")
-    if resolved_ids:
-        parts.append(f"해소 {len(resolved_ids)}건")
-    status = "attention" if new_ids else "complete"
-    message = f"보안 점검: {', '.join(parts)} · {obsidian_link(path, 'Obsidian에서 상세 보기')}"
-    notify("security-check", "Security Check", status, message)
+    # medium 이하의 변화는 리포트와 digest까지만 간다. 즉시 Slack은 high 전용 —
+    # 늘 무해한 알림은 사람을 무디게 만들어 채널 자체를 죽인다(2026-08-04 감사).
+    if "high" not in new_severities:
+        return 0
+    message = (
+        f"보안 점검: 새 이상 {len(new_ids)}건(high 포함) · "
+        f"{obsidian_link(path, 'Obsidian에서 상세 보기')}"
+    )
+    notify("security-check", "Security Check", "attention", message)
+    return 0
+
+
+def security_accept(identifiers: list[str]) -> int:
+    """활성 발견을 기준선으로 승인한다. 인자 없으면 승인 가능한 전부."""
+    state = read_json(SECURITY_STATE, {})
+    active = state.get("active", {}) if isinstance(state.get("active"), dict) else {}
+    targets = identifiers or [
+        identifier for identifier in active if identifier.startswith(ACCEPTABLE_PREFIXES)
+    ]
+    listener_baseline = normalized_listener_baseline(state.get("listenerBaseline"))
+    launchd_baseline = set(state.get("launchdBaseline") or [])
+    accepted = []
+    for identifier in targets:
+        if identifier.startswith("listener:"):
+            listener_baseline.add(identifier[len("listener:"):])
+        elif identifier.startswith("launchd:"):
+            launchd_baseline.add(identifier[len("launchd:"):])
+        else:
+            print(f"승인 불가(설정 이상은 accept 대상이 아님): {identifier}")
+            continue
+        active.pop(identifier, None)
+        accepted.append(identifier)
+    state["active"] = active
+    state["listenerBaseline"] = sorted(listener_baseline)
+    state["launchdBaseline"] = sorted(launchd_baseline)
+    atomic_write(SECURITY_STATE, json.dumps(state, ensure_ascii=False, indent=2) + "\n")
+    if accepted:
+        print("기준선으로 승인:")
+        for identifier in accepted:
+            print(f"  - {identifier}")
+    else:
+        print("승인할 활성 발견이 없습니다.")
     return 0
 
 
@@ -565,11 +720,20 @@ def weekly_command(no_agent: bool = False) -> int:
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="personal-ops")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("security")
+    security = subparsers.add_parser("security")
+    security.add_argument(
+        "--accept",
+        nargs="*",
+        default=None,
+        metavar="ID",
+        help="활성 발견을 기준선으로 승인 (인자 없으면 listener:·launchd: 전부)",
+    )
     weekly = subparsers.add_parser("weekly")
     weekly.add_argument("--no-agent", action="store_true")
     args = parser.parse_args(arguments)
     if args.command == "security":
+        if args.accept is not None:
+            return security_accept(args.accept)
         return security_command()
     return weekly_command(args.no_agent)
 

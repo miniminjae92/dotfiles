@@ -355,8 +355,7 @@ def run_monitor(now: datetime | None = None) -> int:
         daily_lines.append((profile, summary(profile, snapshot)))
         return True
 
-    for profile in PROFILE_NAMES:
-        inspect(profile)
+    failed_profiles = [profile for profile in PROFILE_NAMES if not inspect(profile)]
 
     collision = len(current_accounts) == len(PROFILE_NAMES) and len(
         set(current_accounts.values())
@@ -385,11 +384,25 @@ def run_monitor(now: datetime | None = None) -> int:
     for profile, profile_state in profiles_state.items():
         if isinstance(profile_state, dict) and isinstance(profile_state.get("usedPercent"), int):
             used_fields[f"used_{profile}"] = profile_state["usedPercent"]
+    if failed_profiles:
+        # 일부 프로파일만 죽으면 usage/info로 묻혀 만성 고장이 안 보였다
+        # (2026-08-04 감사: default 18일 방치). finding으로 digest에 띄운다.
+        details = "; ".join(
+            f"{profile}: {profiles_state.get(profile, {}).get('lastError', '조회 실패')}"
+            for profile in failed_profiles
+        )
+        emit_ops_event(
+            "codex-account-usage", "finding",
+            severity="medium" if successful else "high",
+            message=f"프로파일 조회 실패 {len(failed_profiles)}건 — {details}"[:300],
+            failed=len(failed_profiles),
+        )
+    error_message = {} if successful else {"message": "전 프로파일 사용량 조회 실패"}
     emit_ops_event(
         "codex-account-usage",
         "usage" if successful else "error",
         severity="info" if successful else "high",
-        successful=successful, **used_fields,
+        successful=successful, **error_message, **used_fields,
     )
     return 0 if successful else 1
 

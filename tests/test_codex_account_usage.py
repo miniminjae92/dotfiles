@@ -39,11 +39,18 @@ class CodexAccountUsageTest(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.environment = mock.patch.dict(
             os.environ,
-            {"CODEX_USAGE_STATE": str(Path(self.temporary_directory.name) / "state.json")},
+            {
+                "CODEX_USAGE_STATE": str(Path(self.temporary_directory.name) / "state.json"),
+                # 테스트가 실제 이벤트 스트림을 오염시키지 않게 격리
+                "OPS_STATE_DIR": str(Path(self.temporary_directory.name) / "ops"),
+            },
         )
         self.environment.start()
+        self.emit_patch = mock.patch.object(codex_account_usage, "emit_ops_event")
+        self.emit_patch.start()
 
     def tearDown(self):
+        self.emit_patch.stop()
         self.environment.stop()
         self.temporary_directory.cleanup()
 

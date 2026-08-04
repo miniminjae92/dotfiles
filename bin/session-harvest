@@ -123,7 +123,8 @@ def main():
     path = out_dir / f"세션 수확 {ts:%Y-%m-%d}.md"
     if path.exists():
         print(f"이미 존재 — 건너뜀(덮어쓰기 방지): {path}")
-        emit_ops_event("session-harvest", "run", note="skipped-exists", window_days=args.days)
+        emit_ops_event("session-harvest", "run", note="skipped-exists",
+                       message="이미 존재 — 건너뜀", window_days=args.days)
         return
 
     run_extract(args.days)
@@ -146,11 +147,20 @@ def main():
     tmp.write_text(doc, encoding="utf-8")
     os.replace(tmp, path)
     print(f"수확 적재: {path} (generator={generator}, source={len(source):,}자)")
-    emit_ops_event(
-        "session-harvest", "run",
-        severity="info" if generator == "codex" else "low",
-        generator=generator, source_chars=len(source), window_days=args.days,
-    )
+    # 마이닝 실패는 run/low가 아니라 error/medium — run/low는 digest가 걸러내서
+    # "성공 0회 파이프라인"이 2세대 동안 보이지 않았다(2026-08-04 감사).
+    if generator == "codex":
+        emit_ops_event(
+            "session-harvest", "run", severity="info",
+            message=f"수확 적재 완료 ({len(source):,}자)",
+            generator=generator, source_chars=len(source), window_days=args.days,
+        )
+    else:
+        emit_ops_event(
+            "session-harvest", "error", severity="medium",
+            message="codex 마이닝 실패 — 스텁 적재 (default 프로파일 고장/한도 여부 확인)",
+            generator=generator, source_chars=len(source), window_days=args.days,
+        )
 
 
 if __name__ == "__main__":

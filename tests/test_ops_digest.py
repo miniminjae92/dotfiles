@@ -1,0 +1,107 @@
+import datetime
+import importlib.machinery
+import importlib.util
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+SCRIPT_PATH = Path(__file__).parents[1] / "bin" / "ops-digest"
+LOADER = importlib.machinery.SourceFileLoader("ops_digest", str(SCRIPT_PATH))
+SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
+ops_digest = importlib.util.module_from_spec(SPEC)
+LOADER.exec_module(ops_digest)
+
+
+def event(source, kind, severity="info", ts="2026-08-04T10:00:00+09:00", **payload):
+    return {
+        "schema_version": 1,
+        "ts": ts,
+        "source": source,
+        "kind": kind,
+        "severity": severity,
+        **payload,
+    }
+
+
+class OpsDigestTest(unittest.TestCase):
+    def test_event_message_prefers_message_key(self):
+        ev = event("x", "error", message="boom", detail="무시됨")
+
+        self.assertEqual(ops_digest.event_message(ev), "boom")
+
+    def test_event_message_falls_back_to_payload_pairs(self):
+        ev = event("personal-ops-security", "finding", "medium", active=11, new=1)
+
+        self.assertEqual(ops_digest.event_message(ev), "active=11 new=1")
+
+    def test_render_groups_repeated_errors_with_count(self):
+        now = datetime.datetime.fromisoformat("2026-08-04T21:00:00+09:00")
+        events = [
+            event(
+                "codex-account-usage",
+                "error",
+                "high",
+                ts=f"2026-08-04T0{index}:00:00+09:00",
+                message="default: 응답 시간 초과",
+            )
+            for index in range(3)
+        ]
+
+        markdown = ops_digest.render_markdown(ops_digest.build_digest(events, 7, now))
+
+        self.assertIn("오류 3건", markdown)
+        self.assertIn("×3", markdown)
+        self.assertEqual(markdown.count("default: 응답 시간 초과"), 1)
+
+    def test_render_surfaces_medium_findings_with_message(self):
+        now = datetime.datetime.fromisoformat("2026-08-04T21:00:00+09:00")
+        events = [
+            event(
+                "session-harvest",
+                "error",
+                "medium",
+                message="codex 마이닝 실패 — 스텁 적재",
+            ),
+            event(
+                "codex-account-usage",
+                "finding",
+                "medium",
+                message="프로파일 조회 실패 1건 — default: 시간 초과",
+            ),
+        ]
+
+        markdown = ops_digest.render_markdown(ops_digest.build_digest(events, 7, now))
+
+        self.assertIn("codex 마이닝 실패", markdown)
+        self.assertIn("[medium] `codex-account-usage`", markdown)
+
+    @mock.patch.object(ops_digest.subprocess, "run")
+    def test_notify_skips_when_no_signal(self, run):
+        digest = {"errors": [], "findings_attention": [], "sources_silent": []}
+
+        ops_digest.notify_digest(digest, None)
+
+        run.assert_not_called()
+
+    @mock.patch.object(ops_digest.subprocess, "run")
+    @mock.patch.object(ops_digest.shutil, "which", return_value="/usr/local/bin/agent-notify")
+    @mock.patch.object(ops_digest.os, "access", return_value=True)
+    def test_notify_fires_on_errors_with_attention_and_link(self, _access, _which, run):
+        digest = {
+            "errors": [event("x", "error")],
+            "findings_attention": [],
+            "sources_silent": [],
+        }
+
+        ops_digest.notify_digest(digest, "/vault/다이제스트.md")
+
+        command = run.call_args.args[0]
+        self.assertIn("attention", command)
+        joined = " ".join(command)
+        self.assertIn("오류 1", joined)
+        self.assertIn("obsidian://open", joined)
+
+
+if __name__ == "__main__":
+    unittest.main()
