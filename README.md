@@ -25,7 +25,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
     * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository — see Extracted Tools below. `bin/git-cm-ai` stays as a thin compatibility wrapper.
-    * `bin/agent-notify` provides provider-neutral, metadata-only completion alerts for agent CLIs. Codex and `agy` adapters are included, and future CLIs can emit normalized events without changing the notification or Slack logic.
+    * `agent-notify` (provider-neutral persistent notifications + menu bar app) now lives in its own repository — see Extracted Tools below. Hook wiring and the two LaunchAgents stay here.
     * `bin/gcodex` and `bin/ncodex` run Codex with isolated Google/Naver account homes and file-based authentication scoped to each account home.
     * `bin/codex-account-usage` reads account usage and reset windows without starting a model turn, and reports daily or threshold changes through `agent-notify` and Slack.
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
@@ -41,7 +41,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
 * **VSCode**: Configuration files to make VSCode feel more like Neovim.
-* **Agent CLI notifications**: Global Codex, `agy`, and Claude Code `Stop` hooks call `agent-notify`, so completion notifications do not depend on terminal or tmux focus. Codex `PermissionRequest` and Claude Code `Notification` events report permission prompts and idle waits as attention-level alerts. `alerter` provides actionable alerts and click-to-focus navigation to the recorded tmux window and pane. Local presentation and Slack delivery are independent policies, and unacknowledged events can use delayed Slack fallback. Prompts, responses, model names, and detailed errors are excluded from notification state.
+* **Agent CLI notifications**: Global Codex, `agy`, and Claude Code `Stop` hooks call `agent-notify`, so completion notifications do not depend on terminal or tmux focus. Codex `PermissionRequest` and Claude Code `Notification` events report permission prompts and idle waits as attention-level alerts. `alerter` provides actionable alerts and click-to-focus navigation to the recorded tmux window and pane. Local presentation and Slack delivery are independent policies, and unacknowledged events can use delayed Slack fallback. Prompts, responses, model names, and detailed errors are excluded from notification state. The tool and its design record live in the agent-notify repository (Extracted Tools below); this repository keeps the hook wiring and LaunchAgents.
 * **Shared agent instructions**: `agents/AGENTS.md` is the provider-neutral instruction core (hard cap 50 lines; conditional workflows live in skills). Codex reads it via the `~/.codex/AGENTS.md` symlink and Gemini/agy via `~/.gemini/GEMINI.md`. AGY stores its OAuth session in one macOS Keychain item; use `agy` directly. `agents/routing.json` declares model and account routing as logical roles (planner/worker/reviewer/mechanical); it is a human-facing registry checked for drift by tooling, not an automatic router. `agents/skills/` holds provider-neutral skills (`developer-agent-os`, `handoff-session`, the vendored Matt Pocock engineering chain) linked into both `~/.codex/skills/` and `~/.claude/skills/`, while Codex-specific skills stay under `agents/codex/skills/`. `handoff-session` writes the compact continuation note that carries work context across sessions, providers, and machines.
 * **Claude Code**: `claude/CLAUDE.md` is linked to `~/.claude/CLAUDE.md` and imports the shared agent instructions with an `@` import, keeping a thin Claude-specific section (model routing defaults) below the neutral core. Managed settings (`claude/settings-fragment.json`: hooks and the status line) are merged into the machine-local `~/.claude/settings.json` by `install.sh` because Claude Code rewrites that file at runtime; only missing keys and hook events are added, and existing entries are never overwritten. The status line (`bin/claude-statusline`) shows directory, model, and context-window usage as an always-on gauge for judging handoff timing, and a `PreCompact` hook raises an attention alert when auto-compaction is imminent — the signal that a handoff point was missed.
 * **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The local sandbox policy uses `workspace-write` with broad personal work roots (`~/.dotfiles`, `~/.obsidian`, `~/projects`, common document folders, and the iCloud Obsidian vault) plus `on-request` approval for protected or exceptional paths, so normal work proceeds without exposing the entire home directory. The global Codex hook source lives at `agents/codex/hooks.json`.
@@ -83,7 +83,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
-    command -v agent-notify
     command -v gcodex
     command -v ncodex
     command -v codex-account-usage
@@ -92,18 +91,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v prfb
     command -v prfbo
     ```
-    Codex and `agy` completion notifications are enabled by the global hook links installed by this script. The provider-neutral entry point for another CLI is:
-    ```bash
-    agent-notify event --source future-agent --status complete --project example
-    ```
-    Inspect and handle pending events with:
-    ```bash
-    agent-notify status
-    agent-notify ack <event-id>
-    agent-notify ack --all
-    agent-notify open <event-id>
-    ```
-    Verify the basic macOS notification path with `agent-notify test`; macOS may ask for notification permission the first time.
+    Codex, `agy`, and Claude Code completion notifications are enabled by the global hook links installed by this script. The `agent-notify` tool itself lives in its own repository (see Extracted Tools below) and is linked only when the clone exists.
 
     The install script links only stable Codex instructions, hooks, custom agents, and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
     It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
@@ -165,66 +153,23 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         `.config/launchd/` hardcodes `/Users/miniminjae/…`. On a machine with
         another username they load and then fail silently. Rewrite the paths first.
 
-    `alerter` returns the selected action to `agent-notify`. Temporary alerts close automatically after eight seconds; persistent alerts wait for an explicit action up to `persistent_seconds` (default 1800), then close. The bound is not a preference: `alerter` does not exit on its own under macOS 26, and an unbounded wait leaks memory until the machine runs out. `agent-notify` records the PID of every `alerter` it spawns, so the `sweep` watchdog can reclaim one that outlived its worker without touching a same-named process owned by another tool. Clicking the alert body or **터미널로 이동** acknowledges the event, selects its recorded tmux client/window/pane, and brings the terminal app forward. **확인** acknowledges without changing focus. **나중에** leaves the event pending, so delayed Slack fallback can still run. AppleScript remains a degraded fallback when `alerter` is unavailable, but its click is owned by Script Editor and cannot focus a tmux pane or acknowledge an event.
-
-    Delivery policies are independent: local delivery is `off`, `temporary`, or `persistent`; Slack delivery is `off`, `delayed`, or `immediate`. Start by adjusting the two axes directly instead of assuming a fixed workflow. Run `agent-notify mode --help` to see every value and example:
-    ```bash
-    agent-notify mode set --local persistent --slack off
-    agent-notify mode set --local temporary --slack off
-    agent-notify mode set --local persistent --slack immediate
-    agent-notify mode set --local off --slack immediate
-    agent-notify mode status
-    ```
-
-    The existing `normal`, `watch`, `away`, and `quiet` named modes remain available for compatibility, but direct settings are the recommended discovery path until a stable personal pattern emerges.
-
-    `AgentNotifyMenu` is the always-visible control surface for this state. The
-    menu bar icon prioritizes approval requests and attention events, keeps
-    pending work visible after an eight-second temporary banner disappears,
-    and exposes local/Slack mode controls, pane navigation, individual
-    acknowledgement, **완료 모두 확인**, and guarded **전체 확인**. The app is
-    intentionally a thin client over `agent-notify status --json`, `mode`,
-    `open`, and `ack`; the CLI and event store remain the source of truth, so
-    closing or rebuilding the app does not lose pending events.
-
-    `install.sh` builds the native AppKit app into
-    `~/Applications/AgentNotifyMenu.app` and starts it with the
-    `com.miniminjae.agent-notify-menu` LaunchAgent. Verify the app-to-CLI
-    contract without opening the UI:
+    Notification behavior — delivery axes, named modes, the menu bar app,
+    `AGENT_NOTIFY_POLICY` process-tree scoping, and ownership-based `alerter`
+    reclamation (the 83 GB incident) — is documented in the
+    [agent-notify repository](https://github.com/miniminjae92/agent-notify).
+    What stays per-machine here: install.sh links the hooks and the two
+    LaunchAgents (`agent-notify-sweep`, `agent-notify-menu`) and builds
+    `~/Applications/AgentNotifyMenu.app` from the clone when it exists. Codex
+    `PermissionRequest` hooks create priority attention events without storing
+    the requested command or tool input; after changing the hook file, open
+    `/hooks` once in Codex to review and trust the new hook hash. Slack
+    escalation is per-machine Keychain state — the webhook URL never lands in
+    this repository:
 
     ```bash
-    ~/Applications/AgentNotifyMenu.app/Contents/MacOS/AgentNotifyMenu --check
-    ```
-
-    Codex `PermissionRequest` hooks create priority attention events without
-    storing the requested command or tool input. After changing the hook file,
-    open `/hooks` once in Codex to review and trust the new hook hash.
-
-    For bulk work that would flood notifications, scope a named mode to one process tree with the `AGENT_NOTIFY_POLICY` environment variable instead of changing the global mode. Hooks inherit the agent CLI's environment, so only events from that command stay quiet while other sessions keep notifying; there is no global state to restore afterwards:
-    ```bash
-    AGENT_NOTIFY_POLICY=quiet <bulk-command>
-    ```
-
-    Run the following inside a tmux pane to verify click-to-focus behavior:
-    ```bash
-    agent-notify test
-    ```
-
-    To enable Slack escalation, create an Incoming Webhook and enter it directly into the macOS Keychain prompt. The URL is never stored in dotfiles or printed by `agent-notify`:
-    ```bash
-    agent-notify slack configure
-    agent-notify slack status
+    agent-notify slack configure          # agent 작업 알림 채널
+    agent-notify slack configure usage    # 계정 사용량 별도 채널
     agent-notify slack test
-    ```
-
-    Keep account-usage reports in a separate Slack channel by registering that channel's
-    Incoming Webhook as the `usage` destination. Agent work alerts continue using the
-    existing `agent` destination:
-
-    ```sh
-    agent-notify slack configure usage
-    agent-notify slack status all
-    agent-notify slack test usage
     ```
 
     Idle resources are reclaimed by background jobs instead of by remembering to clean up.
@@ -322,6 +267,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 실질 도구는 독립 저장소로 이관했다(D-022). install.sh가 `~/projects/<repo>`
 클론이 있으면 `~/.local/bin`으로 링크하고, 없으면 건너뛴다:
 
+- **agent-notify** — 에이전트 CLI 공용 영속 알림(+메뉴 막대 앱). 소유권 기반 alerter 회수(D-016)·pending과 배너 수명 분리(D-017) — <https://github.com/miniminjae92/agent-notify>. 훅 배선·LaunchAgent 2종·개인 config는 이 레포에 남고, install.sh가 클론에서 메뉴 앱을 빌드한다
 - **kman** — 한국어 man 페이지 (Apple 온디바이스 번역·용어집·캐시) — <https://github.com/miniminjae92/kman>
 - **mdview** — 마크다운 디렉터리 로컬 리더 — <https://github.com/miniminjae92/mdview>
 - **video-summary** — 유튜브 전사 저장(기본 무모델)·옵트인 요약·채널 배치 — <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정

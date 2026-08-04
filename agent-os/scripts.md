@@ -18,7 +18,6 @@
 
 | 이름 | 계층 | 목적 |
 |---|---|---|
-| `agent-notify` | 제품 | 에이전트 CLI 공용 영속 알림(배너·알림 스위프) |
 | `agent-os-capture-event` | 배관 | Stop 훅에서 세션 Run 이벤트 캡처 |
 | `agent-os-core-check` | 배관 | SessionStart 훅: 공통 core drift 탐지 |
 | `agent-os-friction` | 배관 | 생산성 불편일기에 마찰 항목 append |

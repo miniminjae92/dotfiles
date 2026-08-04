@@ -70,14 +70,19 @@ reload_agent() {
 }
 
 build_agent_notify_menu() {
-  local source="$DOTFILES_DIR/agent-notify-menu/AgentNotifyMenu.swift"
-  local plist="$DOTFILES_DIR/agent-notify-menu/Info.plist"
+  # 소스는 추출 레포(D-022 개정, Wave 3)에 있다 — 클론 없으면 건너뛴다.
+  local source="$HOME/projects/agent-notify/agent-notify-menu/AgentNotifyMenu.swift"
+  local plist="$HOME/projects/agent-notify/agent-notify-menu/Info.plist"
   local app="$HOME/Applications/AgentNotifyMenu.app"
   local contents="$app/Contents"
   local executable="$contents/MacOS/AgentNotifyMenu"
   local temporary_executable="${executable}.tmp.$$"
   local module_cache="${TMPDIR:-/private/tmp}/agent-notify-menu-module-cache"
 
+  if [ ! -f "$source" ]; then
+    printf 'skip: AgentNotifyMenu (클론 없음: %s)\n' "$source"
+    return
+  fi
   if ! command -v xcrun >/dev/null 2>&1; then
     printf 'skip: xcrun unavailable; AgentNotifyMenu was not built\n' >&2
     return
@@ -156,6 +161,7 @@ fi
 # 독립 저장소로 이관된 도구(D-022) — 클론이 있으면 링크, 없으면 건너뛴다
 # (예: 아이맥처럼 필요할 때만 clone하는 기기).
 for external_tool in \
+  "agent-notify:$HOME/projects/agent-notify/bin/agent-notify" \
   "mdview:$HOME/projects/mdview/mdview" \
   "kman:$HOME/projects/kman/bin/kman" \
   "video-summary:$HOME/projects/video-summary/bin/video-summary" \
