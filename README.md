@@ -32,9 +32,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
     * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
-    * `bin/kman` displays cached Korean man-page translations using Apple's on-device Translation framework and tracks previously unknown abbreviations separately from the translated body.
+    * `kman` (Korean man pages, on-device translation) now lives in its own repository — see Extracted Tools below.
     * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work. Large playlist/channel batches follow the batch procedure in the `vsummary` skill (two-video gate, detached LaunchAgent run, quota stop).
-    * `bin/mdview` serves a directory of Markdown files as a local browsable site, reusing the Neovim `<leader>mp` preview stylesheet. `mdview .` opens a file tree plus a reader with adjustable font size, light/dark/auto theme, and content width, and reloads a document when its file changes.
+    * `mdview` (local Markdown reader site) now lives in its own repository — see Extracted Tools below.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
@@ -93,11 +93,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v codex-account-usage
     command -v personal-ops
     command -v ai-model-status
-    command -v kman
     command -v prfb
     command -v prfbo
     command -v video-summary
-    command -v mdview
     ```
     Codex and `agy` completion notifications are enabled by the global hook links installed by this script. The provider-neutral entry point for another CLI is:
     ```bash
@@ -320,93 +318,20 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 | `agents/gemini/` | Gemini 어댑터 (알림 훅) | `~/.gemini/config/hooks.json` |
 | `agent-os/` | 운영 결정(DECISIONS)·상태·계약(paths.env)·상류 대장(upstreams) | 없음 — 불변식 |
 | `bin/` | CLI 도구 전부 | `~/.local/bin/*` |
-| `kman/` `man/` `style/` `tests/` `vscode/` | 에이전트와 무관한 일반 dotfiles 자산 | 일부 |
+| `man/` `style/` `tests/` `vscode/` | 에이전트와 무관한 일반 dotfiles 자산 | 일부 |
 
 ---
 
-### Korean Man Pages
+### Extracted Tools
 
-`kman` keeps the normal `man` command as the English source of truth and creates a
-versioned Korean cache using Apple's on-device Translation framework:
+`kman`(한국어 man 페이지 — Apple 온디바이스 번역·용어집·캐시)과 `mdview`
+(마크다운 디렉터리 로컬 리더)는 독립 저장소로 이관했다(D-022):
 
-```bash
-man tmux          # English original
-kman tmux         # Korean translation
-kman 1 tmux       # Explicit man section
-```
+- **kman** — <https://github.com/miniminjae92/kman>
+- **mdview** — <https://github.com/miniminjae92/mdview>
 
-The first translation builds a small local Swift helper and can take longer. It
-requires macOS 26.4 or later, installed Command Line Tools, and downloaded English
-and Korean languages under System Settings > General > Language & Region >
-Translation Languages. Later calls reuse the source-hash cache under
-`~/Library/Caches/kman/` and make no API calls.
-
-Viewer-only changes reuse the newest completed local translation and never start a
-new translation automatically. `--refresh` is the explicit opt-in for rebuilding a
-translation. Refreshes use the low-latency on-device strategy and save each
-successful paragraph immediately, so an interrupted run resumes only unfinished
-paragraphs. A paragraph whose protected command token cannot be restored stays in
-English instead of failing the whole page.
-
-The translated body contains no inserted acronym explanations. Reviewed common
-terms live in `kman/glossary/common.json`; command-specific reviewed terms can be
-added under `kman/glossary/commands/`. Unknown abbreviations remain local review
-candidates:
-
-```bash
-kman --terms tmux       # Reviewed terms used by this page
-kman --new-terms tmux   # Unknown acronym candidates only
-kman --refresh tmux     # Rebuild after a glossary or translator change
-```
-
-The interactive viewer uses terminal display-width wrapping, highlighted section
-and option labels, and a `less` progress prompt. Use `/text` to search, `n`/`N`
-for the next/previous match, `g`/`G` for the start/end, and `q` to quit. Pass
-`--no-pager` when plain output is needed for a pipe or file.
-
-For permissively licensed pages, create a review-first Markdown artifact for a
-future blog pipeline. The export is marked `reviewed: false` and includes the
-detected source license notice:
-
-```bash
-kman --export ./tmux.1.ko.md tmux
-```
-
-Pages with unknown or unsupported redistribution terms remain local and are not
-exported.
-
----
-
-### Markdown Directory Preview
-
-`mdview` is the shell counterpart of the Neovim `<leader>mp` Markdown preview. It serves a
-directory over `127.0.0.1` and renders it with the same reader stylesheet
-(`nvim/assets/markdown-reader.css`), adding a sidebar that walks the whole tree.
-
-```bash
-mdview .                 # serve the current directory
-mdview ~/.obsidian/mimir # serve a vault
-mdview README.md         # serve its parent directory and open this file
-```
-
-Reader controls live in the toolbar and persist per browser in `localStorage`: `A−`/`A+` for
-font size (13–26px), a slider for content width (600–1600px), and a button cycling
-auto/light/dark. The sidebar toggles with `b` or the `☰` button and its width is drag-resizable;
-the filter box searches file paths. Documents auto-reload when their file changes on disk, so a
-`:w` in Neovim refreshes the browser without losing scroll position.
-
-Rendering covers GitHub-flavored basics plus task lists, heading anchors, highlight.js syntax
-colors, and Mermaid diagrams that follow the current theme. Relative links between Markdown files
-navigate in place; relative images and other attachments are served from the same tree.
-
-Renderer assets are downloaded once from jsDelivr into `~/.cache/mdview/assets` (override with
-`MDVIEW_ASSET_DIR`); `--refresh-assets` re-fetches them. Without them the page still shows the raw
-Markdown source rather than failing.
-
-The server binds loopback and validates the `Host` header, so a web page cannot reach it through
-DNS rebinding. Only Markdown files under the served root are readable through the document API,
-and dotfiles and ignored directories (`node_modules`, `__pycache__`, `venv`) are excluded from
-every route. `--host` opts out of the loopback binding and prints an exposure warning.
+install.sh가 `~/projects/kman`·`~/projects/mdview` 클론이 있으면
+`~/.local/bin`으로 링크하고, 없으면 건너뛴다.
 
 ---
 

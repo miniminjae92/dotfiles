@@ -39,9 +39,9 @@
 | `git-cm-ai` | 글루 | lazygit-ai-commit exec 래퍼 |
 | `git-plan-ai` | 제품 | 읽기 전용 AI 커밋 플랜 생성 |
 | `harvest-sessions` | 배관 | 세션에서 사용자 발화 추출(수확 1단계) |
-| `kman` | 제품 | man 페이지 한국어 번역(캐시+용어집) |
 | `lazygit-ai-commit` | 제품 | lazygit용 AI 커밋 통합 |
-| `mdview` | 제품 | 마크다운 디렉터리 로컬 웹 뷰어 |
+| `mirror-from-imac` | 배관 | 아이맥 → 맥북 역방향 미러(세션·상태) |
+| `mirror-to-imac` | 배관 | 맥북 → 아이맥 단방향 미러(수확 원천) |
 | `ncodex` | 글루 | naver 계정 codex 래퍼 |
 | `ops-digest` | 배관 | 이벤트 스트림 → 의사결정 다이제스트 |
 | `ops-event` | 배관 | 백그라운드 잡 구조화 이벤트 수집 CLI |

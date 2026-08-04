@@ -153,6 +153,20 @@ if [ -d "$DOTFILES_DIR/bin" ]; then
     link_file "$script_path" "$HOME/.local/bin/$script_name"
   done
 fi
+# 독립 저장소로 이관된 도구(D-022) — 클론이 있으면 링크, 없으면 건너뛴다
+# (예: 아이맥처럼 필요할 때만 clone하는 기기).
+for external_tool in \
+  "mdview:$HOME/projects/mdview/mdview" \
+  "kman:$HOME/projects/kman/bin/kman"
+do
+  tool_name="${external_tool%%:*}"
+  tool_path="${external_tool#*:}"
+  if [ -f "$tool_path" ]; then
+    link_file "$tool_path" "$HOME/.local/bin/$tool_name"
+  else
+    echo "skip: $tool_name (클론 없음: $tool_path)"
+  fi
+done
 link_file \
   "$DOTFILES_DIR/agents/conventions/commit-message/angular.md" \
   "$HOME/.config/commit-message-conventions/angular.md"

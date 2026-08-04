@@ -24,7 +24,6 @@ brew "zsh-syntax-highlighting" # oh-my-zsh 플러그인 대체 (마지막에 소
 
 # Development
 brew "gh"
-brew "pyenv"
 brew "lazygit"
 
 # Agent environment

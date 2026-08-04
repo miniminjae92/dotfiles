@@ -434,3 +434,22 @@ term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 �
 ### 이유
 
 2026-08-04 감사에서 확인된 자원·가시성 문제의 일괄 처리다. 세 스토어(합 40MB+, 파일 6,000여 개)는 삭제 코드 자체가 없어 단조 증가했고, sweep은 4,017개 파일을 매분 전부 읽고 있었다. D-016("생성자가 사라져도 살아남는 자원에 소유권과 상한을")의 연장선 — 이번엔 프로세스가 아니라 데이터다. 관측 배관 자신이 최대 발신원이 되는 것(sweep 89%)과 관측이 구조적으로 침묵하는 것(mirror skip 0회)은 같은 실패의 양면이라 함께 고쳤다.
+
+## D-022 도구 추출 — dotfiles는 소비자, 도구는 독립 저장소
+
+- 상태: 확정
+- 날짜: 2026-08-04
+
+### 결정
+
+- 실질(테스트·자체 로직)과 이식성(개인 경로 0)과 서사를 갖춘 도구는 독립 저장소로 추출한다(2026-08-04 감사의 1군). 위치·이름은 `~/projects` 평평화 규약(폴더명=원격 슬러그).
+- 추출은 **히스토리 보존**(git filter-repo)으로 한다. dotfiles가 public이라 새 노출은 없다.
+- dotfiles는 소비자가 된다: install.sh가 `~/projects/<repo>` 클론이 있으면 `~/.local/bin`으로 링크하고, 없으면 건너뛴다 — "아이맥은 필요할 때만 clone" 규약과 정합.
+- 추출 저장소 표준: 테스트 + GitHub Actions CI + MIT LICENSE + 한국어 본문·영문 요약 README(설계 결정 포함). 코드가 이미 갖춘 env 계약(`MDVIEW_ASSET_DIR`, `KMAN_TRANSLATOR` 등)은 그대로 유지한다.
+- 1차 추출: `mdview`(safe_path 탈출 방어·scan_tree 순환 테스트 신설), `kman`(bin/ 레이아웃 유지로 코드 수정 0, 기존 12케이스 이관). 후속: video-summary·git-ai-commit(Wave 2), agent-notify(3), asx·codex-accounts·simulator-reaper·prfb(4).
+- **원격 생성과 push는 사용자가 한다**(외부 공개 행위). 준비된 명령: `gh repo create miniminjae92/<name> --public --source ~/projects/<name> --push`.
+- 재검토 조건: 추출 도구의 dotfiles 쪽 사용이 링크 부재로 반복해 깨지면(doctor·friction 기록) 서브모듈 또는 재수용을 검토한다.
+
+### 이유
+
+dotfiles 293파일 안에 실질 도구가 문서·발견 가능성 없이 묻혀 있었다 — 감사에서 README 자체 대섹션을 받은 4개 도구가 곧 추출 1군과 일치했다(본인이 이미 암묵적으로 고른 목록). 추출 기준은 D-018의 축(산출물이 소비되는 증거)에 이식성(개인 경로 참조 0)을 더한 것이다. dotfiles는 얇아지고(이번 추출로 bin 39→37개, kman/ 디렉터리 제거), 도구는 각자 CI·라이선스·README를 갖춘 포트폴리오 단위가 된다.

@@ -36,7 +36,7 @@ check_link "$HOME/.gemini/config/hooks.json" "$DOTFILES_DIR/agents/gemini/hooks.
 check_link "$HOME/.config/ai-tools/models.json" "$DOTFILES_DIR/agents/models.json"
 
 echo "== Tools =="
-for tool in git nvim tmux eza bat fzf fd rg gh zoxide pyenv lazygit jq yt-dlp alerter python3; do
+for tool in git nvim tmux eza bat fzf fd rg gh zoxide lazygit jq yt-dlp alerter python3; do
   if command -v "$tool" >/dev/null 2>&1; then
     ok "tool: $tool"
   else
