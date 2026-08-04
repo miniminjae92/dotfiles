@@ -22,7 +22,9 @@
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
-    <key>Weekday</key><integer>0</integer>
+    <!-- 목요일 저녁(2026-08-04 사용자 요청). 일요일 20:30은 주간 codex 쿼터가
+         소진된 뒤라 마이닝이 한도로 실패하기 쉬웠다. -->
+    <key>Weekday</key><integer>4</integer>
     <key>Hour</key><integer>20</integer>
     <key>Minute</key><integer>30</integer>
   </dict>
