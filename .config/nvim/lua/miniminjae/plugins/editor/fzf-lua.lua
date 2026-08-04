@@ -4,6 +4,14 @@ return {
 	"ibhagwan/fzf-lua",
 	cmd = "FzfLua",
 	opts = {
+		-- fzf는 별도 프로세스라 Neovim 하이라이트를 물려받지 않고 자기 기본 색으로 그린다.
+		-- true로 두면 현재 테마의 FzfLuaNormal(→NormalFloat)에서 색을 끌어오므로
+		-- colorscheme의 transparent 설정까지 그대로 따라간다.
+		fzf_colors = true,
+		winopts = {
+			-- 피커를 띄울 때 화면 전체를 어둡게 덮는 장치. 배경이 비쳐야 하므로 끈다(100이면 비활성).
+			backdrop = 100,
+		},
 		-- 파일명을 먼저 보여준다. 경로가 긴 프로젝트에서 무엇을 고르는지 바로 읽힌다.
 		files = { formatter = "path.filename_first" },
 		grep = { formatter = "path.filename_first" },
