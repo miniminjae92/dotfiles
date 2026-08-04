@@ -162,6 +162,13 @@ fi
 # (예: 아이맥처럼 필요할 때만 clone하는 기기).
 for external_tool in \
   "agent-notify:$HOME/projects/agent-notify/bin/agent-notify" \
+  "asx:$HOME/projects/asx/bin/asx" \
+  "codex-account:$HOME/projects/codex-accounts/bin/codex-account" \
+  "codex-account-login:$HOME/projects/codex-accounts/bin/codex-account-login" \
+  "codex-account-usage:$HOME/projects/codex-accounts/bin/codex-account-usage" \
+  "gcodex:$HOME/projects/codex-accounts/bin/gcodex" \
+  "ncodex:$HOME/projects/codex-accounts/bin/ncodex" \
+  "simulator-reaper:$HOME/projects/simulator-reaper/bin/simulator-reaper" \
   "mdview:$HOME/projects/mdview/mdview" \
   "kman:$HOME/projects/kman/bin/kman" \
   "video-summary:$HOME/projects/video-summary/bin/video-summary" \

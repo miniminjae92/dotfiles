@@ -25,20 +25,14 @@
 | `agent-os-usage` | 배관 | 세션 로그 토큰 사용량 집계 |
 | `agent-os-vault-snapshot` | 배관 | 볼트 git 스냅샷+푸시 (launchd) |
 | `ai-model-status` | 제품 | 설정된 AI 모델 표시·라이브 프로브 |
-| `asx` | 제품 | 에이전트 세션 통합 탐색기(search/list/show) |
 | `claude-statusline` | 배관 | Claude Code statusLine 렌더러 |
 | `cleanclip` | 제품 | 클립보드 공백 정리 (tmux prefix+T) |
-| `codex-account` | 글루 | codex 계정 프로필 선택 실행 래퍼 |
-| `codex-account-login` | 글루 | codex 계정 로그인 헬퍼 |
-| `codex-account-usage` | 제품 | codex 계정별 사용량 조회 (launchd) |
 | `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 (은퇴 예정 — D-019, `asx export` 구현 시 삭제) |
 | `dotfiles-doctor` | 배관 | dotfiles·에이전트 환경 read-only 헬스체크 |
-| `gcodex` | 글루 | google 계정 codex 래퍼 |
 | `git-cm-ai` | 글루 | lazygit-ai-commit exec 래퍼 |
 | `harvest-sessions` | 배관 | 세션에서 사용자 발화 추출(수확 1단계) |
 | `mirror-from-imac` | 배관 | 아이맥 → 맥북 역방향 미러(세션·상태) |
 | `mirror-to-imac` | 배관 | 맥북 → 아이맥 단방향 미러(수확 원천) |
-| `ncodex` | 글루 | naver 계정 codex 래퍼 |
 | `ops-digest` | 배관 | 이벤트 스트림 → 의사결정 다이제스트 |
 | `ops-event` | 배관 | 백그라운드 잡 구조화 이벤트 수집 CLI |
 | `personal-ops` | 제품 | 주간 리뷰·보안 점검 자동화 (launchd) |
@@ -46,7 +40,6 @@
 | `prfb-export` | 제품 | GitHub PR 피드백 → Obsidian 내보내기 |
 | `prfbo` | 글루 | 내보낸 PR 피드백 fzf 선택 → nvim 열기 |
 | `session-harvest` | 배관 | 세션 수확 파이프라인 2단계(마이닝+적재) |
-| `simulator-reaper` | 배관 | 유휴 iOS 시뮬레이터 회수 (launchd) |
 | `vault-ai-classify` | 제품 | 볼트 노트 AI 분류 |
 | `zcp` | 글루 | zoxide 질의 대상으로 cp |
 | `zmv` | 글루 | zoxide 질의 대상으로 mv |

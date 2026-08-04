@@ -26,8 +26,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
     * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository — see Extracted Tools below. `bin/git-cm-ai` stays as a thin compatibility wrapper.
     * `agent-notify` (provider-neutral persistent notifications + menu bar app) now lives in its own repository — see Extracted Tools below. Hook wiring and the two LaunchAgents stay here.
-    * `bin/gcodex` and `bin/ncodex` run Codex with isolated Google/Naver account homes and file-based authentication scoped to each account home.
-    * `bin/codex-account-usage` reads account usage and reset windows without starting a model turn, and reports daily or threshold changes through `agent-notify` and Slack.
+    * `codex-accounts` (isolated per-account Codex homes + no-turn quota monitoring: `gcodex`/`ncodex`/`codex-account-usage`) now lives in its own repository — see Extracted Tools below.
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
     * `kman` (Korean man pages, on-device translation) now lives in its own repository — see Extracted Tools below.
@@ -83,9 +82,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
-    command -v gcodex
-    command -v ncodex
-    command -v codex-account-usage
     command -v personal-ops
     command -v ai-model-status
     command -v prfb
@@ -104,8 +100,13 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     It never substitutes another provider/session; use `--latest` only when that fallback is intentional.
     Claude usage is reported unavailable until its Stop hook emits the same usage schema.
     These token counts are not ChatGPT credits or API cost.
-    `gcodex` and `ncodex` keep authentication, sessions, memories, usage records, and file-based credentials under separate `~/.codex-accounts/google` and `~/.codex-accounts/naver` directories. Shared configuration, hooks, agents, and skills remain linked from `~/.codex`. Each `auth.json` is local credential state and must remain mode 600; never commit or copy it. Authenticate each command once with `gcodex login` and `ncodex login`. On macOS these commands use device authorization and open Chrome's `Default` profile for `gcodex` and `Profile 1` for `ncodex`; override them with `CODEX_GOOGLE_CHROME_PROFILE` or `CODEX_NAVER_CHROME_PROFILE` if Chrome profile directories change. An existing login is left intact; run the matching `logout` command first only when intentionally switching accounts. Plain `codex` remains available but is intentionally excluded from this two-account usage-monitoring workflow; use the named wrappers for managed work so an unrelated default login cannot be mistaken for Google or Naver. Existing legacy Keychain entries are ignored and are not deleted automatically.
-    Use `gcodex usage` or `ncodex usage` for an immediate account report; the masked ChatGPT email in the report verifies which account the wrapper actually resolved. A LaunchAgent runs explicitly at 09:00 and every 15 minutes, sends one daily Slack report per account after 09:00, warns when usage crosses 75%, 90%, 95%, or 100%, and reports resets when usage drops by at least 20 percentage points. It also warns when both wrappers resolve to the same ChatGPT email, when an account query fails twice consecutively, or when a failure follows 30 minutes without a successful check. Each account recovers its missed daily report independently. It never falls back to plain `codex`, switches accounts, or consumes a reset credit.
+    Two-account Codex work (`gcodex`/`ncodex` isolated homes, no-turn quota
+    monitoring, threshold/collision warnings) is documented in the
+    [codex-accounts repository](https://github.com/miniminjae92/codex-accounts).
+    Per-machine facts that stay true here: each `auth.json` under
+    `~/.codex-accounts/` is local credential state (mode 600, never commit),
+    and the `com.miniminjae.codex-account-usage` LaunchAgent runs the monitor
+    at 09:00 and every 15 minutes.
     AI model names are managed in `ai-tools/models.json`, linked to `~/.config/ai-tools/models.json`. The registry contains task assignments and model names only, never credentials. Existing model environment variables remain temporary overrides, and `ai-model-status` reports the effective override when one is set.
 
 5.  **Verify the installation**
@@ -184,13 +185,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `persistent_seconds`, `temporary_seconds`, and `pending_ttl_days` live in
     `.config/agent-notify/config.json`.
 
-    `simulator-reaper` runs every ten minutes and shuts down booted iOS simulators, which
-    survive both closing the Simulator window and quitting Xcode — a stuck `Booted` state
-    persists in `device.plist` and CoreSimulatorService revives it at launch, so simulators
-    reappear without Xcode ever being opened. Two of them held 463 processes and 29 GB for
-    nineteen hours before this job existed. It stays out of the way entirely while Xcode,
-    Simulator.app, `xcodebuild`, or `xctest` is running, and only reclaims devices idle past
-    its grace period (`SIMULATOR_REAPER_GRACE_SECONDS`, default 900).
+    `simulator-reaper` (its own repository — see Extracted Tools below) runs every
+    ten minutes via the `com.miniminjae.simulator-reaper` LaunchAgent and reclaims
+    booted iOS simulators that survive Xcode — never while any dev tool is running.
 
     Personal operations run quietly in the background. The security job runs daily at
     10:00, establishes an external-listener baseline on its first run, and sends Slack only
@@ -268,6 +265,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 클론이 있으면 `~/.local/bin`으로 링크하고, 없으면 건너뛴다:
 
 - **agent-notify** — 에이전트 CLI 공용 영속 알림(+메뉴 막대 앱). 소유권 기반 alerter 회수(D-016)·pending과 배너 수명 분리(D-017) — <https://github.com/miniminjae92/agent-notify>. 훅 배선·LaunchAgent 2종·개인 config는 이 레포에 남고, install.sh가 클론에서 메뉴 앱을 빌드한다
+- **asx** — 에이전트 세션 통합 탐색기(Claude 본대화·서브에이전트·다계정 Codex·기기 미러) — <https://github.com/miniminjae92/asx>
+- **codex-accounts** — 계정 격리 Codex 홈 + MCP 무턴 쿼터 감시(gcodex·ncodex·codex-account-usage) — <https://github.com/miniminjae92/codex-accounts>. LaunchAgent와 auth.json 600 규약은 이 레포에 남는다
+- **simulator-reaper** — 유휴 iOS 시뮬레이터 회수(가드·유예·dry-run) — <https://github.com/miniminjae92/simulator-reaper>. LaunchAgent는 이 레포에 남는다
 - **kman** — 한국어 man 페이지 (Apple 온디바이스 번역·용어집·캐시) — <https://github.com/miniminjae92/kman>
 - **mdview** — 마크다운 디렉터리 로컬 리더 — <https://github.com/miniminjae92/mdview>
 - **video-summary** — 유튜브 전사 저장(기본 무모델)·옵트인 요약·채널 배치 — <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정
