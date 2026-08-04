@@ -30,6 +30,7 @@ local parsers = {
 	"c",
 	"cpp",
 	"java",
+	"python",
 	-- 아래 둘은 Phase 7의 도구가 요구한다: kulala(.http), dadbod(SQL 콘솔)
 	"http",
 	"sql",
