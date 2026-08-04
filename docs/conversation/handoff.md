@@ -13,7 +13,7 @@
 - 전체 지도는 mimir 계획 문서(아래) — 각 항목에 실행 결과·커밋 해시가 체크돼 있다
 - 의도적으로 안 한 것:
   - dref 서버 재시작 안 함 — 작업트리에 사용자 개편 WIP(ux.js 등)가 있어 재시작하면 미완성 코드가 활성화됨. P2의 dref 코드 수정은 다음 자연 재시작부터 적용
-  - iMac에 추출 레포 clone 안 함(규약: 필요할 때만) — iMac의 `~/.local/bin/{kman,mdview,video-summary,git-ai-commit,git-plan-ai,lazygit-ai-commit}` 심링크는 dangling. iMac 자동화는 이 도구들을 안 쓰므로 무해
+  - iMac에 추출 레포 clone 안 함(규약: 필요할 때만) — iMac의 `~/.local/bin/{kman,mdview,video-summary,git-ai-commit,git-plan-ai,lazygit-ai-commit}` 심링크는 dangling. iMac 자동화는 이 도구들을 안 쓰므로 무해. **예외: agent-notify는 iMac이 실가동(sweep·menu)하므로 Wave 3에서 rsync로 배치·전환 완료** — push 후 origin 지정만 하면 됨
   - `tests/test_asx.py` 기존 실패 1건 미수리(이 작업과 무관 — asx의 mirror 지원 확장 때 테스트 미갱신, 별건)
   - gitleaks 시크릿 스캔은 D-020에서 보류 — 레포 공개 절차의 게이트로 편입 예정
 - 가정: 수확·agentos-monitor의 정본 가동처는 iMac (오늘 라이브 확인함)
@@ -26,7 +26,8 @@
 - 미결: session-harvest 존폐 — ⓐ 수리 적용됨, **킬 기준: 목요일(08-06, 08-13) 2회 연속 스텁이면 공식 중단**. 실패는 digest 오류 섹션에 뜬다
 - 미결: `~/projects/claude-code`(유출 스냅샷 미러) public 유지 여부 — 포트폴리오 제외는 합의, 비공개 전환은 사용자 판단 대기
 - 미결: 포트폴리오 MDX 작성 — 스키마의 problem·judgment·metrics는 본인 몫(계획 문서에 엔트리별 표 있음)
-- 미결: Wave 3(agent-notify+menu)·Wave 4(asx·codex-accounts·simulator-reaper·prfb) 실행 여부·시점
+- 확정: `D-022` 개정 — Wave 3(agent-notify+menu) 집행 완료(2026-08-04 밤, 후속 세션). launchd 2종 무중단 전환, 양 기기 doctor 0 fail
+- 미결: Wave 4(asx·codex-accounts·simulator-reaper·prfb) 실행 여부·시점
 
 ## Files To Read First
 
@@ -37,12 +38,13 @@
 ## Work In Progress
 
 - Changed files: 없음 — dotfiles 작업트리 클린
-- **push 대기**: dotfiles `main`이 origin보다 6커밋 앞섬(`fa89686`→`59faa95`). 신규 레포 4개는 커밋 완료·원격 미생성:
+- **push 대기**: dotfiles `main`이 origin보다 11커밋 앞섬(`b359f45`부터 HEAD까지, Wave 3 포함 — `git log origin/main..` 실측). 신규 레포 5개는 커밋 완료·원격 미생성:
   ```bash
   gh repo create miniminjae92/mdview        --public --source ~/projects/mdview        --push
   gh repo create miniminjae92/kman          --public --source ~/projects/kman          --push
   gh repo create miniminjae92/video-summary --public --source ~/projects/video-summary --push
   gh repo create miniminjae92/git-ai-commit --public --source ~/projects/git-ai-commit --push
+  gh repo create miniminjae92/agent-notify  --public --source ~/projects/agent-notify  --push
   ```
 - 다른 레포 커밋(각자 push 대기): dref `4468dcb`·`d0c0619`(개편 브랜치 위), naon `cf00c17`, manual-library `33d0ddc`, gh-mine `da0f0fa`
 - iMac dotfiles: 같은 커밋들을 `git am`으로 적용해 둠 — 맥북 push 후 iMac pull 시 동일 내용이라 충돌 없이 정리됨
@@ -60,7 +62,7 @@
 ## Next Steps
 
 1. (사용자) push: dotfiles 6커밋 + 위 `gh repo create` 4건 + naon/manual-library/gh-mine
-2. Wave 3: `agent-notify`(1,721줄+테스트 984줄) + `agent-notify-menu`(Swift 416줄) 추출 — README의 심장은 D-016 사고(83GB alerter)→소유권 회수 설계 서사. launchd 잡 2개(sweep·menu)의 경로 전환이 Wave 1·2보다 까다로움
+2. ~~Wave 3~~ ✅ 완료(2026-08-04 밤 후속 세션) — `~/projects/agent-notify`, 양 기기 전환·검증 끝. push만 남음
 3. Wave 4: asx·codex-accounts(usage+래퍼 4종)·simulator-reaper·prfb
 4. 목 08-06 20:30 이후: 수확 결과 확인 — 스텁이면 1회차 실패 기록(digest에 뜸)
 5. 포트폴리오 MDX 초안(설명보따리부터) — 계획 문서의 표 참조, 본인 목소리로
