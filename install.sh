@@ -157,7 +157,11 @@ fi
 # (예: 아이맥처럼 필요할 때만 clone하는 기기).
 for external_tool in \
   "mdview:$HOME/projects/mdview/mdview" \
-  "kman:$HOME/projects/kman/bin/kman"
+  "kman:$HOME/projects/kman/bin/kman" \
+  "video-summary:$HOME/projects/video-summary/bin/video-summary" \
+  "git-ai-commit:$HOME/projects/git-ai-commit/bin/git-ai-commit" \
+  "git-plan-ai:$HOME/projects/git-ai-commit/bin/git-plan-ai" \
+  "lazygit-ai-commit:$HOME/projects/git-ai-commit/bin/lazygit-ai-commit"
 do
   tool_name="${external_tool%%:*}"
   tool_path="${external_tool#*:}"
@@ -167,6 +171,10 @@ do
     echo "skip: $tool_name (클론 없음: $tool_path)"
   fi
 done
+# 모델 레지스트리 — 추출 도구(git-ai-commit·video-summary)의 XDG 기본 경로
+link_file \
+  "$DOTFILES_DIR/agents/models.json" \
+  "$HOME/.config/ai-tools/models.json"
 link_file \
   "$DOTFILES_DIR/agents/conventions/commit-message/angular.md" \
   "$HOME/.config/commit-message-conventions/angular.md"

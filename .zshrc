@@ -152,7 +152,9 @@ alias l="ls -la"
 
 # Created by `pipx` on 2025-05-04 06:36:44
 export PATH="$HOME/.local/bin:$PATH"
-export MANPATH="$HOME/.dotfiles/man:${MANPATH:-}"
+export MANPATH="$HOME/projects/git-ai-commit/man:${MANPATH:-}"
+# 추출 도구(D-022)의 노트 저장 위치 — 이 기기에서는 vault로
+export VIDEO_SUMMARY_DIR="$HOME/.obsidian/yggdrasil/3-stash/video-summaries"
 
 # User alias
 alias cl="clear"

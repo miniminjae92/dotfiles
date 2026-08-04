@@ -439,6 +439,7 @@ term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 �
 
 - 상태: 확정
 - 날짜: 2026-08-04
+- 개정: 2026-08-04 — Wave 2 집행: `video-summary`(출력 기본값 중립화, VIDEO_SUMMARY_DIR는 .zshrc에서 vault 지정)·`git-ai-commit` 스위트(3도구+man, 컨벤션 2종과 예시 레지스트리 동봉으로 자급자족화) 추출. 모델 레지스트리의 정본 경로를 XDG(`~/.config/ai-tools/models.json`)로 통일하고 install.sh가 `agents/models.json`을 그 자리에 링크 — 추출 코드의 `.dotfiles` 폴백은 제거. MANPATH는 스위트 레포의 man/으로 이동. bin 37→33.
 
 ### 결정
 

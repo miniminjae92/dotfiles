@@ -1,6 +1,6 @@
 ---
 name: vsummary
-description: "Use when the user gives a YouTube URL (or channel/playlist) and wants its content captured — invoked as /vsummary <URL>, $vsummary <URL>, or asks to 전사/요약/수확 a video. Default action saves the full timestamped transcript with no model call; only summarize when the user asks. Wraps the mature `video-summary` CLI (alias `vsummary`) in ~/.dotfiles/bin. Trigger examples: '/vsummary https://youtu.be/…', '이 영상 전사해줘 <URL>', '이 채널 회원영상 다 가져와'."
+description: "Use when the user gives a YouTube URL (or channel/playlist) and wants its content captured — invoked as /vsummary <URL>, $vsummary <URL>, or asks to 전사/요약/수확 a video. Default action saves the full timestamped transcript with no model call; only summarize when the user asks. Wraps the mature `video-summary` CLI (alias `vsummary`) in ~/projects/video-summary. Trigger examples: '/vsummary https://youtu.be/…', '이 영상 전사해줘 <URL>', '이 채널 회원영상 다 가져와'."
 ---
 
 # vsummary — 유튜브 원본 수집 + 선택적 요약

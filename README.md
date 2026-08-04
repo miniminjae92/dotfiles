@@ -24,16 +24,14 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
-    * `bin/git-ai-commit` is the unified entry point for AI-assisted commit planning, applying a cached plan, and staged-change message generation. It can be run as `git ai-commit`.
-    * `bin/git-cm-ai` and `bin/git-plan-ai` remain available as compatibility commands for message-only and plan-only workflows.
+    * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository — see Extracted Tools below. `bin/git-cm-ai` stays as a thin compatibility wrapper.
     * `bin/agent-notify` provides provider-neutral, metadata-only completion alerts for agent CLIs. Codex and `agy` adapters are included, and future CLIs can emit normalized events without changing the notification or Slack logic.
     * `bin/gcodex` and `bin/ncodex` run Codex with isolated Google/Naver account homes and file-based authentication scoped to each account home.
     * `bin/codex-account-usage` reads account usage and reset windows without starting a model turn, and reports daily or threshold changes through `agent-notify` and Slack.
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
-    * `bin/lazygit-ai-commit` is the underlying message generator used by `git ai-commit message`, `git-cm-ai`, and lazygit.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
     * `kman` (Korean man pages, on-device translation) now lives in its own repository — see Extracted Tools below.
-    * `bin/video-summary` saves a YouTube video's full timestamped transcript as an Obsidian Markdown note by default, with no model call. Add `--summarize` to also generate a dynamically sized Korean summary with timestamp links. It reuses unchanged notes to avoid duplicate work. Large playlist/channel batches follow the batch procedure in the `vsummary` skill (two-video gate, detached LaunchAgent run, quota stop).
+    * `video-summary` (YouTube transcript capture, opt-in summaries) now lives in its own repository — see Extracted Tools below. Agent sessions use the `vsummary` skill for batch procedures.
     * `mdview` (local Markdown reader site) now lives in its own repository — see Extracted Tools below.
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
@@ -85,8 +83,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
     command -v git-cm-ai
-    command -v git-plan-ai
-    command -v git-ai-commit
     command -v agent-notify
     command -v gcodex
     command -v ncodex
@@ -95,7 +91,6 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     command -v ai-model-status
     command -v prfb
     command -v prfbo
-    command -v video-summary
     ```
     Codex and `agy` completion notifications are enabled by the global hook links installed by this script. The provider-neutral entry point for another CLI is:
     ```bash
@@ -324,110 +319,17 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 ### Extracted Tools
 
-`kman`(한국어 man 페이지 — Apple 온디바이스 번역·용어집·캐시)과 `mdview`
-(마크다운 디렉터리 로컬 리더)는 독립 저장소로 이관했다(D-022):
+실질 도구는 독립 저장소로 이관했다(D-022). install.sh가 `~/projects/<repo>`
+클론이 있으면 `~/.local/bin`으로 링크하고, 없으면 건너뛴다:
 
-- **kman** — <https://github.com/miniminjae92/kman>
-- **mdview** — <https://github.com/miniminjae92/mdview>
-
-install.sh가 `~/projects/kman`·`~/projects/mdview` 클론이 있으면
-`~/.local/bin`으로 링크하고, 없으면 건너뛴다.
-
----
-
-### YouTube Video Summaries
-
-In an agent session, invoke the `vsummary` skill (`/vsummary` in Claude, `$vsummary` in Codex) instead of assembling the flags manually. Its batch procedure covers playlist-name resolution, the account/auth gate, the two-video gate, and the detached LaunchAgent run for large playlists.
-
-`video-summary` uses `yt-dlp` for subtitles. It auto-detects the video's original spoken language and prefers that track (the untranslated `-orig` ASR) over YouTube's machine-translated captions, so an English video yields English and a Korean video yields Korean — no accidental auto-translation. Force a specific order with `--sub-langs en,ko`. By default it saves the full timestamped transcript (`type: video-transcript`, `has_transcript: true`) with no model call, preserving the raw material for later cross-video insight work. Check the transcript size without spending model tokens:
-
-```bash
-video-summary 'https://www.youtube.com/watch?v=VIDEO_ID' --dry-run
-```
-
-Save the raw transcript note (default, no model call):
-
-```bash
-video-summary 'https://www.youtube.com/watch?v=VIDEO_ID'
-```
-
-Add `--summarize` to also generate a Korean summary with timestamp links via the authenticated Codex CLI. The transcript is still embedded in the same note:
-
-```bash
-video-summary 'https://www.youtube.com/watch?v=VIDEO_ID' --summarize
-```
-
-After reloading `.zshrc`, the shorter `vsummary` alias runs the same command.
-
-By default, notes are saved under `~/.obsidian/yggdrasil/3-stash/video-summaries/`. Each note records the transcript hash, summary version, processing strategy, model, and observed token usage. If the video ID, transcript hash, and summary version are unchanged, the existing note is returned without another model call. Use `--force` only when a fresh summary is intentionally required.
-
-For a channel membership, let `yt-dlp` read the signed-in browser profile directly. The cookie database is read at runtime and is never exported by `video-summary`. Discover member candidates across the Membership and Community tabs and every channel playlist, then verify their availability without fetching subtitles or calling Codex:
-
-```bash
-video-summary 'https://www.youtube.com/@CHANNEL' \
-  --discover-channel-members \
-  --cookies-from-browser 'chrome:Profile 1' \
-  --list-only
-```
-
-`--discover-channel-members` implies channel and members-only mode. It keeps only entries whose resolved `yt-dlp` availability is `subscriber_only` and defaults to all matching videos. By default each member video is saved as a raw transcript note with no model call; add `--summarize` to also generate summaries, which then use `gpt-5.6-luna` with low reasoning in sequential mode. Detailed summaries preserve substantive claims, evidence, procedures, conditions, examples, numbers, exceptions, warnings, and Q&A. Use `--max-videos N` for a bounded first run. Check transcripts without model calls or note writes, then run the same command without `--dry-run` to create notes:
-
-```bash
-video-summary 'https://www.youtube.com/@CHANNEL' \
-  --discover-channel-members \
-  --cookies-from-browser 'chrome:Profile 1' \
-  --codex-command gcodex \
-  --max-videos 3 \
-  --dry-run
-```
-
-Run without `--max-videos` and `--dry-run` to process all verified member videos. Notes are stored once, while generated indexes under `Video Summaries/Playlists/` link them in each YouTube playlist's order. A video present in several playlists is summarized only once. The verified member inventory is cached there too; use `--refresh-inventory` when the channel adds videos. One failed or captionless video is reported in the final JSON without stopping later videos. Existing notes with the same detailed-summary version are skipped unless `--force` is provided, so rerunning the identical command resumes safely. Add `--notify-slack` to send completion or attention-required results through the configured `agent-notify` Slack destination. Browser cookies grant account access: keep this as an interactive personal command, never export a cookie file, and review YouTube's current terms before automated use.
+- **kman** — 한국어 man 페이지 (Apple 온디바이스 번역·용어집·캐시) — <https://github.com/miniminjae92/kman>
+- **mdview** — 마크다운 디렉터리 로컬 리더 — <https://github.com/miniminjae92/mdview>
+- **video-summary** — 유튜브 전사 저장(기본 무모델)·옵트인 요약·채널 배치 — <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정
+- **git-ai-commit** — AI 커밋 스위트(plan/apply/message + lazygit 연동 + man 페이지) — <https://github.com/miniminjae92/git-ai-commit>. `git cm-ai`·`git plan-ai` 호환 명령은 유지되고, 모델 라우팅은 `~/.config/ai-tools/models.json`(install.sh가 `agents/models.json`을 링크)
 
 ---
 
-### AI-assisted Git Commits
-
-Use one command namespace for the complete workflow. With no subcommand it generates a read-only plan, saves it inside `.git/ai-commit-plan.json`, and sends at most 6,000 tracked-diff characters to the Gemini model selected in `agy`. Untracked file contents are never sent:
-
-```bash
-git ai-commit
-```
-
-Use more tracked diff only when the compact plan lacks context:
-
-```bash
-git ai-commit --full
-```
-
-Preview the saved plan without changing Git state, then explicitly apply it:
-
-```bash
-git ai-commit apply --dry-run
-git ai-commit apply
-```
-
-`apply` verifies that the repository and working-tree fingerprint still match the saved plan, checks the exact staged paths before every commit, and never pushes. `apply --dry-run` prints the cached commit list and warnings without a model call or Git write. Plans containing warnings stop by default; after human or agent review, confirm the review explicitly with `git ai-commit apply --reviewed`.
-
-Git handles a top-level `--help` as a man-page request before an external command runs. Use either of these forms for the built-in workflow help:
-
-```bash
-git ai-commit -h
-git ai-commit help
-git ai-commit apply --help
-```
-
-The dotfiles `MANPATH` includes the bundled `git-ai-commit(1)` page, so after opening a new shell the standard `git ai-commit --help` form works as well.
-
-The plan assigns every changed path exactly once. Sensitive-looking paths such as `.env`, private keys, and credential JSON files stop cloud delegation before `agy` is called. Existing staged paths are accepted only when all of them belong to the first planned commit.
-
-For a manually staged change, generate only a commit message. Compact mode is also the default here:
-
-```bash
-git ai-commit message agy
-git ai-commit message agy --full
-```
-
-The existing `git plan-ai` and `git cm-ai` commands remain available for compatibility.
+### AI Model Status
 
 Configured model names and non-inference provider status:
 

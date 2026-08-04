@@ -1,2 +1,2 @@
 #!/bin/sh
-exec "$HOME/.dotfiles/bin/lazygit-ai-commit" "$@"
+exec "$HOME/.local/bin/lazygit-ai-commit" "$@"

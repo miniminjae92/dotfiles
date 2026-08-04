@@ -35,11 +35,8 @@
 | `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 (은퇴 예정 — D-019, `asx export` 구현 시 삭제) |
 | `dotfiles-doctor` | 배관 | dotfiles·에이전트 환경 read-only 헬스체크 |
 | `gcodex` | 글루 | google 계정 codex 래퍼 |
-| `git-ai-commit` | 제품 | AI 커밋 계획 수립·검증·적용 |
 | `git-cm-ai` | 글루 | lazygit-ai-commit exec 래퍼 |
-| `git-plan-ai` | 제품 | 읽기 전용 AI 커밋 플랜 생성 |
 | `harvest-sessions` | 배관 | 세션에서 사용자 발화 추출(수확 1단계) |
-| `lazygit-ai-commit` | 제품 | lazygit용 AI 커밋 통합 |
 | `mirror-from-imac` | 배관 | 아이맥 → 맥북 역방향 미러(세션·상태) |
 | `mirror-to-imac` | 배관 | 맥북 → 아이맥 단방향 미러(수확 원천) |
 | `ncodex` | 글루 | naver 계정 codex 래퍼 |
@@ -52,6 +49,5 @@
 | `session-harvest` | 배관 | 세션 수확 파이프라인 2단계(마이닝+적재) |
 | `simulator-reaper` | 배관 | 유휴 iOS 시뮬레이터 회수 (launchd) |
 | `vault-ai-classify` | 제품 | 볼트 노트 AI 분류 |
-| `video-summary` | 제품 | YouTube 타임스탬프 요약 → Markdown 노트 |
 | `zcp` | 글루 | zoxide 질의 대상으로 cp |
 | `zmv` | 글루 | zoxide 질의 대상으로 mv |
