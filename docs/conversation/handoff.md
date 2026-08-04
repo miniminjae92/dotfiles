@@ -2,62 +2,74 @@
 
 ## Context
 
-- Date: 2026-07-29
-- Repository: `/Users/miniminjae/.dotfiles`
-- Branch: `main`
-- User goal: iMac의 일반 대화형 판단 요청용 `agent-notify` 실험을 철회하고, 실행 요소는 롤백한 뒤 실패 기록만 남긴다.
+- Date: 2026-08-04 (밤)
+- Repository: `/Users/miniminjae/.dotfiles` 중심. 파생 작업이 닿은 곳: 신규 추출 레포 4개(`~/projects/{mdview,kman,video-summary,git-ai-commit}`), `~/projects/{dref,naon,manual-library,gh-mine}`, mimir vault, iMac(ssh `imac`)
+- Branch: dotfiles `main`. dref만 `feat/ux-proposal-adoption`
+- User goal: ① 매일 보안점검 감사 ② 루틴 전수 검수·개선(P0~P2) ③ dotfiles의 실질 도구를 포트폴리오용 독립 레포로 추출(Wave 0~4)
 
 ## Current State
 
-- `agent-notify decision` 실험은 실사용 알림이 도착하지 않아 실패로 판정하고 롤백했다.
-- 제거 완료:
-  - `agents/AGENTS.md`의 판단 질문 전 알림 호출 규칙
-  - `bin/agent-notify`의 `decision` 명령
-  - Codex execpolicy 정본과 `~/.codex/rules/agent-notify.rules` 심볼릭 링크
-  - `install.sh`, `dotfiles-doctor`, 단위 테스트, README의 실험 연결
-- 유지:
-  - 기존 `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` 정상 링크
-  - 기존 완료·CLI 권한 요청 알림과 `agent-notify` sweep
-  - D-016, D-017에 따른 기존 알림 자원 상한·회수 정책
-- 실험 이벤트 파일의 `alerter_pid`는 모두 `null`이며, 프로세스 목록에도 `agent-notify`·`alerter`·알림용 `osascript`가 남아 있지 않았다. iMac의 메뉴 막대 LaunchAgent는 설치돼 있지 않다.
-- sweep LaunchAgent는 매분 짧게 실행하고 종료하는 기존 작업이며 확인 시점 상태는 `not running`, 마지막 종료 코드는 0이었다.
-- 커밋과 push는 하지 않았다.
+- 완료(전부 오늘): 감사 종합 보고 → P0 신호 복원(D-020) → P1 자원·가시성(D-021) → P2 위생(D-021 개정) → Wave 0(README 3건+포트폴리오 등재 계획) → Wave 1(mdview·kman 추출, D-022) → Wave 2(video-summary·git-ai-commit 스위트 추출, D-022 개정) → 주간 수확을 일→**목 20:30**으로 이동
+- 전체 지도는 mimir 계획 문서(아래) — 각 항목에 실행 결과·커밋 해시가 체크돼 있다
+- 의도적으로 안 한 것:
+  - dref 서버 재시작 안 함 — 작업트리에 사용자 개편 WIP(ux.js 등)가 있어 재시작하면 미완성 코드가 활성화됨. P2의 dref 코드 수정은 다음 자연 재시작부터 적용
+  - iMac에 추출 레포 clone 안 함(규약: 필요할 때만) — iMac의 `~/.local/bin/{kman,mdview,video-summary,git-ai-commit,git-plan-ai,lazygit-ai-commit}` 심링크는 dangling. iMac 자동화는 이 도구들을 안 쓰므로 무해
+  - `tests/test_asx.py` 기존 실패 1건 미수리(이 작업과 무관 — asx의 mirror 지원 확장 때 테스트 미갱신, 별건)
+  - gitleaks 시크릿 스캔은 D-020에서 보류 — 레포 공개 절차의 게이트로 편입 예정
+- 가정: 수확·agentos-monitor의 정본 가동처는 iMac (오늘 라이브 확인함)
 
 ## Decisions (cite, do not restate)
 
-- 확정: `D-016`, `D-017` — 기존 `agent-notify` 자원 회수와 관제 정책.
-- 철회: `일반 대화형 판단 요청용 agent-notify decision + Codex execpolicy` — 실사용 전달 실패와 불필요한 복잡성 때문에 D-번호로 승격하지 않고 제거했다.
+- 확정: `D-020` — 보안점검·다이제스트 신호 복원 (상태: 파일럿, 재검토 조건 있음)
+- 확정: `D-021` — 백그라운드 자원 회수·계측 위생 (+개정: P2 집행)
+- 확정: `D-022` — 도구 추출, dotfiles는 소비자 (+개정: Wave 2 집행)
+- 미결: session-harvest 존폐 — ⓐ 수리 적용됨, **킬 기준: 목요일(08-06, 08-13) 2회 연속 스텁이면 공식 중단**. 실패는 digest 오류 섹션에 뜬다
+- 미결: `~/projects/claude-code`(유출 스냅샷 미러) public 유지 여부 — 포트폴리오 제외는 합의, 비공개 전환은 사용자 판단 대기
+- 미결: 포트폴리오 MDX 작성 — 스키마의 problem·judgment·metrics는 본인 몫(계획 문서에 엔트리별 표 있음)
+- 미결: Wave 3(agent-notify+menu)·Wave 4(asx·codex-accounts·simulator-reaper·prfb) 실행 여부·시점
 
 ## Files To Read First
 
-- `/Users/miniminjae/.obsidian/mimir/40 Reviews/Runs/2026-07-29-agent-notify-decision-alert-rollback.md`
-- `/Users/miniminjae/.obsidian/mimir/40 Reviews/Runs/2026-07-29-agent-notify-decision-approval-loop-fix.md`
-- `agent-os/DECISIONS.md`의 D-016, D-017
+- `~/.obsidian/mimir/00 Inbox/dotfiles 감사·독립 레포 계획 2026-08-04.md`: 오늘 전체의 지도 — 감사 근거, P0~P2 체크 결과, Wave별 상태, 포트폴리오 등재 계획표
+- `agent-os/DECISIONS.md` D-020~D-022: 행동이 바뀐 부분의 정본
+- `git log fa89686..59faa95`: dotfiles 쪽 변경 6커밋의 요약
 
 ## Work In Progress
 
-- 저장소 실행 코드와 설정은 실험 전 상태로 복구됐다.
-- 남은 저장소 변경은 문서뿐이다:
-  - `README.md`: 이미 존재하는 Codex 훅 정본과 `PermissionRequest` 동작을 정확히 반영
-  - `docs/conversation/handoff.md`: 실패·롤백 기록
-- 저장소 밖에는 세 Run과 사용자 friction 기록이 남는다.
+- Changed files: 없음 — dotfiles 작업트리 클린
+- **push 대기**: dotfiles `main`이 origin보다 6커밋 앞섬(`fa89686`→`59faa95`). 신규 레포 4개는 커밋 완료·원격 미생성:
+  ```bash
+  gh repo create miniminjae92/mdview        --public --source ~/projects/mdview        --push
+  gh repo create miniminjae92/kman          --public --source ~/projects/kman          --push
+  gh repo create miniminjae92/video-summary --public --source ~/projects/video-summary --push
+  gh repo create miniminjae92/git-ai-commit --public --source ~/projects/git-ai-commit --push
+  ```
+- 다른 레포 커밋(각자 push 대기): dref `4468dcb`·`d0c0619`(개편 브랜치 위), naon `cf00c17`, manual-library `33d0ddc`, gh-mine `da0f0fa`
+- iMac dotfiles: 같은 커밋들을 `git am`으로 적용해 둠 — 맥북 push 후 iMac pull 시 동일 내용이라 충돌 없이 정리됨
+- Known dirty state that should not be reverted: dref(`ops/install.sh`, `src/domain/ux.js`, `src/web/public/projects.js` + untracked library items), naon(문서 5개), manual-library(3개) — 전부 **사용자 WIP**, 건드리지 말 것
 
 ## Verification
 
-- `agents/AGENTS.md`, `bin/agent-notify`, `bin/dotfiles-doctor`, `install.sh`, `tests/test_agent_notify.py`는 HEAD와 동일하다.
-- `~/.codex/rules/agent-notify.rules`와 저장소의 `agents/codex/rules/`는 제거됐다.
-- 실험 이벤트의 기록된 `alerter_pid`는 모두 `null`이다.
-- `python3 -m unittest tests.test_agent_notify`: 54개 통과.
-- `python3 -m py_compile bin/agent-notify`, `bash -n install.sh bin/dotfiles-doctor`, `git diff --check`: 통과.
-- 프로세스 목록 확인: 조회 명령 자체 외 `agent-notify`·`alerter`·알림용 `osascript` 0개.
+- Command: `python3 -m unittest discover -s tests` (dotfiles)
+  Result: 104개 중 103 통과 — 유일 실패는 기존 `test_asx.py` 1건(별건)
+- Command: `~/.dotfiles/bin/dotfiles-doctor`
+  Result: 48 pass · 1 warn(D-012 설계상 baseline) · **0 fail**
+- 신규 레포 테스트: mdview 6 · kman 12 · video-summary 29 · git-ai-commit 16 — 전부 OK
+- 라이브 확인: `git ai-commit help`·`man -w git-ai-commit`·`video-summary --help` 새 심링크로 정상. 21:00 digest가 `mimir/40 Reviews/백그라운드 잡 다이제스트 minjaes-MacBook-Pro.md`에 착지({host} 분리 작동). 보안점검 활성 이상 3건 전부 진짜(backup-missing·방치 http.server·macos-updates)
 
 ## Next Steps
 
-- 이 실험을 자동 재개하지 않는다.
-- 일반 대화형 판단 알림이 다시 필요해지면 새 요구와 자원 상한을 먼저 정의하고 별도 설계로 시작한다.
+1. (사용자) push: dotfiles 6커밋 + 위 `gh repo create` 4건 + naon/manual-library/gh-mine
+2. Wave 3: `agent-notify`(1,721줄+테스트 984줄) + `agent-notify-menu`(Swift 416줄) 추출 — README의 심장은 D-016 사고(83GB alerter)→소유권 회수 설계 서사. launchd 잡 2개(sweep·menu)의 경로 전환이 Wave 1·2보다 까다로움
+3. Wave 4: asx·codex-accounts(usage+래퍼 4종)·simulator-reaper·prfb
+4. 목 08-06 20:30 이후: 수확 결과 확인 — 스텁이면 1회차 실패 기록(digest에 뜸)
+5. 포트폴리오 MDX 초안(설명보따리부터) — 계획 문서의 표 참조, 본인 목소리로
 
 ## Watch Outs
 
-- 기존 CLI `PermissionRequest` 훅과 일반 대화형 판단 알림 실험을 혼동하지 않는다.
-- 과거 두 Run의 구현 성공 문장은 당시 관찰 기록이며, 최종 판정은 이번 롤백 Run을 따른다.
-- 기존 pending 이벤트나 알림 상태 파일은 사용자 데이터이므로 이번 롤백에서 삭제하지 않았다.
+- `.zshrc`의 `MANPATH`·`VIDEO_SUMMARY_DIR` export는 **새 셸부터** 적용
+- battery는 제3자 plist — `battery` CLI로 maintain 재설정하면 stdout 로그 차단이 되돌아갈 수 있음(D-021 개정에 기록)
+- 방치된 `python -m http.server 8899`(다른 세션 잔재, PID 51865)가 아직 살아 있으면 `kill 51865` — 보안점검 활성 목록에서 확인 가능
+- iMac에서 install.sh 재실행 시 추출 도구 6개의 `skip: … (클론 없음)` 출력은 정상 동작
+- 추출 레포의 CI는 GitHub push 후에야 처음 돈다 — ubuntu 러너에서 깨지면(특히 kman의 pager/man 관련) 그때 수정
+- dref-harvest의 50분 행(hang) 3건은 severity만 고쳤고 원인 미진단 — 재발하면 digest 오류 섹션에 message로 보인다
