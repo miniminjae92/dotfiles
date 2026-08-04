@@ -13,7 +13,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Neovim**: A robust Neovim setup managed by `lazy.nvim`.
     * **Theming**: Uses `solarized-osaka.nvim` for a clean, dark color scheme.
     * **Keymaps**: A consistent keybinding system with `<leader>` set to `space`, for easy navigation, window management, and text manipulation.
-    * **LSP & Completion**: Integrates `mason.nvim` and `nvim-lspconfig` for language server protocol (LSP) support for languages like C, C++, Java, Svelte, and Python. Autocompletion is handled by `nvim-cmp` with `LuaSnip`.
+    * **LSP & Completion**: Uses Neovim's native LSP (`lsp/` directory + `vim.lsp.enable`), with `mason.nvim` supplying the servers and `nvim-lspconfig` acting purely as a defaults database. Java runs through `nvim-jdtls` from `ftplugin/java.lua`. Autocompletion is handled by `blink.cmp`.
     * **Configuration Context**: See `.config/nvim/README.md` before changing the Neovim setup; update it whenever the structure, plugins, keymaps, or tooling instructions change.
 * **Command Line Tools**:
     * `zoxide` for smarter directory navigation (`z` replaces `cd`).
@@ -531,10 +531,12 @@ ai-model-status --probe codex
     * `<leader>se`: Make splits equal size
     * `<leader>sx`: Close current split
     * `<leader>sm`: Maximize/minimize split
-* **File Explorer**: `<leader>ee` to toggle `nvim-tree`.
-* **Fuzzy Finding**:
+* **File Explorer**: `<leader>ee` toggles the `snacks.nvim` tree; `-` opens the current folder in `oil.nvim` for editing.
+* **Fuzzy Finding** (`fzf-lua`):
     * `<leader>ff`: Find files
     * `<leader>fs`: Live grep string
+
+> The full keymap table and the reasoning behind each layer live in `.config/nvim/README.md`.
 
 #### Tmux
 

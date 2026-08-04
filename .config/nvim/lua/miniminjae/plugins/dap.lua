@@ -1,16 +1,15 @@
--- lua/miniminjae/plugins/dap.lua
+-- 디버깅의 언어 무관 부분: UI 배치·거터 표시·키맵. 어댑터(무엇을 붙일지)는 lang/이 꽂는다.
+-- 그래서 이 파일만으로는 아무것도 디버깅하지 못한다 — 그게 의도다.
 return {
 	"mfussenegger/nvim-dap",
 	dependencies = {
 		"nvim-neotest/nvim-nio",
 		"rcarriga/nvim-dap-ui",
 		"theHamsta/nvim-dap-virtual-text",
-		"nvim-telescope/telescope-dap.nvim",
 	},
 	config = function()
 		local dap = require("dap")
 		local dapui = require("dapui")
-		local dap_virtual_text = require("nvim-dap-virtual-text")
 
 		dapui.setup({
 			layouts = {
@@ -35,51 +34,54 @@ return {
 			},
 		})
 
-		-- 가상 텍스트 (변수 옆에 값 보여주기)
-		dap_virtual_text.setup()
+		-- 변수 값을 코드 옆에 바로 띄운다(값 보려고 watch 창을 오갈 필요를 줄인다)
+		require("nvim-dap-virtual-text").setup({})
 
-		-- 디버깅 시작/종료 시 UI 자동으로 열고 닫기
-		dap.listeners.after.event_initialized["dapui_config"] = function()
+		-- 거터 표시. 중단점 종류를 모양으로 구분한다.
+		local signs = {
+			DapBreakpoint = { text = "●", texthl = "DiagnosticSignError" },
+			DapBreakpointCondition = { text = "◆", texthl = "DiagnosticSignWarn" },
+			DapLogPoint = { text = "○", texthl = "DiagnosticSignInfo" },
+			DapBreakpointRejected = { text = "◉", texthl = "DiagnosticSignHint" },
+			DapStopped = { text = "▶", texthl = "DiagnosticSignWarn", linehl = "Visual" },
+		}
+		for name, opts in pairs(signs) do
+			vim.fn.sign_define(name, opts)
+		end
+
+		-- 세션이 시작되면 UI를 열고, 끝나면 닫는다
+		dap.listeners.after.event_initialized["dapui"] = function()
 			dapui.open()
 		end
-		dap.listeners.before.event_terminated["dapui_config"] = function()
+		dap.listeners.before.event_terminated["dapui"] = function()
 			dapui.close()
 		end
-		dap.listeners.before.event_exited["dapui_config"] = function()
+		dap.listeners.before.event_exited["dapui"] = function()
 			dapui.close()
 		end
 
-		local keymap = vim.keymap
+		local map = function(lhs, rhs, desc)
+			vim.keymap.set("n", lhs, rhs, { desc = desc })
+		end
 
-		keymap.set("n", "<leader>db", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
-		keymap.set("n", "<leader>dc", dap.continue, { desc = "Debug: Continue" })
-		keymap.set("n", "<leader>di", dap.step_into, { desc = "Debug: Step Into" })
-		keymap.set("n", "<leader>do", dap.step_over, { desc = "Debug: Step Over" })
-		keymap.set("n", "<leader>dO", dap.step_out, { desc = "Debug: Step Out" })
-		keymap.set("n", "<leader>dr", dap.repl.toggle, { desc = "Debug: Toggle REPL" })
-		keymap.set("n", "<leader>dl", dap.run_last, { desc = "Debug: Run Last" })
-		keymap.set("n", "<leader>du", dapui.toggle, { desc = "Debug: Toggle UI" })
-		keymap.set("n", "<leader>dx", dap.terminate, { desc = "Debug: Terminate" })
-
-		-- [IntelliJ 스타일] 펑션키 조합
-		-- F9: Resume Program (다음 브레이크포인트까지 실행)
-		keymap.set("n", "<F9>", dap.continue, { desc = "Debug: Resume (IntelliJ F9)" })
-
-		-- F8: Step Over (함수 건너뛰고 다음 줄)
-		keymap.set("n", "<F8>", dap.step_over, { desc = "Debug: Step Over (IntelliJ F8)" })
-
-		-- F7: Step Into (함수 안으로)
-		keymap.set("n", "<F7>", dap.step_into, { desc = "Debug: Step Into (IntelliJ F7)" })
-
-		-- Shift + F8: Step Out (함수 밖으로)
-		keymap.set("n", "<S-F8>", dap.step_out, { desc = "Debug: Step Out (IntelliJ Shift+F8)" })
-
-		-- Ctrl + F8: Breakpoint Toggle (맥 OS 단축키와 겹칠 수 있음 주의)
-		keymap.set("n", "<C-F8>", dap.toggle_breakpoint, { desc = "Debug: Toggle Breakpoint" })
-
-		-- 평가(Evaluate) 관련
-		keymap.set("n", "<leader>de", function()
+		map("<leader>db", dap.toggle_breakpoint, "중단점 토글")
+		map("<leader>dc", dap.continue, "계속 실행 / 시작")
+		map("<leader>di", dap.step_into, "함수 안으로")
+		map("<leader>do", dap.step_over, "다음 줄로")
+		map("<leader>dO", dap.step_out, "함수 밖으로")
+		map("<leader>dr", dap.repl.toggle, "REPL 토글")
+		map("<leader>dl", dap.run_last, "직전 설정으로 다시 실행")
+		map("<leader>du", dapui.toggle, "디버그 UI 토글")
+		map("<leader>dx", dap.terminate, "세션 종료")
+		map("<leader>de", function()
 			dapui.eval(nil, { enter = true })
-		end, { desc = "Debug: Evaluate (Cursor)" })
+		end, "커서 아래 값 평가")
+
+		-- IntelliJ와 같은 펑션키 배치. 손이 기억하는 쪽을 그대로 둔다.
+		map("<F9>", dap.continue, "계속 실행 (IntelliJ F9)")
+		map("<F8>", dap.step_over, "다음 줄로 (IntelliJ F8)")
+		map("<F7>", dap.step_into, "함수 안으로 (IntelliJ F7)")
+		map("<S-F8>", dap.step_out, "함수 밖으로 (IntelliJ Shift+F8)")
+		map("<C-F8>", dap.toggle_breakpoint, "중단점 토글 (IntelliJ Ctrl+F8)")
 	end,
 }

@@ -1,0 +1,12 @@
+{
+  "name": "miniminjae-snippets",
+  "version": "1.0.0",
+  "description": "직접 쓰는 스니펫. blink.cmp의 snippets 소스가 이 파일을 보고 읽어간다.",
+  "engines": { "vscode": "^1.11.0" },
+  "contributes": {
+    "snippets": [
+      { "language": "markdown", "path": "./markdown.json" },
+      { "language": "mdx", "path": "./markdown.json" }
+    ]
+  }
+}
