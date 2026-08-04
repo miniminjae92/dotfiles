@@ -38,16 +38,9 @@
 ## Work In Progress
 
 - Changed files: 없음 — dotfiles 작업트리 클린
-- **push 대기**: dotfiles `main`이 origin보다 11커밋 앞섬(`b359f45`부터 HEAD까지, Wave 3 포함 — `git log origin/main..` 실측). 신규 레포 5개는 커밋 완료·원격 미생성:
-  ```bash
-  gh repo create miniminjae92/mdview        --public --source ~/projects/mdview        --push
-  gh repo create miniminjae92/kman          --public --source ~/projects/kman          --push
-  gh repo create miniminjae92/video-summary --public --source ~/projects/video-summary --push
-  gh repo create miniminjae92/git-ai-commit --public --source ~/projects/git-ai-commit --push
-  gh repo create miniminjae92/agent-notify  --public --source ~/projects/agent-notify  --push
-  ```
-- 다른 레포 커밋(각자 push 대기): dref `4468dcb`·`d0c0619`(개편 브랜치 위), naon `cf00c17`, manual-library `33d0ddc`, gh-mine `da0f0fa`
-- iMac dotfiles: 같은 커밋들을 `git am`으로 적용해 둠 — 맥북 push 후 iMac pull 시 동일 내용이라 충돌 없이 정리됨
+- ~~push 대기~~ ✅ **push 완료(2026-08-04 밤, 사용자 지시)**: dotfiles 11커밋 push, 신규 레포 5개(mdview·kman·video-summary·git-ai-commit·agent-notify) `gh repo create --public --push` — **5개 전부 CI 첫 실행 성공**. mdview·kman의 미커밋 README 개선(Host 헤더 검증·요구사항 구체화)은 코드 대조 검증 후 docs 커밋으로 포함
+- 다른 레포 커밋(각자 push 대기 — 지시 범위 밖이라 안 함): dref `4468dcb`·`d0c0619`(개편 브랜치 위), naon `cf00c17`, manual-library `33d0ddc`, gh-mine `da0f0fa`
+- iMac dotfiles: pull --rebase --autostash로 정리 완료 — 맥북과 동일 해시(`012ea46`), lazy-lock.json 로컬 수정은 보존. iMac agent-notify에 origin 연결·upstream 설정 완료
 - Known dirty state that should not be reverted: dref(`ops/install.sh`, `src/domain/ux.js`, `src/web/public/projects.js` + untracked library items), naon(문서 5개), manual-library(3개) — 전부 **사용자 WIP**, 건드리지 말 것
 
 ## Verification
