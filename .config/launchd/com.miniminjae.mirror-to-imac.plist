@@ -17,8 +17,10 @@
   <integer>3600</integer>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- ~/.local/bin 이 없으면 `command -v ops-event` 가드가 항상 실패해
+         skip 텔레메트리가 구조적으로 불가시였다(2026-08-04 감사: 190회 중 skip 0). -->
     <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>/Users/miniminjae/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>StandardOutPath</key>
   <string>/Users/miniminjae/.local/state/mirror-to-imac/mirror.log</string>

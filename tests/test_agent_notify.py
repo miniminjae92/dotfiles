@@ -30,6 +30,8 @@ class AgentNotifyTest(unittest.TestCase):
                 "AGENT_NOTIFY_CONFIG": str(root / "missing-config.json"),
                 "AGENT_NOTIFY_POLICY": "",
                 "TMUX_PANE": "",
+                # sweep 테스트가 실제 이벤트 스트림을 오염시키지 않게 격리
+                "OPS_STATE_DIR": str(root / "ops"),
             },
         )
         self.environment.start()
@@ -893,6 +895,25 @@ class AgentNotifyTest(unittest.TestCase):
 
         self.assertIsNotNone(agent_notify.load_event(stale["id"])["acknowledged_at"])
         self.assertIsNone(agent_notify.load_event(fresh["id"])["acknowledged_at"])
+
+    def test_sweep_prunes_resolved_events_past_retention(self):
+        current_time = datetime(2026, 7, 26, 7, 0, tzinfo=timezone.utc)
+        old_resolved = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/old"})
+        old_resolved["created_at"] = (current_time - timedelta(days=40)).isoformat()
+        old_resolved["acknowledged_at"] = (current_time - timedelta(days=39)).isoformat()
+        fresh_resolved = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/new"})
+        fresh_resolved["acknowledged_at"] = (current_time - timedelta(days=5)).isoformat()
+        old_pending = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/wait"})
+        old_pending["created_at"] = (current_time - timedelta(days=40)).isoformat()
+        for event in (old_resolved, fresh_resolved, old_pending):
+            self.save_event(event)
+
+        agent_notify.sweep(current_time)
+
+        self.assertFalse(agent_notify.event_path(old_resolved["id"]).exists())
+        self.assertTrue(agent_notify.event_path(fresh_resolved["id"]).exists())
+        # 오래된 pending은 TTL로 '지금' 확정될 뿐 파일은 보존기간을 새로 산다
+        self.assertTrue(agent_notify.event_path(old_pending["id"]).exists())
 
     def test_write_pending_summary_projects_pending_count(self):
         pending = agent_notify.normalize_event("future-agent", "complete", {"cwd": "/tmp/a"})

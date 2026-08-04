@@ -381,7 +381,11 @@ def run_monitor(now: datetime | None = None) -> int:
         state["lastDailyReport"] = today
     write_state(state)
     used_fields = {}
-    for profile, profile_state in profiles_state.items():
+    # 관찰 대상(PROFILE_NAMES)만 낸다 — state에 남은 은퇴 프로파일의 낡은 값이
+    # 지표를 계속 오염시켰다(2026-08-04 감사: default가 제외된 뒤에도 18일간
+    # used_default=19 를 매 실행 발신).
+    for profile in PROFILE_NAMES:
+        profile_state = profiles_state.get(profile)
         if isinstance(profile_state, dict) and isinstance(profile_state.get("usedPercent"), int):
             used_fields[f"used_{profile}"] = profile_state["usedPercent"]
     if failed_profiles:

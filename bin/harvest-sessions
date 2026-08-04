@@ -180,12 +180,27 @@ def main():
             w.write(f"# {src} :: {os.path.basename(f)}\n# 사용자 발화 {len(users)}건\n\n{body}\n")
         written += 1
 
+    # 보존기간을 넘긴 캐시를 정리한다. 창에서 벗어난 세션은 더 이상 재작성되지
+    # 않아 mtime이 늙는다 — 삭제 코드가 없어 캐시가 무한히 자랐다(2026-08-04 감사:
+    # 2,056파일 24MB). 소비자(session-harvest)는 최근 창만 읽으므로 안전하다.
+    retention_days = int(os.environ.get("HARVEST_RETENTION_DAYS", "14"))
+    cutoff_ts = datetime.datetime.now().timestamp() - retention_days * 86400
+    pruned = 0
+    for stale in glob.glob(os.path.join(args.out, "*.txt")):
+        try:
+            if os.path.getmtime(stale) < cutoff_ts:
+                os.remove(stale)
+                pruned += 1
+        except OSError:
+            continue
+
     print(f"세션 {written}개 · 사용자 발화 {tot_msg}건 · {tot_char:,}자 (~{tot_char // 3500}K 토큰)")
-    print(f"출력: {args.out}")
+    print(f"출력: {args.out} (보존 {retention_days}일, 정리 {pruned}개)")
     print(f"since: {since.date()}")
     emit_ops_event(
         "harvest-sessions", "run", severity="info",
-        sessions=written, utterances=tot_msg, chars=tot_char, window_days=args.days,
+        sessions=written, utterances=tot_msg, chars=tot_char,
+        window_days=args.days, pruned=pruned,
     )
 
 

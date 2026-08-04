@@ -23,6 +23,7 @@ import datetime as _dt
 import glob
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -238,6 +239,16 @@ def render_markdown(d: dict) -> str:
     return "\n".join(lines)
 
 
+def resolve_out_path(raw: str) -> str:
+    """--out의 {host} 토큰을 짧은 호스트명으로 치환한다.
+
+    같은 plist가 맥북·아이맥 두 기기에 설치된다. 고정 파일명이면 두 기기가
+    매일 밤 같은 vault 파일을 써서 스냅샷 pull --rebase가 충돌한다(2026-07-26
+    세션 수확 both-added 실사고와 동형). 기기별 파일로 갈라 원천 차단한다.
+    """
+    return os.path.expanduser(raw).replace("{host}", platform.node().split(".")[0])
+
+
 def notify_digest(d: dict, out_path: str | None) -> None:
     """신호(오류·주의 발견·침묵)가 있을 때만 agent-notify로 1줄 알린다.
 
@@ -295,7 +306,7 @@ def main() -> int:
     sys.stdout.write(out + "\n")
     out_path = None
     if args.out:
-        out_path = os.path.expanduser(args.out)
+        out_path = resolve_out_path(args.out)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(out + "\n")

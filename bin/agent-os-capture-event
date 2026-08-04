@@ -164,6 +164,18 @@ begin
     file.flock(File::LOCK_UN)
   end
   File.chmod(0o600, event_path)
+
+  # D-003의 "이벤트 큐 30일 보존" 집행 — 결정만 있고 삭제 코드가 없었다(2026-08-04 감사).
+  retention_days = (ENV["AGENT_OS_EVENT_RETENTION_DAYS"] || "30").to_i
+  cutoff = Date.today - retention_days
+  Dir.glob(File.join(events_dir, "*.jsonl")).each do |old_path|
+    begin
+      day = Date.iso8601(File.basename(old_path, ".jsonl"))
+    rescue ArgumentError
+      next
+    end
+    File.delete(old_path) if day < cutoff
+  end
 rescue JSON::ParserError => error
   warn "agent-os-capture-event: invalid hook input: #{error.message}"
   exit 0

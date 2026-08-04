@@ -1,5 +1,6 @@
 import importlib.machinery
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -77,6 +78,25 @@ class CodexAccountUsageTest(unittest.TestCase):
         self.assertIn("google: 주간 한도 90% 사용 · 10% 남음", messages)
         self.assertTrue(any(message.startswith("google: 사용 90%") for message in messages))
         self.assertTrue(any(message.startswith("naver: 사용 20%") for message in messages))
+
+    @mock.patch.object(codex_account_usage, "notify")
+    @mock.patch.object(codex_account_usage, "query")
+    def test_monitor_excludes_retired_profiles_from_metrics(self, query, _notify):
+        # 은퇴 프로파일(default)의 낡은 usedPercent가 state에 남아 있어도
+        # 지표(used_*)로 새지 않아야 한다 (2026-08-04 감사: 18일간 오염)
+        state_path = Path(os.environ["CODEX_USAGE_STATE"])
+        state_path.write_text(
+            json.dumps({"profiles": {"default": {"usedPercent": 19}}}),
+            encoding="utf-8",
+        )
+        query.side_effect = [snapshot(50), snapshot(60)]
+
+        codex_account_usage.run_monitor(datetime(2026, 7, 17, 9, 5, tzinfo=KST))
+
+        kwargs = codex_account_usage.emit_ops_event.call_args.kwargs
+        self.assertIn("used_google", kwargs)
+        self.assertIn("used_naver", kwargs)
+        self.assertNotIn("used_default", kwargs)
 
     @mock.patch.object(codex_account_usage, "notify")
     @mock.patch.object(codex_account_usage, "query")

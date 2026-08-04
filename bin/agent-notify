@@ -151,6 +151,7 @@ DEFAULT_CONFIG = {
     "temporary_seconds": 8,
     "persistent_seconds": 1800,
     "pending_ttl_days": 3,
+    "retention_days": 30,
     "default_profile": "normal",
     "profiles": {
         "normal": {"local": "temporary", "slack": "delayed"},
@@ -274,6 +275,8 @@ def load_config() -> dict[str, Any]:
         config["persistent_seconds"] = max(60, min(7200, configured["persistent_seconds"]))
     if isinstance(configured.get("pending_ttl_days"), int):
         config["pending_ttl_days"] = max(1, min(90, configured["pending_ttl_days"]))
+    if isinstance(configured.get("retention_days"), int):
+        config["retention_days"] = max(7, min(365, configured["retention_days"]))
     if isinstance(configured.get("default_profile"), str):
         config["default_profile"] = configured["default_profile"]
     if isinstance(configured.get("profiles"), dict):
@@ -1224,6 +1227,38 @@ def expire_stale_pending(current_time: datetime, events: list[dict[str, Any]]) -
     return expired
 
 
+def prune_resolved_events(current_time: datetime, events: list[dict[str, Any]]) -> int:
+    """확정된 지 오래된 이벤트 파일을 삭제한다. pending은 절대 지우지 않는다.
+
+    이벤트 스토어에 삭제 코드가 없어 무한히 자랐다(2026-08-04 감사: 4,017개
+    파일 16MB를 sweep이 매번 전부 읽음). 보존 기한은 retention_days(기본 30일).
+    """
+    retention_days = int(load_config().get("retention_days", 30))
+    cutoff = current_time - timedelta(days=retention_days)
+    pruned = 0
+    for event in events:
+        if is_pending(event):
+            continue
+        resolved_at = (
+            event.get("acknowledged_at")
+            or event.get("superseded_at")
+            or event.get("created_at")
+        )
+        try:
+            if parse_time(resolved_at) > cutoff:
+                continue
+        except (TypeError, ValueError):
+            continue
+        event_id = event.get("id")
+        if not event_id:
+            continue
+        with event_lock(event_id):
+            event_path(event_id).unlink(missing_ok=True)
+        (events_dir() / f".{event_id}.lock").unlink(missing_ok=True)
+        pruned += 1
+    return pruned
+
+
 def pending_summary_path() -> Path:
     return state_root() / "pending.json"
 
@@ -1275,6 +1310,7 @@ def sweep(current_time: datetime | None = None) -> int:
         if not deliver_slack_event(event, current_time):
             failures += 1
     pending = write_pending_summary(events)
+    pruned = prune_resolved_events(current_time, events)
     emit_ops_event(
         "agent-notify-sweep",
         "error" if failures else "run",
@@ -1283,6 +1319,7 @@ def sweep(current_time: datetime | None = None) -> int:
         expired=expired,
         reaped=reaped,
         pending=pending,
+        pruned=pruned,
     )
     return 1 if failures else 0
 

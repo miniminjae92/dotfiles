@@ -11,8 +11,11 @@
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <!-- 300초. 60초 주기는 ops 이벤트의 89%를 sweep 혼자 만들면서(일 ~1,440회)
+       지키는 값이 대부분 pending=0 이었다(2026-08-04 감사). 지연 Slack·TTL 만료의
+       최대 5분 지연은 허용 범위 — 실시간 UI는 메뉴 막대 앱이 담당한다(D-017). -->
   <key>StartInterval</key>
-  <integer>60</integer>
+  <integer>300</integer>
   <key>StandardOutPath</key>
   <string>/Users/miniminjae/.local/state/agent-notify/sweep.log</string>
   <key>StandardErrorPath</key>

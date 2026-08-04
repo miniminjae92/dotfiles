@@ -10,7 +10,8 @@
     <string>--days</string>
     <string>7</string>
     <string>--out</string>
-    <string>/Users/miniminjae/.obsidian/mimir/40 Reviews/백그라운드 잡 다이제스트.md</string>
+    <!-- {host}: 두 기기(맥북·아이맥)가 같은 vault 파일을 쓰면 스냅샷이 매일 충돌한다 -->
+    <string>/Users/miniminjae/.obsidian/mimir/40 Reviews/백그라운드 잡 다이제스트 {host}.md</string>
     <string>--notify</string>
   </array>
   <key>StartCalendarInterval</key>

@@ -76,6 +76,12 @@ class OpsDigestTest(unittest.TestCase):
         self.assertIn("codex 마이닝 실패", markdown)
         self.assertIn("[medium] `codex-account-usage`", markdown)
 
+    @mock.patch.object(ops_digest.platform, "node", return_value="minjae-iMac.local")
+    def test_resolve_out_path_expands_host_token(self, _node):
+        resolved = ops_digest.resolve_out_path("~/vault/다이제스트 {host}.md")
+
+        self.assertTrue(resolved.endswith("/vault/다이제스트 minjae-iMac.md"))
+
     @mock.patch.object(ops_digest.subprocess, "run")
     def test_notify_skips_when_no_signal(self, run):
         digest = {"errors": [], "findings_attention": [], "sources_silent": []}
