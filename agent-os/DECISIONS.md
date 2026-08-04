@@ -441,6 +441,7 @@ term이 즉석 설명과 UL 형성을 겸하면서 정본이 세 곳(공통어 �
 - 날짜: 2026-08-04
 - 개정: 2026-08-04 — Wave 2 집행: `video-summary`(출력 기본값 중립화, VIDEO_SUMMARY_DIR는 .zshrc에서 vault 지정)·`git-ai-commit` 스위트(3도구+man, 컨벤션 2종과 예시 레지스트리 동봉으로 자급자족화) 추출. 모델 레지스트리의 정본 경로를 XDG(`~/.config/ai-tools/models.json`)로 통일하고 install.sh가 `agents/models.json`을 그 자리에 링크 — 추출 코드의 `.dotfiles` 폴백은 제거. MANPATH는 스위트 레포의 man/으로 이동. bin 37→33.
 - 개정: 2026-08-04 — Wave 3 집행: `agent-notify`+메뉴 앱 추출(히스토리 11커밋 — D-016 사고 대응 아크가 커밋 로그에 보존됨). 상시 가동 도구의 첫 추출: launchd 잡 2종(sweep·menu)은 `~/.local/bin` 심링크와 컴파일 산출물만 참조하므로 심링크 재지정 + 앱 재빌드로 무중단 전환, plist·훅 배선·개인 config.json은 dotfiles 잔류. 메뉴 앱의 `.dotfiles` 폴백은 PATH 해석으로 디커플링. ops-event 연동은 fail-soft 옵션이라 코드 수정 0. CI는 macOS 러너(unittest+Swift 컴파일). bin 33→32.
+- 개정: 2026-08-04 — Wave 4 집행(범위 재판정 포함): 근거 재검증 결과 `asx`(일상 소비 증거·개념 희소성, paths.env를 env-only로 디커플링, 깨진 테스트 수리)·`codex-accounts`(무턴 쿼터 조회 트릭, 개인 경로 0)·`simulator-reaper`(D-016 사고의 둘째 축, 테스트 12케이스 신설) 3종만 추출. **`prfb`는 잔류** — 테스트 부재 + 산출물 소비 증거 미확인(D-018 축)으로 추출 근거 미달, 소비 증거가 쌓이면 재검토. launchd 잡 2종은 Wave 3 방식 그대로 무중단. bin 32→25, dotfiles 스위트 33/33 전부 그린.
 
 ### 결정
 

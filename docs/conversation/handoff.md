@@ -27,7 +27,7 @@
 - 미결: `~/projects/claude-code`(유출 스냅샷 미러) public 유지 여부 — 포트폴리오 제외는 합의, 비공개 전환은 사용자 판단 대기
 - 미결: 포트폴리오 MDX 작성 — 스키마의 problem·judgment·metrics는 본인 몫(계획 문서에 엔트리별 표 있음)
 - 확정: `D-022` 개정 — Wave 3(agent-notify+menu) 집행 완료(2026-08-04 밤, 후속 세션). launchd 2종 무중단 전환, 양 기기 doctor 0 fail
-- 미결: Wave 4(asx·codex-accounts·simulator-reaper·prfb) 실행 여부·시점
+- 확정: `D-022` 개정 — Wave 4 집행 완료(2026-08-04 밤, 근거 재판정 후 asx·codex-accounts·simulator-reaper 3종만). **prfb 잔류**(테스트 부재+소비 증거 미확인 — 근거 미달)
 
 ## Files To Read First
 
@@ -56,7 +56,7 @@
 
 1. (사용자) push: dotfiles 6커밋 + 위 `gh repo create` 4건 + naon/manual-library/gh-mine
 2. ~~Wave 3~~ ✅ 완료(2026-08-04 밤 후속 세션) — `~/projects/agent-notify`, 양 기기 전환·검증 끝. push만 남음
-3. Wave 4: asx·codex-accounts(usage+래퍼 4종)·simulator-reaper·prfb
+3. ~~Wave 4~~ ✅ 완료 — prfb만 의도적 잔류(근거 미달). 추출 시리즈 종료
 4. 목 08-06 20:30 이후: 수확 결과 확인 — 스텁이면 1회차 실패 기록(digest에 뜸)
 5. 포트폴리오 MDX 초안(설명보따리부터) — 계획 문서의 표 참조, 본인 목소리로
 
