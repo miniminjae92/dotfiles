@@ -309,6 +309,16 @@ def main() -> int:
         out_path = resolve_out_path(args.out)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as fh:
+            if not args.json:
+                # 마크다운 산출물은 mimir 볼트 노트로 소비된다 — 로그 타입은 생성 시 종결 status
+                fh.write(
+                    "---\n"
+                    "type: digest\n"
+                    "status: archived\n"
+                    "origin: agent\n"
+                    f"created: {now.date().isoformat()}\n"
+                    "---\n\n"
+                )
             fh.write(out + "\n")
     if args.notify:
         notify_digest(digest, out_path)

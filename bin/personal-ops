@@ -372,6 +372,7 @@ def security_report(
     lines = [
         "---",
         "type: security-check",
+        "status: archived",
         f"created: {timestamp.isoformat()}",
         f"new_findings: {len(new_ids)}",
         f"resolved_findings: {len(resolved_ids)}",
@@ -688,6 +689,7 @@ def weekly_command(no_agent: bool = False) -> int:
         [
             "---",
             "type: weekly-review",
+            "status: archived",
             f"created: {timestamp.isoformat()}",
             f"period: {iso_year}-W{iso_week:02d}",
             f"generator: {generator}",
