@@ -144,10 +144,10 @@ hl("@markup.strikethrough", { strikethrough = true })
 hl("@markup.link", { fg = p.link })
 hl("@markup.link.label", { fg = p.link })
 hl("@markup.link.url", { fg = p.link, underline = true })
-hl("@markup.raw", { fg = p.inline_code, bg = p.code_bg })
+hl("@markup.raw", { fg = p.inline_code, bg = p.subtle })
 hl("@markup.raw.block", { fg = p.code_text })
 hl("@markup.quote", { fg = p.muted, italic = true })
-hl("@markup.list", { fg = p.symbol })
+hl("@markup.list", { fg = p.muted })
 hl("@markup.list.checked", { fg = p.string })
 hl("@markup.list.unchecked", { fg = p.muted })
 
@@ -180,18 +180,19 @@ hl("GitSignsChange", { fg = p.meta })
 hl("GitSignsDelete", { fg = p.red })
 
 -- ── 플러그인 ─────────────────────────────────────────────────
+-- mdview(markdown-reader.css)와 같은 색 경제: 본문은 크림, 유채색은 코드 필과
+-- 링크에만 아껴 쓴다. 헤딩 바는 전부 끈다. 주의: bg=NONE 정의는 "클리어"로
+-- 취급돼 플러그인의 default 링크(H3Bg->DiffChange 등)가 되살아나므로 canvas를 명시한다.
 hl("RenderMarkdownCode", { bg = p.code_bg })
-hl("RenderMarkdownCodeInline", { fg = p.inline_code, bg = p.code_bg })
-hl("RenderMarkdownBullet", { fg = p.symbol })
-hl("RenderMarkdownTableHead", { fg = p.type, bg = p.table_header })
-hl("RenderMarkdownTableRow", { fg = p.muted })
+hl("RenderMarkdownCodeInline", { fg = p.inline_code, bg = p.subtle })
+hl("RenderMarkdownBullet", { fg = p.muted })
+hl("RenderMarkdownTableHead", { fg = p.border })
+hl("RenderMarkdownTableRow", { fg = p.border })
 hl("RenderMarkdownDash", { fg = p.border })
 hl("RenderMarkdownQuote", { fg = p.muted, italic = true })
 hl("RenderMarkdownLink", { fg = p.link })
-hl("RenderMarkdownH1Bg", { bg = p.surface })
-hl("RenderMarkdownH2Bg", { bg = p.surface })
-for i = 3, 6 do
-	hl("RenderMarkdownH" .. i .. "Bg", { bg = NONE })
+for i = 1, 6 do
+	hl("RenderMarkdownH" .. i .. "Bg", { bg = p.canvas })
 end
 hl("SnacksIndent", { fg = p.subtle })
 hl("SnacksIndentScope", { fg = p.border })
