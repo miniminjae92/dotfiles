@@ -22,7 +22,7 @@ await window.__harvest.run({
 })
 ```
 
-스텝 id·제목은 DOM에 없다. 기본 `fiberIdentify`(React fiber 순회)가 잡아낸다.
+스텝 id, 제목은 DOM에 없다. 기본 `fiberIdentify`(React fiber 순회)가 잡아낸다.
 
 ## 이 사이트 특유의 함정
 

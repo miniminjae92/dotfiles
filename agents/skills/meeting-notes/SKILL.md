@@ -1,6 +1,6 @@
 ---
 name: meeting-notes
-description: "Use when a voice-recording transcript (Clova Note 등) must become a clean team 회의록 — 노이즈 제거·용어 교정·구조화 요약·지난 액션 대조·Notion 게시까지. Trigger examples: '/meeting-notes ~/Downloads/오늘의할인_260812.txt', '회의록 정리해줘', '이 전사본 회의록으로 만들어줘', '오늘 회의 노션에 올려줘', 전사 txt 파일을 그냥 던진 경우."
+description: "Use when a voice-recording transcript (Clova Note 등) must become a clean team 회의록 — 노이즈 제거, 용어 교정, 구조화 요약, 지난 액션 대조, Notion 게시까지. Trigger examples: '/meeting-notes ~/Downloads/오늘의할인_260812.txt', '회의록 정리해줘', '이 전사본 회의록으로 만들어줘', '오늘 회의 노션에 올려줘', 전사 txt 파일을 그냥 던진 경우."
 ---
 
 # meeting-notes — 전사본을 팀 회의록으로
@@ -12,7 +12,7 @@ description: "Use when a voice-recording transcript (Clova Note 등) must become
 핵심 원칙:
 
 1. **원본 불변.** 전사 txt는 아카이브에 사본으로 보존한다. 원본 파일은 절대 수정하지 않는다.
-2. **결정적인 건 스크립트가, 판단은 모델이.** 용어 치환·메타 추출·발화 병합은 `prep.py`가 한다.
+2. **결정적인 건 스크립트가, 판단은 모델이.** 용어 치환, 메타 추출, 발화 병합은 `prep.py`가 한다.
    "로션이 사실 노션인가?"를 매번 모델이 재추측하게 두지 않는다.
 3. **학습 루프.** 실행 끝에 새 오인식을 사전에 추가 제안한다. 다음 회의는 그만큼 덜 틀린다.
 
@@ -70,10 +70,10 @@ mkdir -p "$ARCH/raw" && cp <전사.txt> "$ARCH/raw/<YYYY-MM-DD>.txt"
 템플릿의 **작성 규칙 7개를 그대로 지킨다.** 특히:
 
 - 팀 공유 문서다 — 도구 티가 나는 상투구 없이, 사람이 정리한 글처럼 읽혀야 한다.
-- 전사에 없는 담당자·기한을 지어내지 않는다. 모르면 `확인 필요`.
+- 전사에 없는 담당자, 기한을 지어내지 않는다. 모르면 `확인 필요`.
 - 미결을 결론으로 승격하지 않는다.
 - 화자 번호를 실명으로 단정하지 않는다 — Clova 번호는 회의마다 바뀐다.
-- 녹음 세팅·잡담은 버린다.
+- 녹음 세팅, 잡담은 버린다.
 
 ## ④ 지난 회의 대조
 
@@ -99,7 +99,7 @@ echo "직전 회의록: ${PREV:-없음}"
 
 `_config.json`의 `notion.target`이 있으면 그리로, 없으면 이번 한 번 확정한다.
 
-**게시 전에 문법 명세를 먼저 읽는다 — 추측 금지.** 표·체크박스·토글이 표준 마크다운과 다르다.
+**게시 전에 문법 명세를 먼저 읽는다 — 추측 금지.** 표, 체크박스, 토글이 표준 마크다운과 다르다.
 
 ```
 mcp__notion__notion-fetch  id: notion://docs/enhanced-markdown-spec
@@ -148,6 +148,6 @@ mcp__notion__notion-fetch  id: notion://docs/enhanced-markdown-spec
 ## 하지 않는 것
 
 - **폴더 감시 자동 실행 없음.** 팀 공유 문서라 검수 없이 올라가면 안 된다.
-- 전사 원본 수정·삭제 없음. 아카이브에 복사만.
+- 전사 원본 수정, 삭제 없음. 아카이브에 복사만.
 - `term` 스킬과 겹치지 않는다 — `_glossary.md`는 ASR 문자열 교정용이지
   유비쿼터스 랭귀지 정본이 아니다. 정본은 repo `CONTEXT.md`/`docs/adr/`다.

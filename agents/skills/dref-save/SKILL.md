@@ -9,7 +9,7 @@ description: "Use when the user asks to save a URL/design reference to dref duri
 
 ## 절차
 
-1. URL·제목·분류를 정한다. 사용자가 안 준 것은 대화 맥락과 페이지 내용에서 추론한다.
+1. URL, 제목, 분류를 정한다. 사용자가 안 준 것은 대화 맥락과 페이지 내용에서 추론한다.
    - `type` (필수, 8종): `landing | dashboard | component | typography | color | animation | css-technique | ux-pattern`
    - `tags`: 자유 어휘 소문자 배열 (예: `["dark", "pricing"]`)
    - `note`: "왜 좋은가" 한 줄 — 사용자가 말한 이유를 그대로 담는 게 최선. 없으면 짧은 추정 + 사용자가 다듬게 언급.

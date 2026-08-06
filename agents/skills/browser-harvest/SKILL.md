@@ -23,7 +23,7 @@ description: "Use when a batch of web documents must be saved as local markdown 
 
 ## 절차 A — 목록 순회형 (한 페이지 안에서 사이드바/목차를 클릭 순회)
 
-SPA 강의·미션 사이트 대부분이 여기 해당한다. **검증된 경로다.**
+SPA 강의, 미션 사이트 대부분이 여기 해당한다. **검증된 경로다.**
 
 1. **브라우저 도구 로드** (한 번의 ToolSearch로):
    `tabs_context_mcp, tabs_create_mcp, navigate, javascript_tool, browser_batch`
@@ -38,7 +38,7 @@ SPA 강의·미션 사이트 대부분이 여기 해당한다. **검증된 경�
    ```js
    await window.__harvest.run({ receiverUrl: 'http://127.0.0.1:4199/save', itemSelector: '…', /* … */ })
    ```
-   반환 `status`에서 문서 수·오류 확인. `error: 'list item not found'`가 있으면 그 섹션이
+   반환 `status`에서 문서 수, 오류 확인. `error: 'list item not found'`가 있으면 그 섹션이
    목록에서 접혀 있는 것 — 펼친 뒤 재실행.
 6. **파일 분할**: `node <이 스킬 디렉터리>/split.js <scratchpad>/harvest.json <저장디렉터리> <오늘날짜>`
    → 섹션별 하위 디렉터리 + 문서별 md(frontmatter: source/section/id/harvested/meta) + README 인덱스.
@@ -59,7 +59,7 @@ URL마다 주입 → 1건 수확을 반복한다.
 
 1. `document.querySelectorAll('<후보>').length`로 **목록 항목**(`itemSelector`)을 맞춘다 — 문서 수와 일치해야 한다.
 2. 섹션 구분이 있으면 항목을 감싸는 상자를 `groupSelector`로 잡는다(첫 자식 텍스트를 섹션명으로 쓴다). 없으면 생략.
-3. 본문 컨테이너(`contentSelector`, 기본 `main`)를 확인하고, id·제목이 DOM에 안 드러나면
+3. 본문 컨테이너(`contentSelector`, 기본 `main`)를 확인하고, id, 제목이 DOM에 안 드러나면
    기본 React fiber 탐색(`fiberIdentify`)에 맡긴다. 평범한 `<a href>` 목록이면 더 간단하다:
    `identify: (el) => ({ id: el.getAttribute('href'), title: el.textContent.trim() })`
 4. 잘 도는 config를 `presets/<사이트>.md`에 그대로 저장한다. 다음 사람이 1~3을 다시 안 하게.
@@ -76,10 +76,10 @@ config 전체 키는 `harvester.js`의 `DEFAULTS` 참고
   (토큰 절감은 덤이고, 애초에 이게 유일하게 통하는 경로다.)
 - **사이트 UI 개편 시 깨지는 지점은 셀렉터 2개뿐이다** — `itemSelector` / `groupSelector`
   (그리고 fiber 키 순회). 프리셋의 그 두 줄만 고치면 살아난다. 엔진은 건드릴 일이 없다.
-- **읽기 전용**: 항목 클릭(열람)만 한다. 제출·평가·설정·결제 버튼은 절대 누르지 않는다.
-- **수확물은 개인 사본이다.** 외부 공개·재배포하지 않는다. 사이트 이용약관을 따른다.
+- **읽기 전용**: 항목 클릭(열람)만 한다. 제출, 평가, 설정, 결제 버튼은 절대 누르지 않는다.
+- **수확물은 개인 사본이다.** 외부 공개, 재배포하지 않는다. 사이트 이용약관을 따른다.
 
 ## 선택 후속: 종합 가이드
 
 수확본이 크면 원문을 메인 컨텍스트로 읽지 말고, 섹션별 병렬 서브에이전트(스키마 강제)로
-행동·제출물·마감·규칙만 추출한 뒤 종합 md를 작성한다.
+행동, 제출물, 마감, 규칙만 추출한 뒤 종합 md를 작성한다.

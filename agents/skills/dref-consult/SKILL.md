@@ -15,7 +15,7 @@ description: "Use when the user asks a design question that should draw on their
      축/태그 필터: `rg -l 'type: dashboard' …`
    - FTS API: `curl -s 'http://127.0.0.1:4180/api/items?q=<검색어>&type=<축>&status=approved'`
 2. **읽기** — 맞는 아이템의 `item.md`를 Read. 시각 판단이 필요하면 같은 디렉터리의 `shot.jpg`도 Read(이미지 지원).
-3. **답변** — 반드시 저장된 아이템을 인용해 답한다: 제목·URL·"왜 좋은가" 주석을 근거로.
+3. **답변** — 반드시 저장된 아이템을 인용해 답한다: 제목, URL, "왜 좋은가" 주석을 근거로.
    - 라이브러리에 근거가 없으면 없다고 말하고 일반 지식으로 답하되, 그 구분을 명확히.
    - 답하며 발견한 좋은 외부 레퍼런스는 dref-save 스킬로 저장을 제안.
 

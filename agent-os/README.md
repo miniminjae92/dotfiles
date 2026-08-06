@@ -18,5 +18,5 @@
 - `hooks.json`: 전역 Codex Stop Hook 정의
 - `schemas/`: 이벤트와 Run 형식
 - `vault-template/`: Developer OS 볼트 초기 구조
-- `ASSET-AUDIT.md`: 유지·제외·재검토할 자산 목록
+- `ASSET-AUDIT.md`: 유지, 제외, 재검토할 자산 목록
 

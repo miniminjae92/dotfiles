@@ -1,7 +1,7 @@
 # Provider Interface Surface
 
-에이전트를 **인터페이스**로, Codex·Claude·Gemini(agy)를 그 인터페이스의 **구체 클래스**로 보는
-관점에서, 계약이 provider마다 어긋나는 지점을 기록한다. 공급자 중립 자산(공통 core·훅 스크립트)을
+에이전트를 **인터페이스**로, Codex, Claude, Gemini(agy)를 그 인터페이스의 **구체 클래스**로 보는
+관점에서, 계약이 provider마다 어긋나는 지점을 기록한다. 공급자 중립 자산(공통 core, 훅 스크립트)을
 어디까지 그대로 이식할 수 있고 어디서 어댑터가 필요한지의 경계를 명시하는 것이 목적이다.
 
 배경 결정: [DECISIONS.md](DECISIONS.md) D-003(기록 계층), routing.json의
@@ -28,8 +28,8 @@
 | 최상위 스키마 | `hooks.{Event}[].hooks[]` (중첩) `✓` | `hooks.{Event}[].hooks[]` (중첩, Claude와 동일) `✓` | `{그룹명}.{Event}[]` (**평면·`hooks` 래퍼 없음**, 임의 그룹명 예: `macos-notification`) `✓` |
 | 명령 엔트리 | `{type,command,timeout,matcher?}` | `{type,command,statusMessage?,timeout}` | `{type,command,timeout}` |
 | 이벤트 표기 | PascalCase `✓` | PascalCase (`config.toml` 상태키는 소문자로 정규화) `✓` | PascalCase `✓` |
-| 이벤트 집합 | SessionStart·Stop·SubagentStop·UserPromptSubmit·Notification·PreCompact·PreToolUse·PostToolUse·SessionEnd `✓` | SessionStart·Stop 확인 `✓` / 그 외 Codex 문서 참조 `?` | Stop만 사용 확인 `✓` / SessionStart 지원 여부 `?` |
-| stdin 페이로드 | session_id·transcript_path·cwd·hook_event_name·source·model·agent_type?·session_title? `✓` | session_id·transcript_path·cwd·hook_event_name·model·permission_mode·source `✓` | `?` (미검증 — agent-notify는 stdin 미사용) |
+| 이벤트 집합 | SessionStart, Stop, SubagentStop, UserPromptSubmit, Notification, PreCompact, PreToolUse, PostToolUse, SessionEnd `✓` | SessionStart, Stop 확인 `✓` / 그 외 Codex 문서 참조 `?` | Stop만 사용 확인 `✓` / SessionStart 지원 여부 `?` |
+| stdin 페이로드 | session_id, transcript_path, cwd, hook_event_name, source, model, agent_type?, session_title? `✓` | session_id, transcript_path, cwd, hook_event_name, model, permission_mode, source `✓` | `?` (미검증 — agent-notify는 stdin 미사용) |
 | stdout→컨텍스트 주입 | plain stdout **또는** `hookSpecificOutput.additionalContext` `✓` | plain stdout **또는** `additionalContext` (Claude와 동일) `✓` | `?` (**미검증** — 현재 훅은 side-effect뿐이라 규약 미행사) |
 | 차단(exit 2) | 지원 (PreToolUse deny 등) `✓` | `?` | `?` |
 | matcher | 지원 `✓` | 지원 (`startup\|resume\|clear\|compact`) `✓` | `?` |
