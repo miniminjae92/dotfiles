@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "updated": "2026-08-05",
+  "purpose": "노션 에이전트 허브의 단일 참조. 정본은 로컬(옵시디언)이고 노션은 투영·채널·게시처다. 사람이 참조하고, 무인 스크립트·타 CLI가 페이지 ID를 여기서 읽는다.",
+  "workspace": {
+    "name": "민재",
+    "account": "rkdalswoals@gmail.com",
+    "note": "claude.ai 커넥터는 이 개인 워크스페이스에 묶여 있다. 팀 워크스페이스 작업은 커넥터 재연결 또는 마크다운 전달로 한다."
+  },
+  "pages": {
+    "hub": {
+      "id": "3b37265b3112816ab0a0cb8ab1a03bbd",
+      "url": "https://app.notion.com/p/3b37265b3112816ab0a0cb8ab1a03bbd"
+    },
+    "inbox": {
+      "id": "3b37265b311281638a5ffe589a730ad5",
+      "url": "https://app.notion.com/p/3b37265b311281638a5ffe589a730ad5",
+      "contract": "'새 항목' 섹션을 걷어 mimir 큐·dref·옵시디언으로 분류하고, 처리한 줄은 날짜를 붙여 '회수됨'으로 옮긴다."
+    },
+    "daily_briefing": {
+      "id": "3b37265b311281679585f320ce74670b",
+      "url": "https://app.notion.com/p/3b37265b311281679585f320ce74670b",
+      "contract": "매일 아침 전체를 새로 쓴다: 오늘 집중할 일, 진행 중 작업, 전날 수확."
+    },
+    "shared_output": {
+      "id": "3b37265b311281a7bdc4d66d44d371a3",
+      "url": "https://app.notion.com/p/3b37265b311281a7bdc4d66d44d371a3",
+      "contract": "밖으로 나가는 최종본만. 게시 기준(사람이 쓴 글로 읽히게)은 페이지 본문이 정본이다."
+    }
+  },
+  "approval_queue": {
+    "database_id": "f2eca360968f4908ba744cbc0dca1a7c",
+    "data_source_id": "7aaa92b2-73e5-49a9-af24-e97a23dc9c6c",
+    "url": "https://app.notion.com/p/f2eca360968f4908ba744cbc0dca1a7c",
+    "statuses": ["검토 대기", "승인", "반려", "완료"],
+    "contract": "에이전트는 '검토 대기'로 등록만 한다. '승인'으로 바뀐 행을 실행하고 '완료'로 옮기며 처리 메모를 남긴다. 자동 실행 금지."
+  },
+  "local_masters": "~/.obsidian/yggdrasil/3-stash/notion/",
+  "wiring": {
+    "status": "완료 (2026-08-05)",
+    "note": "통합 agent-hub(토큰: 키체인 notion-mcp) → ~/.dotfiles/bin/notion-mcp 래퍼 → user 스코프 MCP 'notion-local'. 허브 트리가 통합에 연결됨(시운전 2종 통과). launchd: com.miniminjae.notion-inbox(07:20·19:00), com.miniminjae.notion-briefing(07:30) → ~/.dotfiles/bin/notion-job, 로그 ~/.local/state/notion-jobs/."
+  }
+}

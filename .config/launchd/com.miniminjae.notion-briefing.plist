@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.miniminjae.notion-briefing</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/miniminjae/.dotfiles/bin/notion-job</string>
+    <string>briefing</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/miniminjae</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>7</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/miniminjae/.local/state/notion-jobs/launchd-briefing.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/miniminjae/.local/state/notion-jobs/launchd-briefing.error.log</string>
+</dict>
+</plist>

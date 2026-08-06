@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# notion-mcp — 키체인의 노션 통합 토큰으로 공식 Notion MCP 서버(stdio)를 띄운다.
+# 토큰 등록: security add-generic-password -a notion -s notion-mcp -w   (값은 숨김 프롬프트에 입력)
+# 허브 계약: ~/.dotfiles/agents/notion.json
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/bin:/bin"
+
+NOTION_TOKEN="$(security find-generic-password -s notion-mcp -w)"
+export NOTION_TOKEN
+
+exec npx -y @notionhq/notion-mcp-server

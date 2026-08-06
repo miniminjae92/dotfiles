@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# notion-job <inbox|briefing> — 노션 허브 정기 잡. launchd가 부르고, 손으로도 부를 수 있다.
+# 프롬프트: ~/.dotfiles/agents/jobs/notion-<잡>.md, 로그: ~/.local/state/notion-jobs/
+set -euo pipefail
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+JOB="${1:?usage: notion-job <inbox|briefing>}"
+PROMPT_FILE="$HOME/.dotfiles/agents/jobs/notion-$JOB.md"
+[ -f "$PROMPT_FILE" ] || { echo "notion-job: 프롬프트 없음: $PROMPT_FILE" >&2; exit 1; }
+
+STATE_DIR="$HOME/.local/state/notion-jobs"
+mkdir -p "$STATE_DIR"
+
+# 인박스가 비어 있으면 모델 호출 없이 스킵 (프리플라이트 실패 시엔 그냥 실행해 가시성 확보)
+if [ "$JOB" = "inbox" ]; then
+  TOKEN=$(security find-generic-password -s notion-mcp -w 2>/dev/null || true)
+  if [ -n "$TOKEN" ]; then
+    ITEMS=$(curl -s --max-time 10 "https://api.notion.com/v1/blocks/3b37265b311281638a5ffe589a730ad5/children?page_size=100" \
+      -H "Authorization: Bearer $TOKEN" -H "Notion-Version: 2022-06-28" \
+      | jq -r '[.results[] | {t: ([.. | .plain_text? // empty] | join(""))}] as $b
+        | ($b | map(.t=="새 항목") | index(true)) as $s
+        | ($b | map(.t=="회수됨") | index(true)) as $e
+        | if $s == null then "NOHEAD"
+          else ($b[($s+1):($e // ($b|length))] | map(.t) | map(select(length>0)) | join(" | ")) end' \
+      2>/dev/null || echo "PARSE_FAIL")
+    if [ -z "$ITEMS" ]; then
+      echo "$(date '+%F %T') inbox 비어있음 — 모델 호출 없이 스킵" >>"$STATE_DIR/skips.log"
+      exit 0
+    fi
+  fi
+fi
+
+LOG="$STATE_DIR/$JOB-$(date +%Y%m%d-%H%M%S).log"
+
+if claude -p "$(cat "$PROMPT_FILE")" \
+  --model sonnet \
+  --max-turns 40 \
+  --allowedTools "mcp__notion-local,Read,Glob,Grep,Write,Edit" \
+  >"$LOG" 2>&1; then
+  # 14일 지난 로그 정리
+  find "$STATE_DIR" -name "$JOB-*.log" -mtime +14 -delete
+else
+  agent-notify event --source notion-job --label "$JOB 실패 — $LOG" --status error || true
+  exit 1
+fi
