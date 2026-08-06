@@ -1,8 +1,9 @@
 # Agent Handoff
 
 직전 핸드오프(Wave 3, Wave 4 집행과 전체 push)는 `c4b51c9`에 남아 있습니다.
-이 노트는 2026-08-06 하루에 병행된 Claude 세션 네 갈래를 합친 것입니다. 사용자 지시로
-흩어진 글쓰기 규칙을 한 곳에 모으고 중복을 정리한 결과까지 반영했습니다.
+이 노트는 2026-08-06 하루에 병행된 Claude 세션 다섯 갈래를 합친 것입니다. 사용자 지시로
+흩어진 글쓰기 규칙을 한 곳에 모으고 중복을 정리한 결과까지 반영했고, 이후 갈래 5(Ghostty
+reader-dark 테마)가 추가됐습니다.
 
 ## Context
 
@@ -39,6 +40,22 @@
 - 이름 변경: `writing-great-skills`에서 `writing-for-agents`로. 잔존 참조 없고 `~/.claude/skills` 심링크도 정상입니다
 - upstream 삭제 2종은 로컬 보존: `edit-article`, `obsidian-vault`
 - `agent-os/upstreams.md` 갱신됨
+
+### 갈래 5: Ghostty reader-dark 테마 (이 세션, 커밋 완료 `0a2ff9f`, `0ba7325`)
+
+- 목표: iTerm2 무영향, 디자인 터미널별 독립, 기능 공유를 지키면서 `leader+mp`/mdview의
+  리더 다크 스타일로 Ghostty, nvim, fzf, bat, Starship, lualine을 통일
+- 팔레트 정본은 `.config/nvim/assets/markdown-reader.css`의 `[data-theme="dark"]` 블록.
+  정본에 없는 빨강은 테라코타 `#d47f77`, 브라이트블랙은 `#707a7d`로 파생(근거는 커밋 본문)
+- `.zshrc`에 `_is_ghostty` 헬퍼 신설(`TERM_PROGRAM` 또는 `GHOSTTY_RESOURCES_DIR`).
+  의도된 동작 변화: Ghostty에서 띄운 tmux 세션이 이제 p10k가 아니라 Starship을 받습니다
+- nvim은 `colors/reader-dark.lua`(수제 스킴, 약 130개 그룹)와 `core/term.lua`로
+  Ghostty에서만 로드, 실패 시 solarized-osaka 폴백. iTerm 쪽 경로는 바이트 동일
+- 한글 폰트 결함 후속 수정: 내장 JetBrains Mono에 한글 글리프가 없어 폰트 체인을
+  JetBrains Mono(라틴) 다음 D2Coding(한글)으로 명시. 두 폰트 Brewfile 편입, 설치 완료
+- ssh imac TERM 문제 해결: 원인은 iMac terminfo DB 결손. `~/.terminfo`에
+  tmux-256color와 xterm-ghostty를 원격 1회 설치했고 실 ssh로 256색 해석 검증 완료
+- Ghostty 테마 심링크(`~/.config/ghostty/themes/reader-dark`)는 이미 생성돼 있음
 
 ### 이번 세션에서 한 일원화
 
@@ -81,6 +98,8 @@
 - 미결: R02(가운뎃점) threshold 조정. 문서 기준과 커밋 기준 측정이 모두 조정 여지를 가리킵니다
 - 미결: tell-lint의 warn에서 enforce 승격 시점
 - 미결: 갈래 4 스킬 동기화의 검수. VENDOR.md 41건이 한꺼번에 바뀌었고 아직 아무도 diff를 읽지 않았습니다
+- 미결: Ghostty 대 iTerm2 최종 판정. Brewfile 주석의 A/B는 계속 진행 중이며 이 노트가 판정을 만들지 않습니다
+- 미결: nvim reader-dark의 전역 승격 여부(현재는 Ghostty 한정, 사용자 선택), tmux 상태바 리더 테마 전환 여부, 브라우저 리더용 Pretendard 폰트 설치 여부
 
 ## Files To Read First
 
@@ -91,6 +110,9 @@
 - `bin/agent-os-tell-lint`: `chat`과 `commit` 표면 린터
 - `~/projects/ww-req/delivery-discount/CLAUDE.md`: 대행 작업 규율
 - `~/projects/ww-req/delivery-discount/notes/01_파악과_결정_보고.md`: 동료에게 보낸 파악 결과
+- `.config/ghostty/themes/reader-dark`: 터미널 팔레트 정본 이식본. 파생색 근거가 헤더 주석에 있습니다
+- `.config/nvim/assets/markdown-reader.css`: 리더 팔레트의 단일 정본. 색을 바꾸려면 여기부터
+- `.zshrc` 상단 `_is_ghostty`: 터미널 분기 규약. nvim 쪽 쌍둥이는 `core/term.lua`
 
 ## Work In Progress
 
@@ -106,6 +128,13 @@
 - `agents/tell-rules.tsv`(surfaces 축소). 파일 자체가 다른 세션 소유의 미추적 파일이라
   제 변경만 떼어 커밋할 수 없습니다. 갈래 3을 커밋할 때 함께 들어가야 합니다
 - `docs/conversation/handoff.md`
+
+갈래 5 커밋 완료(`0a2ff9f` 12파일, `0ba7325` 2파일):
+
+- `.config/ghostty/{config,themes/reader-dark}`, `.config/starship.toml`, `.zshrc`,
+  `Brewfile`, `install.sh`, `bin/dotfiles-doctor`, `README.md`
+- nvim: `colors/reader-dark.lua`, `core/term.lua`, `lazy.lua`, `plugins/ui/{colorscheme,lualine}.lua`
+- README은 기능 반영 외에 기존 문장의 엠대시 33건을 `ko-style` 대체표대로 함께 정리했습니다
 
 다른 세션:
 
@@ -137,6 +166,14 @@
   Result: `ko-style` 기준 `AGENTS.md`와 규약 2종 모두 exit 0. tell-lint `doc` 표면은 exit 0으로 손을 뗐고 `commit` 표면은 R03이 여전히 잡습니다
 - dotfiles 테스트 스위트: 실행하지 않았습니다. 이번 변경이 문서와 규칙 파일뿐이고 스크립트 로직을 건드리지 않았기 때문입니다
 - 갈래 4 스킬 diff: 읽지 않았습니다. 다른 세션 산출물이고 41개 파일 규모입니다
+- 갈래 5 검증(스크립트 확인분):
+  `zsh -n`, `ghostty +validate-config`, `starship print-config` 전부 통과.
+  nvim 헤드리스 3경로(iTerm은 solarized 유지, Ghostty와 Ghostty+tmux는 reader-dark,
+  투명 Normal, NormalFloat `#252b2d`, terminal_color 세팅) 확인.
+  zsh 분기 3시나리오에서 BAT_THEME과 fzf 색 정확.
+  `TERM=tmux-256color`와 `TERM=xterm-ghostty`로 실 ssh imac 접속, 둘 다 256색 해석.
+  Ghostty 폰트 체인이 bold와 italic까지 JetBrains Mono 다음 D2Coding으로 해석됨.
+  시각 확인(Ghostty 창에서 실제 렌더링, 한글 폰트 체감)은 사용자 몫으로 남아 있습니다
 
 ## Next Steps
 
@@ -148,11 +185,17 @@
 6. 이번 일원화와 말투 규약을 `agent-os/DECISIONS.md`에 D-번호로 승격할지 정합니다
 7. nn98 PR 리뷰 대응. 저장소 최초 PR이라 동료가 알림을 못 받았을 수 있습니다
 8. `bin/ko-style`이 `scripts.md`에 미등록입니다(D-012 드리프트). `tell-lint`만 등록돼 있습니다
+9. 갈래 5 시각 확인: Ghostty에서 cmd+shift+, 리로드 후 프롬프트, fzf(Ctrl+T), `bat`,
+   nvim, 한글 렌더링을 눈으로 확인합니다. iTerm은 이전과 동일해야 합니다
+10. A/B 판정이 나면 Brewfile의 병행 주석과 CLAUDE.md의 관련 절을 갱신합니다.
+   한글 폰트가 D2Coding으로도 아쉬우면 Sarasa Term K 또는 Monoplex KR Nerd가 다음 후보입니다
 
 ## Watch Outs
 
 - 워킹트리에 네 세션 변경이 섞여 있습니다. `git commit -a`를 그냥 부르면 남의 작업이 딸려 들어갑니다
 - **index에 다른 세션이 미리 올려둔 변경이 있습니다.** 이번에 실제로 사고가 났습니다. 제 파일 3개만 `git add` 했는데도 커밋에 스킬 이름 변경 3건이 딸려 갔습니다. `git status`에서 첫 열이 `R`이면 이미 스테이징된 상태입니다. 경로를 명시한 `git commit -F <msg> -- <paths>` 형태를 쓰면 index의 나머지를 건드리지 않고 부분 커밋이 됩니다
+- 위 사고가 갈래 5에서 한 번 더 재현됐습니다(스킬 리네임 3건이 또 딸려 들어가 `reset --soft` 후 경로 지정 커밋으로 복구). 이 워킹트리에서 커밋할 때는 처음부터 `git commit -- <paths>`를 쓰는 것이 규칙입니다
+- Ghostty 분기 감지의 한계: 이미 떠 있는 tmux 서버는 자기를 띄운 터미널 기준으로 판정이 남습니다. A/B 중 터미널을 오가면 `tmux kill-server`로 리셋합니다
 - 훅은 이미 활성입니다. 직전 핸드오프에 "다음 세션부터 활성"이라고 적었는데 **틀렸습니다.** 이 세션에서 `AGENTS.md` 편집이 실제로 두 번 막혔고 `ko-style --fix`가 파일을 직접 고쳤습니다
 - 훅이 파일을 수정하므로 편집 직후 내용이 달라질 수 있습니다. 오래된 `old_string`으로 다시 편집하려면 먼저 읽어야 합니다
 - 규칙 문서가 금지 부호를 그대로 쓰면 훅이 그것까지 고쳐버립니다. 부호를 언급할 때는 인라인 코드로 감쌉니다
