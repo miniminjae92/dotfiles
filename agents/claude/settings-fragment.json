@@ -25,8 +25,25 @@
           },
           {
             "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-os-tell-lint\" ]; then \"$HOME/.local/bin/agent-os-tell-lint\" --hook stop; fi",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "if [ -x \"$HOME/.local/bin/agent-notify\" ]; then \"$HOME/.local/bin/agent-notify\" claude-hook; else \"$HOME/projects/agent-notify/bin/agent-notify\" claude-hook; fi",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/agent-os-tell-lint\" ]; then \"$HOME/.local/bin/agent-os-tell-lint\" --hook posttooluse; fi",
+            "timeout": 10
           }
         ]
       }

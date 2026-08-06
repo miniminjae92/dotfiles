@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""ko-style: 한국어 산출물의 부호 규칙 검사/수정.
+
+정본: mimir "20 Knowledge/좋은 글 작성 기준.md" §3 (부호 대체표).
+기계 판정이 가능한 규칙만 다룬다. 문체(합니다체)와 구조(균일함, 판단)는
+모델/사람 몫이므로 여기서 검사하지 않는다.
+
+규칙:
+  dash    엠대시(—)·엔대시(–) 사용 금지. 자동 수정 불가(괄호/문장 분리는
+          판단이 필요) → 위반만 보고.
+  mdot    가운뎃점(·, ㆍ)이 글자 사이에 오면 금지 → --fix 시 ", "로 치환.
+          줄 머리 불릿 용도는 건드리지 않는다.
+  slash   슬래시 한쪽 띄움 금지 → --fix 시 양쪽 띄움으로 정규화.
+
+코드 펜스(```), 인라인 코드(`...`), URL은 검사에서 제외한다.
+
+사용:
+  ko-style FILE...          # 검사만. 위반 있으면 exit 1
+  ko-style --fix FILE...    # 안전 수정 적용 후, 남은 위반(dash) 보고
+  cat x.md | ko-style -     # stdin 검사
+"""
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+DASH = re.compile(r"[—–]")
+MDOT_BETWEEN = re.compile(r"(?<=\S)[·ㆍ](?=\S)")
+SLASH_ONE_SIDED = re.compile(r"(?<=\S) /(?=\S)|(?<=\S)/ (?=\S)")
+URL = re.compile(r"https?://\S+")
+INLINE_CODE = re.compile(r"`[^`]*`")
+FENCE = re.compile(r"^\s*(```|~~~)")
+
+
+def masked(line: str) -> str:
+    """인라인 코드와 URL을 같은 길이의 공백으로 가려 검사 대상에서 제외."""
+    def blank(m):
+        return " " * len(m.group(0))
+    return URL.sub(blank, INLINE_CODE.sub(blank, line))
+
+
+def scan(lines):
+    """[(lineno, rule, snippet)] 반환. 코드 펜스 내부는 건너뛴다."""
+    hits = []
+    in_fence = False
+    for i, line in enumerate(lines, 1):
+        if FENCE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = masked(line)
+        for rule, pat in (("dash", DASH), ("mdot", MDOT_BETWEEN), ("slash", SLASH_ONE_SIDED)):
+            for hit in pat.finditer(m):
+                s = max(0, hit.start() - 12)
+                snippet = line[s:hit.end() + 12].strip()
+                hits.append((i, rule, snippet))
+    return hits
+
+
+def fix_line(line: str) -> str:
+    """안전 수정: mdot → ', ', 한쪽 띄움 슬래시 → 양쪽 띄움."""
+    out = []
+    pos = 0
+    protected = [(m.start(), m.end()) for m in INLINE_CODE.finditer(line)]
+    protected += [(m.start(), m.end()) for m in URL.finditer(line)]
+    protected.sort()
+
+    def in_protected(idx):
+        return any(a <= idx < b for a, b in protected)
+
+    # mdot
+    chars = list(line)
+    for m in list(MDOT_BETWEEN.finditer(masked(line)))[::-1]:
+        if not in_protected(m.start()):
+            chars[m.start():m.end()] = [",", " "]
+    line = "".join(chars)
+
+    # slash: " /" 또는 "/ " → " / "
+    def slash_repl(m):
+        return " / "
+    result = []
+    last = 0
+    for m in SLASH_ONE_SIDED.finditer(masked(line)):
+        if in_protected(m.start()):
+            continue
+        result.append(line[last:m.start()])
+        result.append(" / ")
+        last = m.end()
+    result.append(line[last:])
+    return "".join(result)
+
+
+def apply_fix(lines):
+    out = []
+    in_fence = False
+    changed = 0
+    for line in lines:
+        if FENCE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        fixed = fix_line(line)
+        if fixed != line:
+            changed += 1
+        out.append(fixed)
+    return out, changed
+
+
+def main():
+    ap = argparse.ArgumentParser(description="한국어 부호 규칙 검사/수정")
+    ap.add_argument("files", nargs="+", help="대상 파일 ('-'는 stdin)")
+    ap.add_argument("--fix", action="store_true", help="안전 수정을 파일에 적용")
+    args = ap.parse_args()
+
+    exit_code = 0
+    for name in args.files:
+        if name == "-":
+            lines = sys.stdin.read().splitlines(keepends=True)
+            label = "<stdin>"
+            writable = None
+        else:
+            p = Path(name)
+            if not p.is_file():
+                print(f"ko-style: 파일 없음: {name}", file=sys.stderr)
+                exit_code = 2
+                continue
+            lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
+            label = name
+            writable = p
+
+        if args.fix and writable:
+            lines, changed = apply_fix(lines)
+            if changed:
+                writable.write_text("".join(lines), encoding="utf-8")
+                print(f"{label}: {changed}줄 수정 (mdot/slash)")
+
+        remaining = scan(lines)
+        if args.fix:
+            remaining = [h for h in remaining if h[1] == "dash"]
+        for lineno, rule, snippet in remaining:
+            print(f"{label}:{lineno}: [{rule}] {snippet}")
+        if remaining:
+            exit_code = max(exit_code, 1)
+
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
