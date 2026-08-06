@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# jobs-mcp — 키체인의 채용 API 인증키로 jobs-mcp 서버(stdio)를 띄운다.
+#
+# 키 등록:
+#   security add-generic-password -a saramin -s jobs-mcp-saramin -w -U
+#   security add-generic-password -a worknet -s jobs-mcp-worknet -w -U
+# 발급 절차는 ~/projects/jobs-mcp/scripts/setup-keys.sh 위저드를 쓴다.
+#
+# 키가 없어도 서버는 뜬다. 없는 소스만 건너뛰고 나머지로 동작하며,
+# quota_status 도구가 어느 쪽이 비었는지 알려준다.
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/bin:/bin"
+
+SERVER="${JOBS_MCP_HOME:-$HOME/projects/jobs-mcp}/bin/jobs-mcp"
+if [ ! -x "$SERVER" ]; then
+  echo "jobs-mcp: 서버를 찾을 수 없습니다: $SERVER" >&2
+  exit 1
+fi
+
+SARAMIN_ACCESS_KEY="$(security find-generic-password -s jobs-mcp-saramin -w 2>/dev/null || true)"
+WORKNET_API_KEY="$(security find-generic-password -s jobs-mcp-worknet -w 2>/dev/null || true)"
+export SARAMIN_ACCESS_KEY WORKNET_API_KEY
+
+exec "$SERVER" "$@"
