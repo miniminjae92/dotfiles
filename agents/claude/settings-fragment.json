@@ -44,6 +44,11 @@
             "type": "command",
             "command": "if [ -x \"$HOME/.local/bin/agent-os-tell-lint\" ]; then \"$HOME/.local/bin/agent-os-tell-lint\" --hook posttooluse; fi",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in *.md) grep -q '[가-힣]' \"$f\" 2>/dev/null || exit 0; out=$(\"$HOME/.local/bin/ko-style\" --fix \"$f\") && exit 0; nd=$(printf '%s\\n' \"$out\" | grep -c '\\[dash\\]'); ns=$(printf '%s\\n' \"$out\" | grep -c '\\[slash\\]'); \"$HOME/.local/bin/ops-event\" --source ko-style --kind finding --severity low dash=\"$nd\" slash=\"$ns\" file=\"$f\" >/dev/null 2>&1; exit 0;; esac",
+            "timeout": 15
           }
         ]
       }

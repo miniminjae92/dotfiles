@@ -10,13 +10,14 @@
           판단이 필요) → 위반만 보고.
   mdot    가운뎃점(·, ㆍ)이 글자 사이에 오면 금지 → --fix 시 ", "로 치환.
           줄 머리 불릿 용도는 건드리지 않는다.
-  slash   슬래시 한쪽 띄움 금지 → --fix 시 양쪽 띄움으로 정규화.
+  slash   슬래시 한쪽 띄움 금지. 자동 수정 불가(경로 표기 `/dev/null`,
+          `agents/ 반영`을 ` / `로 벌려 손상시킨다) → 위반만 보고.
 
 코드 펜스(```), 인라인 코드(`...`), URL은 검사에서 제외한다.
 
 사용:
   ko-style FILE...          # 검사만. 위반 있으면 exit 1
-  ko-style --fix FILE...    # 안전 수정 적용 후, 남은 위반(dash) 보고
+  ko-style --fix FILE...    # 안전 수정(mdot) 적용 후, 남은 위반(dash, slash) 보고
   cat x.md | ko-style -     # stdin 검사
 """
 
@@ -60,9 +61,7 @@ def scan(lines):
 
 
 def fix_line(line: str) -> str:
-    """안전 수정: mdot → ', ', 한쪽 띄움 슬래시 → 양쪽 띄움."""
-    out = []
-    pos = 0
+    """안전 수정: mdot → ', '. slash 는 경로를 손상시키므로 여기서 다루지 않는다."""
     protected = [(m.start(), m.end()) for m in INLINE_CODE.finditer(line)]
     protected += [(m.start(), m.end()) for m in URL.finditer(line)]
     protected.sort()
@@ -75,21 +74,7 @@ def fix_line(line: str) -> str:
     for m in list(MDOT_BETWEEN.finditer(masked(line)))[::-1]:
         if not in_protected(m.start()):
             chars[m.start():m.end()] = [",", " "]
-    line = "".join(chars)
-
-    # slash: " /" 또는 "/ " → " / "
-    def slash_repl(m):
-        return " / "
-    result = []
-    last = 0
-    for m in SLASH_ONE_SIDED.finditer(masked(line)):
-        if in_protected(m.start()):
-            continue
-        result.append(line[last:m.start()])
-        result.append(" / ")
-        last = m.end()
-    result.append(line[last:])
-    return "".join(result)
+    return "".join(chars)
 
 
 def apply_fix(lines):
@@ -141,7 +126,7 @@ def main():
 
         remaining = scan(lines)
         if args.fix:
-            remaining = [h for h in remaining if h[1] == "dash"]
+            remaining = [h for h in remaining if h[1] in ("dash", "slash")]
         for lineno, rule, snippet in remaining:
             print(f"{label}:{lineno}: [{rule}] {snippet}")
         if remaining:
