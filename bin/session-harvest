@@ -44,10 +44,51 @@ def codex_executable():
     return None
 
 
+def agy_executable():
+    configured = os.environ.get("SESSION_HARVEST_AGY")
+    if configured:
+        return configured
+    for c in (shutil.which("agy"), HOME / ".local/bin/agy"):
+        if c and os.access(c, os.X_OK):
+            return str(c)
+    return None
+
+
+def agy_model():
+    """모델 레지스트리(D-022: XDG 정본) 우선, 없으면 routing.json clerk 기본값."""
+    try:
+        data = json.loads((HOME / ".config/ai-tools/models.json").read_text(encoding="utf-8"))
+        m = data.get("models", {}).get("agy_gemini_fast")
+        if m:
+            return m
+    except (OSError, ValueError):
+        pass
+    return "Gemini 3.5 Flash (Low)"
+
+
+def log_friction(message):
+    """마이닝 실패를 생산성 불편일기에 남긴다(2026-08-05 감사 A.1). 실패해도 잡을 깨지 않는다."""
+    exe = shutil.which("agent-os-friction") or str(HOME / ".local/bin/agent-os-friction")
+    try:
+        subprocess.run([exe, "--origin", "agent", message], check=False, timeout=10,
+                       capture_output=True)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def run_extract(days):
     exe = shutil.which("harvest-sessions") or str(HOME / ".local/bin/harvest-sessions")
     subprocess.run([exe, "--days", str(days), "--out", str(CACHE)],
                    capture_output=True, text=True, check=False, timeout=120)
+
+
+def is_batch_session(text_head):
+    """배치 파이프라인 세션 판정: 발화 1건이고 그 발화가 템플릿 프롬프트('- #' 시작).
+
+    스크립트가 만든 프롬프트라 수확 가치가 없고, 대량(1,700건+)이라 방치하면
+    MAX_CHARS 표본을 통째로 잡아먹는다(2026-08-06 캐시 회수에서 확인)."""
+    lines = text_head.splitlines()
+    return len(lines) >= 4 and lines[1] == "# 사용자 발화 1건" and lines[3].startswith("- #")
 
 
 def gather_source():
@@ -55,8 +96,13 @@ def gather_source():
         return ""
     chunks = []
     total = 0
-    for f in sorted(CACHE.glob("*.txt")):
+    # 최신 mtime 우선 — 알파벳순이면 MAX_CHARS 표본이 창(window)과 무관한
+    # 임의 구간이 된다. mtime은 "마지막으로 추출 창에 있던 날"이라 최신순이
+    # 이번 주 세션을 먼저 채운다.
+    for f in sorted(CACHE.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True):
         t = f.read_text(encoding="utf-8", errors="replace")
+        if is_batch_session(t[:400]):
+            continue
         if total + len(t) > MAX_CHARS:
             chunks.append(t[: MAX_CHARS - total])
             break
@@ -101,6 +147,31 @@ def mine_with_codex(source, days):
     return content if 80 <= len(content) <= 40_000 else None
 
 
+AGY_MAX_CHARS = 120_000  # 프롬프트가 argv로 전달되므로 ARG_MAX(1MB) 아래로 여유를 둔다
+
+
+def mine_with_agy(source, days):
+    """codex 실패 시 폴백 — routing.json clerk 폴백(Gemini Flash, 2026-08-05 감사 A.1)."""
+    exe = agy_executable()
+    if exe is None or not source.strip():
+        return None
+    prompt = PROMPT.format(days=days, source=source[:AGY_MAX_CHARS])
+    try:
+        r = subprocess.run(
+            [exe, "--model", agy_model(), "--mode", "plan", "--sandbox",
+             "--print-timeout", "600s", "-p", prompt],
+            capture_output=True, text=True, check=False, timeout=900,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    content = r.stdout.strip()
+    if content.startswith("```markdown") and content.endswith("```"):
+        content = content[len("```markdown"):-3].strip()
+    return content if 80 <= len(content) <= 40_000 else None
+
+
 DISABLED_MARKER = HOME / ".local/state/session-harvest/disabled"
 
 
@@ -130,9 +201,13 @@ def main():
     run_extract(args.days)
     source = gather_source()
     body = mine_with_codex(source, args.days)
-    generator = "codex" if body else "rules"
+    generator = "codex"
     if body is None:
-        body = "## 불편\n\n- (자동 마이닝 실패 — codex 미가용/한도. 원시 추출분은 ~/.cache/harvest-sessions 에 있음)\n"
+        body = mine_with_agy(source, args.days)
+        generator = "agy"
+    if body is None:
+        generator = "rules"
+        body = "## 불편\n\n- (자동 마이닝 실패 — codex·agy 모두 미가용/실패. 원시 추출분은 ~/.cache/harvest-sessions 에 있음)\n"
 
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = "\n".join([
@@ -149,18 +224,19 @@ def main():
     print(f"수확 적재: {path} (generator={generator}, source={len(source):,}자)")
     # 마이닝 실패는 run/low가 아니라 error/medium — run/low는 digest가 걸러내서
     # "성공 0회 파이프라인"이 2세대 동안 보이지 않았다(2026-08-04 감사).
-    if generator == "codex":
+    if generator in ("codex", "agy"):
         emit_ops_event(
             "session-harvest", "run", severity="info",
-            message=f"수확 적재 완료 ({len(source):,}자)",
+            message=f"수확 적재 완료 (generator={generator}, {len(source):,}자)",
             generator=generator, source_chars=len(source), window_days=args.days,
         )
     else:
         emit_ops_event(
             "session-harvest", "error", severity="medium",
-            message="codex 마이닝 실패 — 스텁 적재 (default 프로파일 고장/한도 여부 확인)",
+            message="codex·agy 마이닝 모두 실패 — 스텁 적재",
             generator=generator, source_chars=len(source), window_days=args.days,
         )
+        log_friction("session-harvest: 주간 마이닝 실패(codex·agy 모두 실패) — 스텁 적재, 원시분은 캐시 보존")
 
 
 if __name__ == "__main__":
