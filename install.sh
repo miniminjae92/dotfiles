@@ -279,22 +279,53 @@ fi
 
 # Merge managed Claude Code settings into the machine-local settings file.
 # settings.json stays unlinked because Claude Code rewrites it at runtime
-# (model preference, theme); only missing keys and hook events are added,
-# and existing entries are never overwritten.
+# (model preference, theme); only missing keys are added, and unmanaged entries
+# are never touched. Managed hooks are matched by the tool they invoke, so a new
+# hook lands inside an event that already exists and an edited one is updated in
+# place instead of being appended as a duplicate.
 python3 - "$DOTFILES_DIR/agents/claude/settings-fragment.json" "$HOME/.claude/settings.json" <<'PY'
-import json, pathlib, sys
+import json, pathlib, re, sys
 
 fragment_path, settings_path = map(pathlib.Path, sys.argv[1:3])
 fragment = json.loads(fragment_path.read_text())
 settings_path.parent.mkdir(parents=True, exist_ok=True)
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 
+TOOL = re.compile(r"\$HOME/(?:\.local/bin|projects/[^/\s\"']+/bin)/([\w-]+)")
+
+
+def identity(hook):
+    """Managed hooks are identified by the tool they invoke, not by the exact
+    command. Otherwise editing a hook in the fragment would append a duplicate
+    instead of updating the existing one."""
+    m = TOOL.search(hook.get("command", ""))
+    return m.group(1) if m else hook.get("command", "")
+
+
 added = []
 hooks = settings.setdefault("hooks", {})
-for event in fragment.get("hooks", {}):
-    if event not in hooks:
-        hooks[event] = fragment["hooks"][event]
-        added.append(f"hooks.{event}")
+for event, groups in fragment.get("hooks", {}).items():
+    existing = hooks.setdefault(event, [])
+    for group in groups:
+        # Same matcher means the same trigger, so the hook belongs in that group.
+        target = next((g for g in existing if g.get("matcher") == group.get("matcher")), None)
+        if target is None:
+            target = {**group, "hooks": []}
+            existing.append(target)
+        current = target.setdefault("hooks", [])
+        for hook in group.get("hooks", []):
+            same = next((h for h in current if identity(h) == identity(hook)), None)
+            if same is None:
+                current.append(hook)
+            elif same != hook:
+                same.update(hook)      # fragment is canonical for managed hooks
+            else:
+                continue
+            label = f"hooks.{event}"
+            if group.get("matcher"):
+                label += f"[{group['matcher']}]"
+            if label not in added:
+                added.append(label)
 for key, value in fragment.items():
     if key != "hooks" and key not in settings:
         settings[key] = value
