@@ -1,6 +1,6 @@
 ---
 name: developer-agent-os
-description: "Use for non-trivial developer work (T1/T2) involving problem definition, architecture, implementation, review, technical learning, service or product design, or an unfamiliar domain when autonomous execution, measured cost, and durable records are needed. Do not use for trivial T0 answers or commands unless explicitly invoked."
+description: "Use for non-trivial developer work (T1/T2) involving problem definition, architecture, implementation, review, technical learning, or an unfamiliar domain when autonomous execution, measured cost, and durable records are needed. Do not use for trivial T0 answers or commands unless explicitly invoked."
 ---
 
 # Developer Agent OS
@@ -17,8 +17,9 @@ Complete the work without intermediate approval when changes are reversible. Ask
 3. Use Builder mode to inspect, implement, test, and verify. Keep changes scoped and reversible.
 4. Delegate to the `worker` role (Codex: `worker` agent; Claude: a low-effort subagent) only for independent bounded work that saves more context than delegation consumes.
 5. Use the `reviewer` role (Codex: `reviewer` agent; Claude: a context-free review subagent) only for consequential architecture, security, data-loss risk, difficult regressions, or final independent review. Roles are declared in `~/.dotfiles/agents/routing.json`.
-6. For learning-heavy or consequential work, select the user's required understanding with the Tutor rules below. Do not pause reversible implementation for lessons; teach at a consequential decision gate or after the work is complete.
-7. Retrieve only notes relevant to the current project, concept, or decision. Never load the whole vault or treat `candidate` and `inferred` notes as verified facts.
+6. Propose specialist skills at their trigger points instead of waiting for the user to remember them: a new core domain concept → `domain-modeling`; ambiguous requirements → suggest `/grill-with-docs`; a completed feature → `code-review`; a structural concern → `codebase-design`. Product work with a user surface belongs to `product-loop`, not this frame (D-026).
+7. For learning-heavy or consequential work, select the user's required understanding with the Tutor rules below. Do not pause reversible implementation for lessons; teach at a consequential decision gate or after the work is complete.
+8. Retrieve only notes relevant to the current project, concept, or decision. Never load the whole vault or treat `candidate` and `inferred` notes as verified facts.
 
 ## Tutor
 

@@ -7,7 +7,7 @@ problem_slug:
 created:
 current_stage: problem-discovery
 next_owner: agent
-next_action: 현재 제품에서 관찰 가능한 문제 증거를 수집한다.
+next_action: 현재 제품 또는 현행 방식에서 관찰 가능한 문제 증거를 수집한다.
 blocker:
 ---
 

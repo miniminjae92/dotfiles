@@ -16,7 +16,7 @@ Claude 전용 실험 구현이다. Codex 구현과 함께 provider-neutral 승�
 1. 저장소의 `CLAUDE.md`·`AGENTS.md`, `CONTEXT.md`, `docs/adr/`와 제품 문서를 확인한다.
 2. `docs/product-loop/**/LOOP.md`에서 `status: active`인 사이클을 찾는다.
    - 하나면 그 사이클을 재개한다.
-   - 없으면 `~/.dotfiles/agents/conventions/product-loop/LOOP-template.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다.
+   - 없으면 새 사이클 시작을 제안하고, 사용자 승인 뒤 `~/.dotfiles/agents/conventions/product-loop/LOOP-template.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다 (D-026).
    - 둘 이상이면 가장 최근 파일을 임의 선택하지 말고 충돌을 사용자에게 알린다.
 3. `current_stage`, `next_owner`, `next_action`을 읽고 지금 할 일 하나를 먼저 보여준다.
 4. `STAGES.md`에서 현재 단계 절만 읽고 실행한다.
@@ -77,7 +77,7 @@ dref는 기획 원문을 UX 흐름과 UI 방향으로 구체화하고, 결과로
 
 이 저장소의 프로젝트가 dref에 있으면 6·9단계 산출물은 dref 프로젝트를 정본으로 삼고 `LOOP.md`는 링크만 한다. 없으면 `docs/product-loop/<사이클>/` 아래 문서로 남긴다.
 
-취향 근거 조회는 `dref-consult`를 쓴다.
+취향 근거 조회는 `dref-consult`를 쓴다. (2026-07-28 우선 제외 — dref 개편 중이라 라이브러리·API가 유동적. 개편 완료 후 재연결)
 
 ## 사이클 종료
 

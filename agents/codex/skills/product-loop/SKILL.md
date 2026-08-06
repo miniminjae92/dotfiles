@@ -14,7 +14,7 @@ Codex 구현이다. 단계와 게이트는 공통 개념 파일에 있고 Claude
 1. 저장소의 `AGENTS.md`, `CONTEXT.md`, `docs/adr/`와 제품 문서를 확인한다.
 2. `docs/product-loop/**/LOOP.md`에서 `status: active`인 사이클을 찾는다.
    - 하나면 그 사이클을 재개한다.
-   - 없으면 `~/.dotfiles/agents/conventions/product-loop/LOOP-template.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다.
+   - 없으면 새 사이클 시작을 제안하고, 사용자 승인 뒤 `~/.dotfiles/agents/conventions/product-loop/LOOP-template.md`를 복사해 `docs/product-loop/<YYYY-MM-DD>-<problem-slug>/LOOP.md`를 만든다 (D-026).
    - 둘 이상이면 가장 최근 파일을 임의 선택하지 말고 충돌을 사용자에게 알린다.
 3. `current_stage`, `next_owner`, `next_action`을 읽고 지금 할 일 하나를 먼저 보여준다.
 4. 현재 단계에 해당하는 `STAGES.md` 절만 읽고 실행한다.
