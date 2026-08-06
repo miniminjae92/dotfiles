@@ -33,6 +33,9 @@ from collections import defaultdict
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
 # 침묵 감지: 과거(롤백 창)엔 있었는데 최근 창에 없는 소스를 찾기 위한 되돌아보기.
 SILENCE_LOOKBACK_DAYS = 30
+# 스냅샷 신선도(2026-08-05 감사 A.2): 시간당 잡이므로 24h 무소식은 확실한 고장이다.
+SNAPSHOT_SOURCE = "vault-snapshot"
+SNAPSHOT_STALE_HOURS = 24
 
 
 def state_root() -> str:
@@ -75,6 +78,36 @@ def numeric_fields(ev: dict) -> dict:
         for k, v in ev.items()
         if k not in reserved and isinstance(v, (int, float)) and not isinstance(v, bool)
     }
+
+
+def snapshot_freshness(events: list[dict], now: _dt.datetime) -> list[str]:
+    """볼트 스냅샷(백업 경로)의 침묵 실패를 표면화한다.
+
+    일반 침묵 감지(7일 창)로는 백업 정지를 하루 안에 못 잡는다 — 이 잡만
+    24h 기준을 따로 둔다. 경보 셋: ① 잡 침묵 24h+ ② 커밋은 있는데 push 성공
+    0(로컬에만 있는 변경이 하루 초과) ③ pull 충돌(사람이 풀 때까지 동기화 정지)."""
+    dated = [(parse_ts(e), e) for e in events if e.get("source") == SNAPSHOT_SOURCE]
+    dated = [(ts, e) for ts, e in dated if ts is not None]
+    if not dated:
+        return []  # 이 기기에서 돈 적 없는 잡 — 일반 침묵 섹션의 몫
+    cutoff = now - _dt.timedelta(hours=SNAPSHOT_STALE_HOURS)
+    recent = [e for ts, e in dated if ts >= cutoff]
+    if not recent:
+        last_ts = max(ts for ts, _ in dated)
+        return [f"스냅샷 잡 침묵 {SNAPSHOT_STALE_HOURS}h+ — 마지막 실행 {last_ts.isoformat()[:16]}"]
+    problems = []
+    committed = sum(e.get("committed", 0) for e in recent)
+    pushed = sum(e.get("pushed", 0) for e in recent)
+    push_failed = sum(e.get("push_failed", 0) for e in recent)
+    conflicted = sum(e.get("conflicted", 0) for e in recent)
+    if committed and not pushed:
+        problems.append(
+            f"커밋 {committed}건이 {SNAPSHOT_STALE_HOURS}h째 원격 미반영"
+            f" (push 실패 {push_failed}회) — 오프디바이스 백업 정지"
+        )
+    if conflicted:
+        problems.append(f"pull 충돌 {conflicted}회 — 해당 볼트는 수동 해소 전까지 동기화 정지")
+    return problems
 
 
 def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
@@ -135,6 +168,7 @@ def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
         "window_days": days,
         "sources_active": sorted(recent_sources),
         "sources_silent": silent,
+        "snapshot_freshness": snapshot_freshness(events, now),
         "per_source": {k: dict(v) for k, v in per_source.items()},
         "last_seen": last_seen,
         "errors": errors,
@@ -186,6 +220,11 @@ def render_markdown(d: dict) -> str:
     lines.append("")
 
     # 결정 신호 먼저 (요약 우선)
+    if d.get("snapshot_freshness"):
+        lines.append("## 🧊 스냅샷 신선도 경보 (백업 경로 점검)")
+        for msg in d["snapshot_freshness"]:
+            lines.append(f"- {msg}")
+        lines.append("")
     if d["sources_silent"]:
         lines.append("## ⚠️ 침묵한 잡 (launchagent 점검 권장)")
         for src in d["sources_silent"]:
@@ -258,7 +297,8 @@ def notify_digest(d: dict, out_path: str | None) -> None:
     errors = len(d["errors"])
     findings = len(d["findings_attention"])
     silent = len(d["sources_silent"])
-    if not (errors or findings or silent):
+    fresh = len(d.get("snapshot_freshness", []))
+    if not (errors or findings or silent or fresh):
         return
     executable = shutil.which("agent-notify") or os.path.expanduser(
         "~/.local/bin/agent-notify"
@@ -266,6 +306,8 @@ def notify_digest(d: dict, out_path: str | None) -> None:
     if not os.access(executable, os.X_OK):
         return
     message = f"잡 다이제스트: 오류 {errors} · 발견 {findings} · 침묵 {silent}"
+    if fresh:
+        message += f" · 🧊신선도 {fresh}"
     if out_path:
         encoded = urllib.parse.quote(out_path, safe="")
         message += f" · <obsidian://open?path={encoded}|열기>"
@@ -275,7 +317,7 @@ def notify_digest(d: dict, out_path: str | None) -> None:
                 executable, "event",
                 "--source", "ops-digest",
                 "--label", "Ops Digest",
-                "--status", "attention" if errors or silent else "complete",
+                "--status", "attention" if errors or silent or fresh else "complete",
                 "--project", message,
                 "--local", "off",
                 "--slack", "immediate",

@@ -90,6 +90,62 @@ class OpsDigestTest(unittest.TestCase):
 
         run.assert_not_called()
 
+    def test_snapshot_freshness_quiet_when_recent_push(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts="2026-08-06T20:00:00+09:00",
+                  committed=1, pushed=2, push_failed=0, conflicted=0),
+        ]
+
+        self.assertEqual(ops_digest.snapshot_freshness(events, now), [])
+
+    def test_snapshot_freshness_alerts_on_24h_silence(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts="2026-08-04T10:00:00+09:00",
+                  committed=1, pushed=1, push_failed=0, conflicted=0),
+        ]
+
+        alerts = ops_digest.snapshot_freshness(events, now)
+
+        self.assertEqual(len(alerts), 1)
+        self.assertIn("침묵 24h+", alerts[0])
+
+    def test_snapshot_freshness_alerts_on_committed_without_push(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts="2026-08-06T19:00:00+09:00",
+                  committed=3, pushed=0, push_failed=3, conflicted=1),
+        ]
+
+        alerts = ops_digest.snapshot_freshness(events, now)
+
+        self.assertEqual(len(alerts), 2)
+        self.assertIn("원격 미반영", alerts[0])
+        self.assertIn("pull 충돌", alerts[1])
+
+    def test_snapshot_freshness_ignores_machines_that_never_ran(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+
+        self.assertEqual(ops_digest.snapshot_freshness([], now), [])
+
+    @mock.patch.object(ops_digest.subprocess, "run")
+    @mock.patch.object(ops_digest.shutil, "which", return_value="/usr/local/bin/agent-notify")
+    @mock.patch.object(ops_digest.os, "access", return_value=True)
+    def test_notify_fires_on_freshness_alone(self, _access, _which, run):
+        digest = {
+            "errors": [],
+            "findings_attention": [],
+            "sources_silent": [],
+            "snapshot_freshness": ["커밋 3건이 24h째 원격 미반영"],
+        }
+
+        ops_digest.notify_digest(digest, None)
+
+        command = run.call_args.args[0]
+        self.assertIn("attention", command)
+        self.assertIn("🧊신선도 1", " ".join(command))
+
     @mock.patch.object(ops_digest.subprocess, "run")
     @mock.patch.object(ops_digest.shutil, "which", return_value="/usr/local/bin/agent-notify")
     @mock.patch.object(ops_digest.os, "access", return_value=True)
