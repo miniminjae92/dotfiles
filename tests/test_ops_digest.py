@@ -129,6 +129,43 @@ class OpsDigestTest(unittest.TestCase):
 
         self.assertEqual(ops_digest.snapshot_freshness([], now), [])
 
+    def test_snapshot_freshness_catches_single_vault_stuck_behind_other_success(self):
+        # 볼트 합산 이벤트라 pushed>0가 경보를 가리는 마스킹 시나리오:
+        # 매시 {pushed:1, push_failed:1} = 한 볼트 성공·한 볼트 고착
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts=f"2026-08-06T{h:02d}:00:00+09:00",
+                  committed=1, pushed=1, push_failed=1, conflicted=0)
+            for h in range(10, 20)
+        ]
+
+        alerts = ops_digest.snapshot_freshness(events, now)
+
+        self.assertEqual(len(alerts), 1)
+        self.assertIn("고착 의심", alerts[0])
+
+    def test_snapshot_freshness_quiet_on_transient_push_failures(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts="2026-08-06T18:00:00+09:00",
+                  committed=1, pushed=1, push_failed=1, conflicted=0),
+            event("vault-snapshot", "run", ts="2026-08-06T19:00:00+09:00",
+                  committed=1, pushed=2, push_failed=0, conflicted=0),
+            event("vault-snapshot", "run", ts="2026-08-06T20:00:00+09:00",
+                  committed=0, pushed=2, push_failed=0, conflicted=0),
+        ]
+
+        self.assertEqual(ops_digest.snapshot_freshness(events, now), [])
+
+    def test_snapshot_freshness_survives_non_numeric_payload(self):
+        now = datetime.datetime.fromisoformat("2026-08-06T21:00:00+09:00")
+        events = [
+            event("vault-snapshot", "run", ts="2026-08-06T20:00:00+09:00",
+                  committed="abc", pushed="", push_failed=0, conflicted=0),
+        ]
+
+        self.assertEqual(ops_digest.snapshot_freshness(events, now), [])
+
     @mock.patch.object(ops_digest.subprocess, "run")
     @mock.patch.object(ops_digest.shutil, "which", return_value="/usr/local/bin/agent-notify")
     @mock.patch.object(ops_digest.os, "access", return_value=True)

@@ -95,15 +95,28 @@ def snapshot_freshness(events: list[dict], now: _dt.datetime) -> list[str]:
     if not recent:
         last_ts = max(ts for ts, _ in dated)
         return [f"스냅샷 잡 침묵 {SNAPSHOT_STALE_HOURS}h+ — 마지막 실행 {last_ts.isoformat()[:16]}"]
+
+    def count(ev: dict, key: str):
+        # 수동 백필 등으로 비숫자 값이 섞여도 다이제스트가 죽으면 안 된다
+        v = ev.get(key, 0)
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else 0
+
     problems = []
-    committed = sum(e.get("committed", 0) for e in recent)
-    pushed = sum(e.get("pushed", 0) for e in recent)
-    push_failed = sum(e.get("push_failed", 0) for e in recent)
-    conflicted = sum(e.get("conflicted", 0) for e in recent)
+    committed = sum(count(e, "committed") for e in recent)
+    pushed = sum(count(e, "pushed") for e in recent)
+    push_failed = sum(count(e, "push_failed") for e in recent)
+    conflicted = sum(count(e, "conflicted") for e in recent)
     if committed and not pushed:
         problems.append(
             f"커밋 {committed}건이 {SNAPSHOT_STALE_HOURS}h째 원격 미반영"
             f" (push 실패 {push_failed}회) — 오프디바이스 백업 정지"
+        )
+    elif len(recent) >= 3 and all(count(e, "push_failed") > 0 for e in recent):
+        # 이벤트는 볼트 합산이라 한 볼트가 고착돼도 다른 볼트의 성공이 pushed를
+        # 채운다 — 전 실행에서 push_failed가 지속되는 패턴이 단일 볼트 고장 신호다.
+        problems.append(
+            f"push 실패가 최근 {len(recent)}회 실행 전부에서 지속 (합 {push_failed}회)"
+            " — 볼트 하나가 원격 미반영으로 고착 의심"
         )
     if conflicted:
         problems.append(f"pull 충돌 {conflicted}회 — 해당 볼트는 수동 해소 전까지 동기화 정지")
