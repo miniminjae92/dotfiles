@@ -137,7 +137,16 @@ hl("@tag.delimiter", { fg = p.muted })
 hl("@label", { fg = p.symbol })
 
 -- ── 마크다운/@markup(render-markdown이 이 위에 얹힌다) ───────
+-- 터미널엔 글자 크기가 없으므로 mdview의 크기 위계를 난색 램프로 치환한다:
+-- H1 크림, H2 액센트, H3 골드, H4 피치, H5·H6 크림. 인접 레벨끼리 전부 구분되고
+-- 전색이 팔레트 안의 난색이라 채도 규율은 유지된다.
 hl("@markup.heading", { fg = p.heading, bold = true })
+hl("@markup.heading.1", { fg = p.heading, bold = true })
+hl("@markup.heading.2", { fg = p.accent, bold = true })
+hl("@markup.heading.3", { fg = p.meta, bold = true })
+hl("@markup.heading.4", { fg = p.inline_code, bold = true })
+hl("@markup.heading.5", { fg = p.heading, bold = true })
+hl("@markup.heading.6", { fg = p.heading, bold = true })
 hl("@markup.strong", { fg = p.heading, bold = true })
 hl("@markup.italic", { italic = true })
 hl("@markup.strikethrough", { strikethrough = true })
@@ -189,9 +198,10 @@ hl("RenderMarkdownBullet", { fg = p.muted })
 hl("RenderMarkdownTableHead", { fg = p.border })
 hl("RenderMarkdownTableRow", { fg = p.border })
 hl("RenderMarkdownDash", { fg = p.border })
-hl("RenderMarkdownQuote", { fg = p.muted, italic = true })
+hl("RenderMarkdownQuote", { fg = p.accent })
 hl("RenderMarkdownLink", { fg = p.link })
-for i = 1, 6 do
+for i, c in ipairs({ p.heading, p.accent, p.meta, p.inline_code, p.heading, p.heading }) do
+	hl("RenderMarkdownH" .. i, { fg = c, bold = true })
 	hl("RenderMarkdownH" .. i .. "Bg", { bg = p.canvas })
 end
 hl("SnacksIndent", { fg = p.subtle })
