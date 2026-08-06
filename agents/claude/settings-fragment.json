@@ -59,7 +59,7 @@
           },
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in *.md) grep -q '[가-힣]' \"$f\" 2>/dev/null || exit 0; out=$(\"$HOME/.local/bin/ko-style\" --fix \"$f\") && exit 0; nd=$(printf '%s\\n' \"$out\" | grep -c '\\[dash\\]'); ns=$(printf '%s\\n' \"$out\" | grep -c '\\[slash\\]'); \"$HOME/.local/bin/ops-event\" --source ko-style --kind finding --severity low dash=\"$nd\" slash=\"$ns\" file=\"$f\" >/dev/null 2>&1; exit 0;; esac",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty'); case \"$f\" in *.md) grep -q '[가-힣]' \"$f\" 2>/dev/null || exit 0; out=$(\"$HOME/.local/bin/ko-style\" --fix \"$f\") && exit 0; nd=$(printf '%s\\n' \"$out\" | grep -c '\\[dash\\]'); ns=$(printf '%s\\n' \"$out\" | grep -c '\\[slash\\]'); \"$HOME/.local/bin/ops-event\" --source ko-style --kind finding --severity low dash=\"$nd\" slash=\"$ns\" file=\"$f\" >/dev/null 2>&1; jq -n --arg o \"$out\" '{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:(\"ko-style: --fix 로 못 고치는 위반이 남았습니다. dash 와 slash 는 문맥 판단이 필요해 자동 수정 대상이 아닙니다. 방금 쓴 줄이면 좋은 글 작성 기준 3절 대체표대로 고치고, 레거시 줄이면 두십시오.\\n\" + $o)}}'; exit 0;; esac",
             "timeout": 15
           }
         ]
