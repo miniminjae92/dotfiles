@@ -6,32 +6,33 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 * **Terminal & Zsh**
     * **iTerm2 Theme**: Uses the [Catppuccin Mocha](https://github.com/catppuccin/iterm) color scheme.
+    * **Ghostty Theme**: Custom `reader-dark` (ported from the markdown-reader dark palette in `.config/nvim/assets/markdown-reader.css`) at `.config/ghostty/themes/reader-dark`. Design is per-terminal (iTerm2 keeps Catppuccin Mocha); functionality is shared.
     * **Shell**: A plain `.zshrc` with no framework. Every component is a Homebrew formula sourced directly.
-    * **Prompt**: `Starship` under Ghostty, `Powerlevel10k` elsewhere, selected by `$TERM_PROGRAM`.
+    * **Prompt**: `Starship` under Ghostty, `Powerlevel10k` elsewhere, selected by the `_is_ghostty` helper (`$TERM_PROGRAM` or `$GHOSTTY_RESOURCES_DIR`, so tmux sessions started under Ghostty keep Starship).
     * **Plugins**: `zsh-syntax-highlighting` (command validation) and `zsh-autosuggestions` (history-based completion).
-    * **Git abbreviations**: `.config/zsh/git.zsh` — Oh My Zsh naming, no Oh My Zsh.
+    * **Git abbreviations**: `.config/zsh/git.zsh` (Oh My Zsh naming, no Oh My Zsh).
 * **Neovim**: A robust Neovim setup managed by `lazy.nvim`.
-    * **Theming**: Uses `solarized-osaka.nvim` for a clean, dark color scheme.
+    * **Theming**: `solarized-osaka.nvim` by default; under Ghostty the local `colors/reader-dark.lua` scheme (same reader palette as the terminal) loads instead, with solarized-osaka as fallback.
     * **Keymaps**: A consistent keybinding system with `<leader>` set to `space`, for easy navigation, window management, and text manipulation.
     * **LSP & Completion**: Uses Neovim's native LSP (`lsp/` directory + `vim.lsp.enable`), with `mason.nvim` supplying the servers and `nvim-lspconfig` acting purely as a defaults database. Java runs through `nvim-jdtls` from `ftplugin/java.lua`. Autocompletion is handled by `blink.cmp`.
     * **Configuration Context**: See `.config/nvim/README.md` before changing the Neovim setup; update it whenever the structure, plugins, keymaps, or tooling instructions change.
 * **Command Line Tools**:
     * `zoxide` for smarter directory navigation (`z` replaces `cd`).
     * `eza` as a modern `ls` replacement (with icons).
-    * `bat` for file viewing with syntax highlighting (replaces `cat`), including the `tokyonight_night` theme.
+    * `bat` for file viewing with syntax highlighting (replaces `cat`). Theme is per-terminal: built-in `ansi` under Ghostty (inherits the terminal palette), `tokyonight_night` elsewhere.
     * `fzf` with `fd` for fast and efficient file and directory searching.
     * `gh` for GitHub CLI workflows.
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
-    * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository — see Extracted Tools below. `bin/git-cm-ai` stays as a thin compatibility wrapper.
-    * `agent-notify` (provider-neutral persistent notifications + menu bar app) now lives in its own repository — see Extracted Tools below. Hook wiring and the two LaunchAgents stay here.
-    * `codex-accounts` (isolated per-account Codex homes + no-turn quota monitoring: `gcodex`/`ncodex`/`codex-account-usage`) now lives in its own repository — see Extracted Tools below.
+    * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository (see Extracted Tools below). `bin/git-cm-ai` stays as a thin compatibility wrapper.
+    * `agent-notify` (provider-neutral persistent notifications + menu bar app) now lives in its own repository (see Extracted Tools below). Hook wiring and the two LaunchAgents stay here.
+    * `codex-accounts` (isolated per-account Codex homes + no-turn quota monitoring: `gcodex`/`ncodex`/`codex-account-usage`) now lives in its own repository (see Extracted Tools below).
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
     * `bin/ai-model-status` shows centrally configured models and checks provider installation and login state without inference by default.
-    * `kman` (Korean man pages, on-device translation) now lives in its own repository — see Extracted Tools below.
-    * `video-summary` (YouTube transcript capture, opt-in summaries) now lives in its own repository — see Extracted Tools below. Agent sessions use the `vsummary` skill for batch procedures.
-    * `mdview` (local Markdown reader site) now lives in its own repository — see Extracted Tools below.
+    * `kman` (Korean man pages, on-device translation) now lives in its own repository (see Extracted Tools below).
+    * `video-summary` (YouTube transcript capture, opt-in summaries) now lives in its own repository (see Extracted Tools below). Agent sessions use the `vsummary` skill for batch procedures.
+    * `mdview` (local Markdown reader site) now lives in its own repository (see Extracted Tools below).
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
@@ -42,7 +43,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **VSCode**: Configuration files to make VSCode feel more like Neovim.
 * **Agent CLI notifications**: Global Codex, `agy`, and Claude Code `Stop` hooks call `agent-notify`, so completion notifications do not depend on terminal or tmux focus. Codex `PermissionRequest` and Claude Code `Notification` events report permission prompts and idle waits as attention-level alerts. `alerter` provides actionable alerts and click-to-focus navigation to the recorded tmux window and pane. Local presentation and Slack delivery are independent policies, and unacknowledged events can use delayed Slack fallback. Prompts, responses, model names, and detailed errors are excluded from notification state. The tool and its design record live in the agent-notify repository (Extracted Tools below); this repository keeps the hook wiring and LaunchAgents.
 * **Shared agent instructions**: `agents/AGENTS.md` is the provider-neutral instruction core (hard cap 50 lines; conditional workflows live in skills). Codex reads it via the `~/.codex/AGENTS.md` symlink and Gemini/agy via `~/.gemini/GEMINI.md`. AGY stores its OAuth session in one macOS Keychain item; use `agy` directly. `agents/routing.json` declares model and account routing as logical roles (planner/worker/reviewer/mechanical); it is a human-facing registry checked for drift by tooling, not an automatic router. `agents/skills/` holds provider-neutral skills (`developer-agent-os`, `handoff-session`, the vendored Matt Pocock engineering chain) linked into both `~/.codex/skills/` and `~/.claude/skills/`, while Codex-specific skills stay under `agents/codex/skills/`. `handoff-session` writes the compact continuation note that carries work context across sessions, providers, and machines.
-* **Claude Code**: `claude/CLAUDE.md` is linked to `~/.claude/CLAUDE.md` and imports the shared agent instructions with an `@` import, keeping a thin Claude-specific section (model routing defaults) below the neutral core. Managed settings (`claude/settings-fragment.json`: hooks and the status line) are merged into the machine-local `~/.claude/settings.json` by `install.sh` because Claude Code rewrites that file at runtime; only missing keys and hook events are added, and existing entries are never overwritten. The status line (`bin/claude-statusline`) shows directory, model, and context-window usage as an always-on gauge for judging handoff timing, and a `PreCompact` hook raises an attention alert when auto-compaction is imminent — the signal that a handoff point was missed.
+* **Claude Code**: `claude/CLAUDE.md` is linked to `~/.claude/CLAUDE.md` and imports the shared agent instructions with an `@` import, keeping a thin Claude-specific section (model routing defaults) below the neutral core. Managed settings (`claude/settings-fragment.json`: hooks and the status line) are merged into the machine-local `~/.claude/settings.json` by `install.sh` because Claude Code rewrites that file at runtime; only missing keys and hook events are added, and existing entries are never overwritten. The status line (`bin/claude-statusline`) shows directory, model, and context-window usage as an always-on gauge for judging handoff timing, and a `PreCompact` hook raises an attention alert when auto-compaction is imminent (the signal that a handoff point was missed).
 * **Codex**: Global Codex instructions, lifecycle hooks, custom agents, and custom skills are managed through symlinks under `~/.codex/`. `~/.codex/config.toml` stays local because it contains machine-specific project trust state. The local sandbox policy uses `workspace-write` with broad personal work roots (`~/.dotfiles`, `~/.obsidian`, `~/projects`, common document folders, and the iCloud Obsidian vault) plus `on-request` approval for protected or exceptional paths, so normal work proceeds without exposing the entire home directory. The global Codex hook source lives at `agents/codex/hooks.json`.
 
 ---
@@ -90,7 +91,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     Codex, `agy`, and Claude Code completion notifications are enabled by the global hook links installed by this script. The `agent-notify` tool itself lives in its own repository (see Extracted Tools below) and is linked only when the clone exists.
 
     The install script links only stable Codex instructions, hooks, custom agents, and custom skills. It does not manage Codex config, auth, logs, sessions, caches, system skills, or local state.
-    It also links the managed `bat` theme into `~/.config/bat/themes/` and rebuilds the `bat` cache.
+    It also links the managed `bat` theme into `~/.config/bat/themes/` (rebuilding the `bat` cache) and the Ghostty `reader-dark` theme into `~/.config/ghostty/themes/`.
     Codex helper commands become available after opening a new shell:
     ```bash
     agent-os-usage               # 현재 Codex 세션(정확한 thread id)
@@ -118,7 +119,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     number of `FAIL` findings. `WARN` lines are usually the per-machine steps in
     step 6 that have not been done yet.
 
-    `install.sh` prints its own failure report at the end — skipped symlinks and
+    `install.sh` prints its own failure report at the end: skipped symlinks and
     LaunchAgents that would not load. An empty report plus `Installed dotfile links.`
     is what a clean run looks like.
 
@@ -126,7 +127,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
     * **Shell environment.** Oh My Zsh is **not** used and must not be installed.
         It was removed in favour of Starship (Ghostty) and Powerlevel10k (iTerm2),
-        selected at runtime by `$TERM_PROGRAM`. The prompt, `zsh-autosuggestions`,
+        selected at runtime by the `_is_ghostty` helper in `.zshrc` (checks
+        `$TERM_PROGRAM` and `$GHOSTTY_RESOURCES_DIR`, so tmux sessions started
+        under Ghostty count as Ghostty). The prompt, `zsh-autosuggestions`,
         and `zsh-syntax-highlighting` all come from the Brewfile in step 3. Git
         abbreviations live in `.config/zsh/git.zsh`, which keeps the Oh My Zsh
         naming convention without depending on Oh My Zsh.
@@ -154,18 +157,19 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         `.config/launchd/` hardcodes `/Users/miniminjae/…`. On a machine with
         another username they load and then fail silently. Rewrite the paths first.
 
-    Notification behavior — delivery axes, named modes, the menu bar app,
-    `AGENT_NOTIFY_POLICY` process-tree scoping, and ownership-based `alerter`
-    reclamation (the 83 GB incident) — is documented in the
-    [agent-notify repository](https://github.com/miniminjae92/agent-notify).
+    Notification behavior is documented in the
+    [agent-notify repository](https://github.com/miniminjae92/agent-notify):
+    delivery axes, named modes, the menu bar app, `AGENT_NOTIFY_POLICY`
+    process-tree scoping, and ownership-based `alerter` reclamation (the 83 GB
+    incident).
     What stays per-machine here: install.sh links the hooks and the two
     LaunchAgents (`agent-notify-sweep`, `agent-notify-menu`) and builds
     `~/Applications/AgentNotifyMenu.app` from the clone when it exists. Codex
     `PermissionRequest` hooks create priority attention events without storing
     the requested command or tool input; after changing the hook file, open
     `/hooks` once in Codex to review and trust the new hook hash. Slack
-    escalation is per-machine Keychain state — the webhook URL never lands in
-    this repository:
+    escalation is per-machine Keychain state (the webhook URL never lands in
+    this repository):
 
     ```bash
     agent-notify slack configure          # agent 작업 알림 채널
@@ -177,17 +181,17 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `agent-notify sweep` runs every minute: it acknowledges pending events older than
     `pending_ttl_days`, projects the pending count to `pending.json` so the statusline can
     warn once it passes ten, and reclaims any `alerter` that outlived its worker. Events
-    with both local and Slack delivery off are acknowledged the moment they are presented —
-    nothing will ever reach the user, so leaving them pending only grows a queue no click
+    with both local and Slack delivery off are acknowledged the moment they are presented.
+    Nothing will ever reach the user, so leaving them pending only grows a queue no click
     can drain. Reclamation is scoped by ownership: only PIDs that `agent-notify` recorded
     when spawning are eligible, and the executable path is re-checked immediately before
     signalling, so a recycled PID or another tool's same-named process is never killed.
     `persistent_seconds`, `temporary_seconds`, and `pending_ttl_days` live in
     `.config/agent-notify/config.json`.
 
-    `simulator-reaper` (its own repository — see Extracted Tools below) runs every
+    `simulator-reaper` (its own repository; see Extracted Tools below) runs every
     ten minutes via the `com.miniminjae.simulator-reaper` LaunchAgent and reclaims
-    booted iOS simulators that survive Xcode — never while any dev tool is running.
+    booted iOS simulators that survive Xcode (never while any dev tool is running).
 
     Personal operations run quietly in the background. The security job runs daily at
     10:00, establishes an external-listener baseline on its first run, and sends Slack only
@@ -241,19 +245,19 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 ### Repository Layout
 
-의미 규칙 한 줄: **`agents/`는 설비 세팅값(고치면 에이전트가 다르게 일함, 전부 홈으로 설치됨), `agent-os/`는 운전 일지·계측 규격서(고쳐도 에이전트는 그대로, 홈 링크 0)**. 용어는 [CONTEXT.md](CONTEXT.md), 결정 배경은 `agent-os/DECISIONS.md` D-014.
+의미 규칙 한 줄: **`agents/`는 설비 세팅값(고치면 에이전트가 다르게 일함, 전부 홈으로 설치됨), `agent-os/`는 운전 일지, 계측 규격서(고쳐도 에이전트는 그대로, 홈 링크 0)**. 용어는 [CONTEXT.md](CONTEXT.md), 결정 배경은 `agent-os/DECISIONS.md` D-014.
 
 | 디렉터리 | 정체 | install.sh 링크 |
 | --- | --- | --- |
 | `agents/` | 에이전트가 읽는 실행 자산 전부 | 아래 전부 |
 | `agents/AGENTS.md` | 공급자 중립 공통 지침 | `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md` |
 | `agents/routing.json` + `models.json` | 라우팅 패키지 (역할→모델, 정형 태스크) | models.json → `~/.config/ai-tools/` |
-| `agents/skills/` | 스킬 — 자작 + 벤더(각 VENDOR.md, 대장: `agent-os/upstreams.md`) | `~/.claude/skills/*`, `~/.codex/skills/*` |
+| `agents/skills/` | 스킬: 자작 + 벤더(각 VENDOR.md, 대장: `agent-os/upstreams.md`) | `~/.claude/skills/*`, `~/.codex/skills/*` |
 | `agents/conventions/` | 커밋 메시지 규약 | `~/.config/commit-message-conventions/` |
 | `agents/claude/` | Claude 어댑터 (CLAUDE.md, settings 병합 조각) | `~/.claude/CLAUDE.md` |
 | `agents/codex/` | Codex 어댑터 (~/.codex 미러: hooks, agents toml, 전용 스킬) | `~/.codex/{hooks.json,agents,skills}` |
 | `agents/gemini/` | Gemini 어댑터 (알림 훅) | `~/.gemini/config/hooks.json` |
-| `agent-os/` | 운영 결정(DECISIONS)·상태·계약(paths.env)·상류 대장(upstreams) | 없음 — 불변식 |
+| `agent-os/` | 운영 결정(DECISIONS), 상태, 계약(paths.env), 상류 대장(upstreams) | 없음(불변식) |
 | `bin/` | CLI 도구 전부 | `~/.local/bin/*` |
 | `man/` `style/` `tests/` `vscode/` | 에이전트와 무관한 일반 dotfiles 자산 | 일부 |
 
@@ -264,14 +268,14 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 실질 도구는 독립 저장소로 이관했다(D-022). install.sh가 `~/projects/<repo>`
 클론이 있으면 `~/.local/bin`으로 링크하고, 없으면 건너뛴다:
 
-- **agent-notify** — 에이전트 CLI 공용 영속 알림(+메뉴 막대 앱). 소유권 기반 alerter 회수(D-016)·pending과 배너 수명 분리(D-017) — <https://github.com/miniminjae92/agent-notify>. 훅 배선·LaunchAgent 2종·개인 config는 이 레포에 남고, install.sh가 클론에서 메뉴 앱을 빌드한다
-- **asx** — 에이전트 세션 통합 탐색기(Claude 본대화·서브에이전트·다계정 Codex·기기 미러) — <https://github.com/miniminjae92/asx>
-- **codex-accounts** — 계정 격리 Codex 홈 + MCP 무턴 쿼터 감시(gcodex·ncodex·codex-account-usage) — <https://github.com/miniminjae92/codex-accounts>. LaunchAgent와 auth.json 600 규약은 이 레포에 남는다
-- **simulator-reaper** — 유휴 iOS 시뮬레이터 회수(가드·유예·dry-run) — <https://github.com/miniminjae92/simulator-reaper>. LaunchAgent는 이 레포에 남는다
-- **kman** — 한국어 man 페이지 (Apple 온디바이스 번역·용어집·캐시) — <https://github.com/miniminjae92/kman>
-- **mdview** — 마크다운 디렉터리 로컬 리더 — <https://github.com/miniminjae92/mdview>
-- **video-summary** — 유튜브 전사 저장(기본 무모델)·옵트인 요약·채널 배치 — <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정
-- **git-ai-commit** — AI 커밋 스위트(plan/apply/message + lazygit 연동 + man 페이지) — <https://github.com/miniminjae92/git-ai-commit>. `git cm-ai`·`git plan-ai` 호환 명령은 유지되고, 모델 라우팅은 `~/.config/ai-tools/models.json`(install.sh가 `agents/models.json`을 링크)
+- **agent-notify**: 에이전트 CLI 공용 영속 알림(+메뉴 막대 앱). 소유권 기반 alerter 회수(D-016), pending과 배너 수명 분리(D-017). <https://github.com/miniminjae92/agent-notify>. 훅 배선, LaunchAgent 2종, 개인 config는 이 레포에 남고, install.sh가 클론에서 메뉴 앱을 빌드한다
+- **asx**: 에이전트 세션 통합 탐색기(Claude 본대화, 서브에이전트, 다계정 Codex, 기기 미러). <https://github.com/miniminjae92/asx>
+- **codex-accounts**: 계정 격리 Codex 홈 + MCP 무턴 쿼터 감시(gcodex, ncodex, codex-account-usage). <https://github.com/miniminjae92/codex-accounts>. LaunchAgent와 auth.json 600 규약은 이 레포에 남는다
+- **simulator-reaper**: 유휴 iOS 시뮬레이터 회수(가드, 유예, dry-run). <https://github.com/miniminjae92/simulator-reaper>. LaunchAgent는 이 레포에 남는다
+- **kman**: 한국어 man 페이지 (Apple 온디바이스 번역, 용어집, 캐시). <https://github.com/miniminjae92/kman>
+- **mdview**: 마크다운 디렉터리 로컬 리더. <https://github.com/miniminjae92/mdview>
+- **video-summary**: 유튜브 전사 저장(기본 무모델), 옵트인 요약, 채널 배치. <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정
+- **git-ai-commit**: AI 커밋 스위트(plan/apply/message + lazygit 연동 + man 페이지). <https://github.com/miniminjae92/git-ai-commit>. `git cm-ai`·`git plan-ai` 호환 명령은 유지되고, 모델 라우팅은 `~/.config/ai-tools/models.json`(install.sh가 `agents/models.json`을 링크)
 
 ---
 

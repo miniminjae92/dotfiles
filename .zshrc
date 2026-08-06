@@ -1,6 +1,15 @@
+# Terminal detection. tmux >=3.2 overwrites TERM_PROGRAM with "tmux", so
+# GHOSTTY_RESOURCES_DIR (inherited into tmux panes) is checked as well.
+# Caveat: a tmux server keeps the env of the terminal that started it, so a
+# server born under iTerm2 stays "not ghostty" even when attached from Ghostty
+# (and vice versa). Acceptable during the A/B; `tmux kill-server` resets it.
+_is_ghostty() {
+  [[ "$TERM_PROGRAM" == "ghostty" || -n "${GHOSTTY_RESOURCES_DIR:-}" ]]
+}
+
 # Powerlevel10k instant prompt (iTerm2 & others; Ghostty uses Starship below).
 # Console-input init must go above this block; everything else may go below.
-if [[ "$TERM_PROGRAM" != "ghostty" && -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+if ! _is_ghostty && [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
@@ -26,7 +35,9 @@ zstyle ':completion:*' menu select
 source "$HOMEBREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 
 # Prompt: Ghostty gets Starship (A/B trial); iTerm2 & others keep Powerlevel10k.
-if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
+# _is_ghostty (not raw TERM_PROGRAM) so tmux sessions started under Ghostty
+# also get Starship.
+if _is_ghostty; then
   eval "$(starship init zsh)"
 else
   source "$HOMEBREW_PREFIX/share/powerlevel10k/powerlevel10k.zsh-theme"
@@ -84,15 +95,21 @@ export PKG_CONFIG_PATH="$(brew --prefix tcl-tk@8)/lib/pkgconfig"
 # Set up fzf key bindings and fuzzy completion
 eval "$(fzf --zsh)"
 
-# --- setup fzf theme ---
-fg="#CBE0F0"
-bg="#011628"
-bg_highlight="#143652"
-purple="#B388FF"
-blue="#06BCE4"
-cyan="#2CF9ED"
+# --- setup fzf theme (design is per-terminal; functional opts below are shared) ---
+if _is_ghostty; then
+  # reader-dark (~/.dotfiles/.config/ghostty/themes/reader-dark): match=accent
+  # orange, selected line=selection bg + heading fg, marker=green, counts=muted.
+  export FZF_DEFAULT_OPTS="--color=fg:#e7dfd2,bg:#1d2224,hl:#e29a68,fg+:#f4eddf,bg+:#343d3f,hl+:#f0bb8d,info:#b6ada0,prompt:#7fc6dd,pointer:#e29a68,marker:#a9d68d,spinner:#b6ada0,header:#9ba5a8"
+else
+  fg="#CBE0F0"
+  bg="#011628"
+  bg_highlight="#143652"
+  purple="#B388FF"
+  blue="#06BCE4"
+  cyan="#2CF9ED"
 
-export FZF_DEFAULT_OPTS="--color=fg:${fg},bg:${bg},hl:${purple},fg+:${fg},bg+:${bg_highlight},hl+:${purple},info:${blue},prompt:${cyan},pointer:${cyan},marker:${cyan},spinner:${cyan},header:${cyan}"
+  export FZF_DEFAULT_OPTS="--color=fg:${fg},bg:${bg},hl:${purple},fg+:${fg},bg+:${bg_highlight},hl+:${purple},info:${blue},prompt:${cyan},pointer:${cyan},marker:${cyan},spinner:${cyan},header:${cyan}"
+fi
 
 # -- Use fd instead of fzf --
 
@@ -136,7 +153,13 @@ _fzf_comprun() {
 
 # ----- Bat (better cat) -----
 
-export BAT_THEME=tokyonight_night
+# Per-terminal: `ansi` is a bat built-in (no cache build) that inherits the
+# terminal's ANSI palette — so Ghostty renders bat/delta in reader-dark.
+if _is_ghostty; then
+  export BAT_THEME=ansi
+else
+  export BAT_THEME=tokyonight_night
+fi
 
 # ---- Eza (better ls) -----
 

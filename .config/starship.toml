@@ -1,7 +1,28 @@
-# Starship prompt — active in Ghostty (terminal branch lives in ~/.dotfiles/.zshrc).
-# Intentionally minimal starting point: redesign alongside the new Ghostty theme.
+# Starship prompt — active in Ghostty only (branch: _is_ghostty in ~/.dotfiles/.zshrc).
+# Reader-dark palette — source of truth: .config/nvim/assets/markdown-reader.css
+# [data-theme="dark"]; terminal-side twin: .config/ghostty/themes/reader-dark.
 
 add_newline = true
+palette = "reader_dark"
+
+# Minimal two-line prompt: where am I, which branch, is it dirty, was it slow.
+format = """
+$directory\
+$git_branch\
+$git_status\
+$cmd_duration\
+$line_break\
+$character"""
+
+[palettes.reader_dark]
+# ANSI names remapped to reader colors so module defaults need no style overrides.
+red = "#d47f77"      # derived terracotta — the reader palette has no red
+green = "#a9d68d"    # syntax string
+yellow = "#e8c77c"   # syntax meta (cmd_duration)
+blue = "#82c7de"     # syntax type
+purple = "#d7a3df"   # syntax keyword (git_branch)
+cyan = "#7fc6dd"     # links (directory)
+white = "#e7dfd2"    # body text
 
 [character]
 success_symbol = "[❯](bold green)"

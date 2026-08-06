@@ -8,13 +8,17 @@
 # (TERM_PROGRAM=ghostty branch in ~/.dotfiles/.zshrc). A Nerd Font is
 # recommended once you choose a font, so prompt glyphs render.
 
-# --- Theme / appearance (design here) ---
-# theme =
-# font-family =
-# font-size =
-# background-opacity =
-# window-padding-x =
-# window-padding-y =
+# --- Theme / appearance ---
+# reader-dark lives in ~/.config/ghostty/themes/ (linked by install.sh).
+# Reload after edits: cmd+shift+, (no file watch).
+theme = reader-dark
+
+# font-family stays unset on purpose: Ghostty's embedded default IS JetBrains Mono
+# (the reader palette's code font) with built-in Nerd Font symbol fallback.
+# background-opacity stays unset: the reader canvas is an opaque page.
+font-size = 14
+window-padding-x = 10
+window-padding-y = 8
 
 # --- Ergonomics (uncomment if wanted) ---
 # macos-option-as-alt = true

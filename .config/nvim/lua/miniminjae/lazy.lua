@@ -20,7 +20,7 @@ require("lazy").setup({
 	{ import = "miniminjae.plugins.coding" },
 	{ import = "miniminjae.plugins.lang" },
 }, {
-	install = { colorscheme = { "solarized-osaka", "habamax" } },
+	install = { colorscheme = { "solarized-osaka", "reader-dark", "habamax" } },
 	-- 여기 쓰는 플러그인 중 luarocks가 필요한 것이 없다. 켜 두면 hererocks를 못 찾는다고 계속 경고한다.
 	rocks = { enabled = false },
 	checker = { enabled = true, notify = false },

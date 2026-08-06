@@ -111,6 +111,9 @@ link_file "$DOTFILES_DIR/.config/zsh/git.zsh" "$HOME/.config/zsh/git.zsh"
 link_file "$DOTFILES_DIR/.config/starship.toml" "$HOME/.config/starship.toml"
 link_file "$DOTFILES_DIR/.config/ghostty/config" "$HOME/.config/ghostty/config"
 link_file \
+  "$DOTFILES_DIR/.config/ghostty/themes/reader-dark" \
+  "$HOME/.config/ghostty/themes/reader-dark"
+link_file \
   "$DOTFILES_DIR/.config/bat/themes/tokyonight_night.tmTheme" \
   "$HOME/.config/bat/themes/tokyonight_night.tmTheme"
 link_file \
