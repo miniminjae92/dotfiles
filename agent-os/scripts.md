@@ -36,6 +36,8 @@
 | `ko-style` | 배관 | 한국어 산출물 부호 규칙 검사, 수정(`--fix`) |
 | `mirror-from-imac` | 배관 | 아이맥 → 맥북 역방향 미러(세션, 상태) |
 | `mirror-to-imac` | 배관 | 맥북 → 아이맥 단방향 미러(수확 원천) |
+| `notion-job` | 배관 | 노션 허브 정기 잡 실행(launchd, 수동 겸용) |
+| `notion-mcp` | 글루 | 키체인 토큰으로 Notion MCP 서버(stdio) 기동 |
 | `ops-digest` | 배관 | 이벤트 스트림 → 의사결정 다이제스트 |
 | `ops-event` | 배관 | 백그라운드 잡 구조화 이벤트 수집 CLI |
 | `personal-ops` | 제품 | 주간 리뷰, 보안 점검 자동화 (launchd) |
