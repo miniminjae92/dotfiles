@@ -11,6 +11,10 @@
 - `run`: 작업 실행 요약
 - `review`: 주기적 검토
 - `proposal`: 개선 실험 제안
+- `security-check`: 일일 보안 점검 로그 (personal-ops 생성)
+- `weekly-review`: 주간 운영 리뷰 로그 (personal-ops 생성)
+- `harvest`: 세션 수확 산출물 (session-harvest 생성)
+- `digest`: 백그라운드 잡 다이제스트 (ops-digest 생성, 기기별 롤링 파일)
 
 ## Origin
 
