@@ -1,6 +1,6 @@
 ---
 type: review
-status: candidate
+status: archived
 origin: agent
 created:
 period:

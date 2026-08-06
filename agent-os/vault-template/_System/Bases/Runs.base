@@ -1,7 +1,8 @@
 filters:
   and:
-    - 'file.ext == "md"'
-    - 'type == "run"'
+    - file.ext == "md"
+    - type == "run"
+    - '!file.inFolder("_System")'
 properties:
   file.name:
     displayName: Run

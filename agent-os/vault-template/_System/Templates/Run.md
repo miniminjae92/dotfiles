@@ -1,6 +1,6 @@
 ---
 type: run
-status: candidate
+status: archived
 origin: agent
 created:
 session_id:

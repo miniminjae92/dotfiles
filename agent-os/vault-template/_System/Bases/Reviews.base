@@ -1,7 +1,8 @@
 filters:
   and:
-    - 'file.ext == "md"'
-    - 'type == "review" || type == "proposal"'
+    - file.ext == "md"
+    - type == "review" || type == "proposal" || type == "security-check" || type == "weekly-review"
+    - '!file.inFolder("_System")'
 properties:
   file.name:
     displayName: Review

@@ -1,8 +1,8 @@
 filters:
   and:
-    - 'file.ext == "md"'
-    - 'type == "decision" || type == "concept" || type == "insight" || type == "learning"'
-    - 'status == "active" || status == "verified"'
+    - file.ext == "md"
+    - file.inFolder("20 Knowledge")
+    - file.name != "README"
 properties:
   file.name:
     displayName: Knowledge
