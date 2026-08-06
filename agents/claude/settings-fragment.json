@@ -36,6 +36,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x \"$HOME/.local/bin/explain-diff-gate\" ]; then \"$HOME/.local/bin/explain-diff-gate\" --hook pretooluse; fi",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",

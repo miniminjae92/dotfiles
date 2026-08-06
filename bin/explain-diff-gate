@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""explain-diff-gate — 커밋 직전 diff 설명서를 강제하고 skip 사유를 데이터화 (D-027).
+
+에이전트가 쓴 코드를 사람이 이해하지 못한 채 쌓이는 인지 부채(cognitive debt)를
+막는 속도 조절기. Geoffrey Litt 의 explain-diff 스킬을 커밋 경로에 건다.
+
+동작:
+  PreToolUse(Bash) 훅이 `git commit` 을 가로채, 이 diff 에 대한 설명서 기록이
+  없으면 커밋을 차단하고 두 갈래를 안내한다 — 설명서 생성(ack) 또는
+  사용자가 승인한 skip(사유 기록). 설계 전제는 "기준을 미리 정하지 않고
+  skip 분포를 실측해 도출한다" 이므로, skip 사유는 반드시 남는다.
+
+사용법:
+  explain-diff-gate --hook pretooluse       # Claude PreToolUse(Bash) 훅
+  explain-diff-gate ack [--path FILE]       # 설명서를 만들었음을 기록
+  explain-diff-gate skip <사유> [--note N]  # 사용자 승인 skip 을 사유와 함께 기록
+  explain-diff-gate status                  # 현재 diff 의 게이트 상태
+
+차단 해제 단위(둘 다 조용히 통과):
+  EXPLAIN_DIFF_GATE=off            전역 킬 스위치
+  <repo>/.git/explain-diff-off     repo 단위 해제
+
+기록: $EXPLAIN_DIFF_DIR/records.jsonl (경로 계약 D-012) + ops-event(source=explain-diff).
+철학: 배관은 조용히 실패한다. 게이트 내부 오류·타임아웃은 전부 통과시킨다 —
+고장 난 게이트가 커밋을 영구히 막는 쪽이 이해 부채보다 나쁘다.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import fcntl
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+SOURCE = "explain-diff"
+HOME = os.path.expanduser("~")
+GIT_TIMEOUT = 8
+MAX_DIFF_BYTES = 5_000_000
+
+# `git ... commit` 을 명령 위치에서만 잡는다. 복합 명령(`a && git commit -m x`)과
+# 환경변수 접두(`FOO=1 git commit`)는 포함하되, 아래는 오탐이므로 제외한다:
+#   - 인용부호 안의 문자열, 즉 다른 명령의 인자 (`rg 'git commit' FILE`)
+#   - 하이픈·경로로 이어진 다른 이름 (`git-ai-commit`, `~/projects/git-ai-commit/`)
+BOUND = r"[\w./-]"
+GIT_COMMIT_RE = re.compile(
+    rf"(?:^|[;&|(\n])\s*(?:\w+=\S+\s+)*git(?!{BOUND})"
+    rf"[^;&|\n]*?(?<!{BOUND})commit(?!{BOUND})")
+GIT_C_RE = re.compile(r"\bgit\b\s+(?:[^\s]+\s+)*?-C\s+(\S+)")
+ALL_FLAG_RE = re.compile(r"(?:^|\s)-(?:[a-zA-Z]*a[a-zA-Z]*)(?:\s|$)|\s--all\b")
+
+
+def contract(key: str, default: str) -> str:
+    """경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값."""
+    env = os.environ.get(key)
+    if env:
+        return os.path.expanduser(env)
+    paths_file = os.environ.get("AGENT_OS_PATHS") or os.path.join(
+        HOME, ".dotfiles", "agent-os", "paths.env")
+    try:
+        with open(paths_file, encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if line.startswith(f"{key}="):
+                    return line.split("=", 1)[1].replace("$HOME", HOME)
+    except OSError:
+        pass
+    ops_emit("error", "low", reason="paths-contract-fallback", key=key)
+    return os.path.expanduser(default)
+
+
+def ops_emit(kind: str, severity: str, **payload) -> None:
+    exe = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ops-event")
+    if not os.access(exe, os.X_OK):
+        exe = shutil.which("ops-event")
+    if not exe:
+        return
+    pairs = [f"{k}={v}" for k, v in payload.items() if v not in (None, "")]
+    try:
+        subprocess.run(
+            [exe, "--source", SOURCE, "--kind", kind, "--severity", severity, *pairs],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=3, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def state_dir() -> str:
+    return contract("EXPLAIN_DIFF_DIR", "~/.local/state/explain-diff")
+
+
+def records_path() -> str:
+    return os.path.join(state_dir(), "records.jsonl")
+
+
+def git(repo: str, *args: str) -> str | None:
+    """git 호출. 실패·타임아웃은 None (호출자는 통과시킨다)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", repo, *args],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=GIT_TIMEOUT, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout[:MAX_DIFF_BYTES].decode("utf-8", "replace")
+
+
+def repo_root(cwd: str) -> str | None:
+    out = git(cwd, "rev-parse", "--show-toplevel")
+    return out.strip() if out and out.strip() else None
+
+
+def diff_hashes(repo: str) -> tuple[list[str], dict]:
+    """(해시 후보들, diff 통계). staged 와 HEAD 대비 둘 다 계산해 ack/훅 시점 차이를 흡수한다.
+
+    `git commit -a` 는 커밋 시점에 tracked 변경을 함께 담으므로 HEAD 대비가 맞고,
+    보통 커밋은 staged 가 맞다. 양쪽을 다 기록·조회하면 어느 쪽이든 매칭된다.
+    """
+    hashes: list[str] = []
+    stats = {"files": 0, "added": 0, "removed": 0}
+    for args in (("diff", "--cached"), ("diff", "HEAD")):
+        text = git(repo, *args, "--no-color", "--no-ext-diff")
+        if not text or not text.strip():
+            continue
+        digest = hashlib.sha256(f"{repo}\0{text}".encode("utf-8")).hexdigest()[:16]
+        if digest not in hashes:
+            hashes.append(digest)
+        if stats["files"] == 0:
+            stats = numstat(repo, *args)
+    return hashes, stats
+
+
+def numstat(repo: str, *args: str) -> dict:
+    out = git(repo, *args, "--numstat", "--no-color", "--no-ext-diff")
+    stats = {"files": 0, "added": 0, "removed": 0}
+    if not out:
+        return stats
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        stats["files"] += 1
+        for key, raw in (("added", parts[0]), ("removed", parts[1])):
+            if raw.isdigit():
+                stats[key] += int(raw)
+    return stats
+
+
+def known_hashes() -> set[str]:
+    seen: set[str] = set()
+    try:
+        with open(records_path(), encoding="utf-8") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    rec = json.loads(raw)
+                except (ValueError, json.JSONDecodeError):
+                    continue
+                for digest in rec.get("hashes") or []:
+                    seen.add(digest)
+    except OSError:
+        pass
+    return seen
+
+
+def append_record(record: dict) -> None:
+    directory = state_dir()
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    path = records_path()
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        os.write(fd, line.encode("utf-8"))
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def gate_disabled(repo: str | None) -> bool:
+    if (os.environ.get("EXPLAIN_DIFF_GATE") or "").lower() in ("off", "0", "false"):
+        return True
+    if repo and os.path.exists(os.path.join(repo, ".git", "explain-diff-off")):
+        return True
+    return False
+
+
+def in_progress(repo: str) -> bool:
+    """머지·리베이스·체리픽 중의 커밋은 에이전트가 쓴 코드가 아니다."""
+    git_dir = os.path.join(repo, ".git")
+    return any(os.path.exists(os.path.join(git_dir, name))
+               for name in ("MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD",
+                            "rebase-merge", "rebase-apply"))
+
+
+BLOCK_MESSAGE = """explain-diff 게이트(D-027): 이 diff 에 대한 설명서 기록이 없습니다.
+  대상 {stats} · 해시 {digest}
+
+둘 중 하나를 하고 커밋을 다시 시도하세요.
+
+1) 설명서 생성 (기본 경로)
+   explain-diff 스킬로 지금 커밋할 변경의 설명서를 만든 뒤:
+     explain-diff-gate ack --path <생성한 파일 경로>
+   설명서를 만들었으면 사용자에게 경로와 핵심 3줄을 알리고, 퀴즈는 사용자가 원할 때만 낸다.
+
+2) skip, 사용자가 이번 커밋을 명시적으로 넘기라고 한 경우에만
+     explain-diff-gate skip <사유> --note "<한 줄 근거>"
+   사유는 kebab 한 단어: docs-only, config-only, version-bump, revert,
+   user-authored, trivial-fix, generated, wip 중 맞는 것 (없으면 새로 만든다).
+
+스스로 판단해 skip 하지 마세요. skip 후보로 보이면 사용자에게 그렇게 제안하고,
+사용자가 승인한 뒤에 기록합니다. 이 실험의 데이터가 skip 사유 분포 자체입니다."""
+
+
+def run_hook() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        return 0
+    if payload.get("tool_name") != "Bash":
+        return 0
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    if not GIT_COMMIT_RE.search(command) or "--dry-run" in command:
+        return 0
+
+    cwd = payload.get("cwd") or os.getcwd()
+    match = GIT_C_RE.search(command)
+    if match:
+        candidate = os.path.expanduser(match.group(1).strip("'\""))
+        if not os.path.isabs(candidate):
+            candidate = os.path.join(cwd, candidate)
+        if os.path.isdir(candidate):
+            cwd = candidate
+
+    repo = repo_root(cwd)
+    if not repo or gate_disabled(repo) or in_progress(repo):
+        return 0
+
+    hashes, stats = diff_hashes(repo)
+    if not hashes:  # 빈 커밋·메시지만 수정하는 amend 등
+        return 0
+    if known_hashes() & set(hashes):
+        return 0
+
+    label = f"파일 {stats['files']} · +{stats['added']}/-{stats['removed']}"
+    ops_emit("run", "info", action="blocked", repo=os.path.basename(repo),
+             digest=hashes[0], files=stats["files"],
+             added=stats["added"], removed=stats["removed"])
+    sys.stderr.write(BLOCK_MESSAGE.format(stats=label, digest=hashes[0]) + "\n")
+    return 2  # PreToolUse: 도구 호출 차단 + stderr 를 에이전트에게 전달
+
+
+def run_record(action: str, reason: str | None, note: str | None, path: str | None) -> int:
+    repo = repo_root(os.getcwd())
+    if not repo:
+        sys.stderr.write("explain-diff-gate: git 저장소가 아닙니다.\n")
+        return 1
+    hashes, stats = diff_hashes(repo)
+    if not hashes:
+        sys.stderr.write("explain-diff-gate: 기록할 변경이 없습니다 (staged/HEAD diff 비어 있음).\n")
+        return 1
+
+    record = {
+        "ts": _dt.datetime.now().astimezone().isoformat(),
+        "action": action,
+        "repo": repo,
+        "hashes": hashes,
+        "files": stats["files"],
+        "added": stats["added"],
+        "removed": stats["removed"],
+    }
+    if reason:
+        record["reason"] = reason
+    if note:
+        record["note"] = note
+    if path:
+        record["path"] = os.path.abspath(os.path.expanduser(path))
+
+    try:
+        append_record(record)
+    except OSError as err:
+        sys.stderr.write(f"explain-diff-gate: 기록 실패: {err}\n")
+        return 1
+
+    ops_emit("run", "info", action=action, repo=os.path.basename(repo),
+             digest=hashes[0], files=stats["files"], added=stats["added"],
+             removed=stats["removed"], reason=reason, has_doc=int(bool(path)))
+    print(f"{action} 기록: {hashes[0]} ({stats['files']}파일 "
+          f"+{stats['added']}/-{stats['removed']})"
+          + (f" · 사유 {reason}" if reason else ""))
+    return 0
+
+
+def run_status() -> int:
+    repo = repo_root(os.getcwd())
+    if not repo:
+        print("git 저장소가 아닙니다.")
+        return 0
+    if gate_disabled(repo):
+        print(f"게이트 해제됨 · {repo}")
+        return 0
+    hashes, stats = diff_hashes(repo)
+    if not hashes:
+        print("커밋할 변경 없음.")
+        return 0
+    state = "통과" if known_hashes() & set(hashes) else "차단"
+    print(f"{state} · {hashes[0]} · 파일 {stats['files']} "
+          f"+{stats['added']}/-{stats['removed']} · {records_path()}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="explain-diff-gate",
+        description="커밋 직전 diff 설명서 게이트 (D-027)")
+    parser.add_argument("--hook", choices=("pretooluse",))
+    sub = parser.add_subparsers(dest="command")
+
+    ack = sub.add_parser("ack", help="설명서를 만들었음을 기록")
+    ack.add_argument("--path", help="생성한 설명서 파일 경로")
+
+    skip = sub.add_parser("skip", help="사용자가 승인한 skip 을 사유와 함께 기록")
+    skip.add_argument("reason", help="kebab 한 단어 사유 (docs-only, version-bump 등)")
+    skip.add_argument("--note", help="한 줄 근거")
+
+    sub.add_parser("status", help="현재 diff 의 게이트 상태")
+
+    args = parser.parse_args()
+
+    if args.hook:
+        try:
+            return run_hook()
+        except Exception as err:  # noqa: BLE001 — 고장 난 게이트가 커밋을 막으면 안 된다
+            sys.stderr.write(f"explain-diff-gate: 내부 오류로 통과시킴: {err}\n")
+            ops_emit("error", "low", reason="hook-internal-error", detail=type(err).__name__)
+            return 0
+
+    if args.command == "ack":
+        return run_record("ack", None, None, args.path)
+    if args.command == "skip":
+        return run_record("skip", args.reason, args.note, None)
+    if args.command == "status":
+        return run_status()
+
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

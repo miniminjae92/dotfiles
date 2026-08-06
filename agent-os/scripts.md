@@ -30,6 +30,7 @@
 | `cleanclip` | 제품 | 클립보드 공백 정리 (tmux prefix+T) |
 | `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 (은퇴 예정: D-019, `asx export` 구현 시 삭제) |
 | `dotfiles-doctor` | 배관 | dotfiles, 에이전트 환경 read-only 헬스체크 |
+| `explain-diff-gate` | 배관 | 커밋 직전 diff 설명서 게이트, skip 사유 기록 (D-027) |
 | `git-cm-ai` | 글루 | lazygit-ai-commit exec 래퍼 |
 | `harvest-sessions` | 배관 | 세션에서 사용자 발화 추출(수확 1단계) |
 | `jobs-mcp` | 글루 | 키체인 인증키로 채용 MCP 서버(stdio) 기동 |
