@@ -1,5 +1,21 @@
 # AngularJS Commit Message Convention
 
+## Someone else's repository wins, but measure it rather than eyeballing it
+
+In a repository you do not own, that repository's existing convention overrides this file.
+Determine it by counting, not by reading the last few commits:
+
+```sh
+git log --format='%s' -30    # classify the subjects and take the majority
+```
+
+A handful of recent commits is not the convention. Two exceptions out of thirty are still
+exceptions, and copying one produces a message that matches neither the repo nor this file.
+Classify separately per artifact. A repo can use one form for commit subjects and another
+for ADR or design-doc titles at the same time, and usually does.
+
+## Shape
+
 Generate commit messages in this shape:
 
 ```text

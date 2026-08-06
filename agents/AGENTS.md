@@ -7,7 +7,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 ## Language
 
 - Respond in Korean unless the user explicitly asks for another language.
-- Use the configured commit-message convention when suggesting commit messages.
+- Korean writing follows mimir `20 Knowledge/좋은 글 작성 기준.md`; commit, PR, and issue form follows `~/.config/commit-message-conventions/korean-angularjs.md`.
 
 ## Core Behavior
 
@@ -35,15 +35,15 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - When many mixed Git changes need commit grouping, prefer the read-only `git ai-commit` command and validate its output as a proposal. Never infer authorization to push.
 - Escalation means reclassifying a task to a higher role after failure, not swapping models. When it happens, log it: `agent-os-friction --origin agent "escalation: <from>→<to> | <task> | <reason>"` (D-010).
 - Declare the boundary when an independent unit of work completes. When context grows heavy or the topic shifts, proactively suggest a handoff note (`handoff-session` skill) or a fresh session.
-- When the session's work runs persistently below or above the current model's grade, say so instead of silently continuing — this is the de-escalation/escalation signal (D-010).
+- When the session's work runs persistently below or above the current model's grade, say so instead of silently continuing. This is the de-escalation/escalation signal (D-010).
 
 ## Personal Paths
 
 - When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/yggdrasil`. AI-generated reports go under `3-stash/ai-work-reports` there.
 - Agent OS runs, development knowledge, technical learning, service design, and productivity-friction notes go under `/Users/miniminjae/.obsidian/mimir`.
-- To find or cite past conversations across agents (Claude main/subagents + Codex), use `asx search <query>` / `asx list` / `asx show <id>` — one unified index over auto-recorded session logs.
+- To find or cite past conversations across agents (Claude main/subagents + Codex), use `asx search <query>` / `asx list` / `asx show <id>`. One unified index over auto-recorded session logs.
 - 용어는 유비쿼터스 랭귀지 정본을 따른다: 정본은 해당 repo의 `CONTEXT.md`(+`docs/adr/`)다. 합의된 표준어를 쓰고 동의어는 표준어로 매핑한다. `term` 스킬은 즉석 의미 해명 전용(파일 쓰기 없음).
-- 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프·Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015).
+- 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프, Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015).
 
 ## Skills
 
