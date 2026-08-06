@@ -13,12 +13,15 @@
 # Reload after edits: cmd+shift+, (no file watch).
 theme = reader-dark
 
-# Font fallback chain: JetBrains Mono (Latin/code, the reader palette's code
-# font) -> D2Coding (Hangul; the embedded JetBrains Mono has no Hangul glyphs,
-# so Korean otherwise rendered via a random macOS fallback). Both installed by
-# the Brewfile. Nerd symbols come from Ghostty's built-in fallback.
-font-family = JetBrains Mono
+# Primary font: D2Coding. Hangul:Latin is designed 2:1 in one font, so Korean
+# fills its double-width cell exactly (a JetBrains-Mono-primary chain left ~17%
+# gap per Hangul glyph because cells were sized by JBM's wider Latin advance).
+# JetBrains Mono stays as fallback for glyphs D2Coding lacks; Nerd symbols come
+# from Ghostty's built-in fallback. Both fonts installed by the Brewfile.
 font-family = D2Coding
+font-family = JetBrains Mono
+# Dense Korean prose needs more leading than the font's default metrics.
+adjust-cell-height = 15%
 # background-opacity stays unset: the reader canvas is an opaque page.
 font-size = 14
 window-padding-x = 10

@@ -51,8 +51,10 @@ reader-dark 테마)가 추가됐습니다.
   의도된 동작 변화: Ghostty에서 띄운 tmux 세션이 이제 p10k가 아니라 Starship을 받습니다
 - nvim은 `colors/reader-dark.lua`(수제 스킴, 약 130개 그룹)와 `core/term.lua`로
   Ghostty에서만 로드, 실패 시 solarized-osaka 폴백. iTerm 쪽 경로는 바이트 동일
-- 한글 폰트 결함 후속 수정: 내장 JetBrains Mono에 한글 글리프가 없어 폰트 체인을
-  JetBrains Mono(라틴) 다음 D2Coding(한글)으로 명시. 두 폰트 Brewfile 편입, 설치 완료
+- 한글 폰트 결함 2단계 수정: 처음엔 JetBrains Mono 주 + D2Coding 폴백으로 잡았으나,
+  주 폰트 셀폭(JBM 라틴) 기준 2배 박스에 D2Coding 한글이 얹혀 글자당 약 17% 자간이 떠서
+  **D2Coding을 주 폰트로 승격**(JBM은 보조 폴백). 행간은 `adjust-cell-height = 15%`.
+  두 폰트 Brewfile 편입, 설치 완료. 교훈: 한글 자간은 폴백으로 못 잡고 주 폰트가 2:1 정합이어야 함
 - ssh imac TERM 문제 해결: 원인은 iMac terminfo DB 결손. `~/.terminfo`에
   tmux-256color와 xterm-ghostty를 원격 1회 설치했고 실 ssh로 256색 해석 검증 완료
 - Ghostty 테마 심링크(`~/.config/ghostty/themes/reader-dark`)는 이미 생성돼 있음
@@ -172,7 +174,8 @@ reader-dark 테마)가 추가됐습니다.
   투명 Normal, NormalFloat `#252b2d`, terminal_color 세팅) 확인.
   zsh 분기 3시나리오에서 BAT_THEME과 fzf 색 정확.
   `TERM=tmux-256color`와 `TERM=xterm-ghostty`로 실 ssh imac 접속, 둘 다 256색 해석.
-  Ghostty 폰트 체인이 bold와 italic까지 JetBrains Mono 다음 D2Coding으로 해석됨.
+  Ghostty 폰트 체인이 bold와 italic까지 D2Coding 다음 JetBrains Mono로 해석되고
+  adjust-cell-height 15% 반영 확인.
   시각 확인(Ghostty 창에서 실제 렌더링, 한글 폰트 체감)은 사용자 몫으로 남아 있습니다
 
 ## Next Steps
@@ -188,7 +191,8 @@ reader-dark 테마)가 추가됐습니다.
 9. 갈래 5 시각 확인: Ghostty에서 cmd+shift+, 리로드 후 프롬프트, fzf(Ctrl+T), `bat`,
    nvim, 한글 렌더링을 눈으로 확인합니다. iTerm은 이전과 동일해야 합니다
 10. A/B 판정이 나면 Brewfile의 병행 주석과 CLAUDE.md의 관련 절을 갱신합니다.
-   한글 폰트가 D2Coding으로도 아쉬우면 Sarasa Term K 또는 Monoplex KR Nerd가 다음 후보입니다
+   D2Coding 주 폰트(라틴 포함)가 아쉬우면 다음 후보는 Sarasa Term K, Monoplex KR Nerd이며
+   행간 15%도 체감에 따라 10~20% 사이에서 조정 여지가 있습니다
 
 ## Watch Outs
 

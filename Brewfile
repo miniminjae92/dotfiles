@@ -35,8 +35,8 @@ brew "vjeantet/tap/alerter" # agent-notify 클릭 가능 알림
 # GUI
 cask "iterm2"
 cask "ghostty"          # iTerm2 병행 — Starship 프롬프트로 A/B 비교 중
-cask "font-jetbrains-mono" # Ghostty 라틴/코드 폰트(reader 팔레트의 코드 폰트, 브라우저 리더도 사용)
-cask "font-d2coding"       # Ghostty 한글 폴백(네이버 D2Coding, 한글 코딩 가독성 표준)
+cask "font-d2coding"       # Ghostty 주 폰트(한글:라틴 2:1 일체 설계라 한글 자간이 셀에 정합)
+cask "font-jetbrains-mono" # Ghostty 보조 폴백 + 브라우저 리더(mdview, nvim 프리뷰)의 코드 폰트
 cask "karabiner-elements"
 cask "visual-studio-code"
 cask "tailscale-app"    # 기기 간 메시 VPN(맥북↔아이맥 원격 SSH/화면공유). up은 계정 로그인 필요
