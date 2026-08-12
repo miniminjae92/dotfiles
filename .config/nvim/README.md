@@ -34,7 +34,7 @@ IntelliJ급 자바 개발을 터미널에서 하되, **모든 조각이 왜 있�
 ├── lsp/                      서버별 오버라이드 (한 서버 = 한 파일)
 ├── ftplugin/java.lua         jdtls 기동 — 이 설정에서 가장 조심스러운 파일
 ├── snippets/                 직접 만든 스니펫 (VSCode JSON 형식)
-└── assets/                   markdown-preview용 CSS
+└── assets/                   이전 markdown-preview용 CSS (현재 사용 안 함)
 ```
 
 ### 층위를 나눈 이유
@@ -240,7 +240,7 @@ ERD·시퀀스·클래스 다이어그램의 정본 표기법은 Mermaid다. 이
 
 - Obsidian: ```` ```mermaid ```` 블록을 그대로 그린다
 - GitHub: 마크다운 안에서 그대로 그린다
-- 여기: `<leader>mt`(markdown-preview)가 브라우저에서 그린다
+- 여기: `<leader>mp`(mdview)가 브라우저에서 그린다
 
 treesitter에 `mermaid` 파서가 들어 있어 편집 중에도 문법 색이 붙는다. 별도 CLI나 이미지 변환 단계가 없다.
 
