@@ -210,6 +210,11 @@ export PATH="$HOME/.dotfiles/scripts:$PATH"
 # Added by Antigravity
 export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
+# ---- Android SDK ----
+# 에뮬레이터와 adb 경로. 설치는 brew cask android-commandlinetools, AVD는 ddt-a16.
+export ANDROID_HOME="/opt/homebrew/share/android-commandlinetools"
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+
 # ---- Zoxide (better cd) ----
 # init은 PATH 조작이 모두 끝난 뒤 실행해야 doctor 경고가 없다 (syntax highlighting 직전).
 # 에이전트 툴 셸(Claude Code)은 chpwd 훅이 유실돼 doctor가 오탐하므로 검사만 끈다.
