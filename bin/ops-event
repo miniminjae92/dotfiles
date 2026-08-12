@@ -6,8 +6,14 @@
 단일 수집 지점이 된다.
 
 봉투(한 줄 JSON):
-  {"schema_version":1,"ts":<iso8601>,"source":<job>,"kind":<run|finding|usage|error>,
+  {"schema_version":1,"ts":<iso8601>,"source":<job>,
+   "kind":<run|finding|usage|error|heartbeat|skip>,
    "severity":<info|low|medium|high>, ...payload}
+
+kind 고르기: 일을 했으면 run(수치는 usage), 문제를 발견하면 finding,
+잡이 깨졌으면 error. 할 일이 없어 안 했으면 heartbeat, 전제가 없어
+못 했으면 skip 이다. 뒤 둘을 error 로 내면 다이제스트가 오탐으로 차고,
+아무것도 안 내면 침묵한 잡으로 오인된다.
 
 스트림 경로:
   $OPS_STATE_DIR (있으면) 또는 $XDG_STATE_HOME/ops (기본 ~/.local/state/ops)
@@ -32,7 +38,11 @@ import sys
 
 SCHEMA_VERSION = 1
 RESERVED = {"schema_version", "ts", "source", "kind", "severity"}
-KINDS = {"run", "finding", "usage", "error"}
+# heartbeat: 할 일이 없어 아무것도 하지 않았음. 잡이 살아 있다는 것만 말한다.
+#   (2026-08-12) ops-digest 침묵 판정에는 쓰이되 실행/이벤트 수로는 안 센다.
+#   평소 조용한 잡(simulator-reaper 등)이 고장으로 오인되는 것을 막는다.
+# skip: 전제가 없어 실행하지 않았음(네트워크 부재 등). 고장이 아니다.
+KINDS = {"run", "finding", "usage", "error", "heartbeat", "skip"}
 SEVERITIES = {"info", "low", "medium", "high"}
 
 

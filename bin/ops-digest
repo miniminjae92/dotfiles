@@ -33,6 +33,25 @@ from collections import defaultdict
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
 # 침묵 감지: 과거(롤백 창)엔 있었는데 최근 창에 없는 소스를 찾기 위한 되돌아보기.
 SILENCE_LOOKBACK_DAYS = 30
+# 침묵 오탐 교정(2026-08-12 감사). 경보 4건 중 3건이 오탐이었고, 그러면
+# 사람이 다이제스트를 안 읽게 된다. 세 가지가 빠져 있었다.
+#
+# ① 이름이 바뀐 잡. 옛 소스명이 롤백 창에만 남아 영원히 침묵으로 뜬다.
+#    비어 있어도 둔다. 개명할 때 여기 한 줄이 오탐을 막는다.
+#    주의: harvest-sessions(1단계 추출)와 session-harvest(2단계 마이닝)는
+#    이름이 닮았을 뿐 서로 다른 잡이다. 별칭으로 묶지 않는다.
+SOURCE_ALIASES: dict[str, str] = {}
+# ② 잡이 아닌 소스, 그리고 은퇴한 잡. 감시 대상이 아니다.
+#    새로 은퇴시킬 때는 여기에 사유와 날짜를 남긴다.
+SILENCE_EXEMPT = {
+    # 스킬이 실행할 때만 도는 도구다. launchd 잡이 아니다.
+    "agent-os-review-due",
+    # 2026-07-22 은퇴. session-harvest-weekly 가 대체(install.sh 가 bootout 한다).
+    "personal-ops-weekly",
+}
+# ③ 할 일이 없어 조용한 잡. "아무것도 안 함"을 성공으로 남기는 규약이
+#    하트비트다. 침묵 판정에는 쓰되 이벤트/실행 수로는 세지 않는다.
+HEARTBEAT_KIND = "heartbeat"
 # 스냅샷 신선도(2026-08-05 감사 A.2): 시간당 잡이므로 24h 무소식은 확실한 고장이다.
 SNAPSHOT_SOURCE = "vault-snapshot"
 SNAPSHOT_STALE_HOURS = 24
@@ -142,6 +161,7 @@ def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
         if ts is None:
             continue
         src = ev.get("source", "?")
+        src = SOURCE_ALIASES.get(src, src)
         if ts >= lookback_start:
             prior_sources.add(src)
         if ts < window_start:
@@ -151,9 +171,14 @@ def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
         if src not in last_seen or iso > last_seen[src]:
             last_seen[src] = iso
 
+        kind = ev.get("kind", "run")
+        if kind == HEARTBEAT_KIND:
+            # 살아 있다는 신호일 뿐이다. 위 recent_sources 등록으로 제 몫을
+            # 다했으니 여기서 끝낸다. 요약 표를 하트비트로 채우지 않는다.
+            continue
+
         s = per_source[src]
         s["events"] += 1
-        kind = ev.get("kind", "run")
         if kind == "run":
             s["runs"] += 1
         elif kind == "error":
@@ -166,7 +191,7 @@ def build_digest(events: list[dict], days: int, now: _dt.datetime) -> dict:
         for field, val in numeric_fields(ev).items():
             s["metrics"][field].append(val)
 
-    silent = sorted(prior_sources - recent_sources)
+    silent = sorted(prior_sources - recent_sources - SILENCE_EXEMPT)
 
     # metrics 를 min/last/max 로 축약
     for src, s in per_source.items():

@@ -188,6 +188,11 @@ def main():
     # 마커는 state 디렉터리에 있어 install.sh 재실행에도 살아남는다.
     if DISABLED_MARKER.exists():
         print(f"session-harvest: 이 기기는 수확 담당이 아님 — {DISABLED_MARKER}")
+        # 아무 이벤트도 안 내면 ops-digest 가 "침묵한 잡(고장 의심)"으로 올린다
+        # (2026-08-12 감사: 3주간 오탐). 담당 기기가 아닌 것은 고장이 아니므로
+        # skip 으로 남긴다. 감시를 끄는 대신 이렇게 하는 이유는, 담당 기기인
+        # 아이맥에서 이 잡이 멈추면 그건 진짜 고장이라 계속 잡아야 하기 때문이다.
+        emit_ops_event("session-harvest", "skip", note="not-harvest-host")
         return
 
     ap = argparse.ArgumentParser()
