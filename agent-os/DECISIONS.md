@@ -52,11 +52,13 @@
 
 - 상태: 확정
 - 날짜: 2026-07-15
+- 개정: 2026-08-12. 다계정 `CODEX_HOME` 세션 루트와 계측 완전성 상태를 반영.
 
 ### 결정
 
-- 원시 세션은 `~/.codex/sessions`에 둔다.
+- 원시 Codex 세션은 명시한 `AGENT_OS_SESSIONS_DIR`, `$CODEX_HOME/sessions`, `~/.codex/sessions` 순으로 찾는다.
 - Stop Hook은 세션 JSONL에서 구조화된 `token_count`와 해당 턴의 모델, 추론 수준만 읽고, 프롬프트, 응답 원문은 복사하지 않는다.
+- Stop 이벤트는 모델, 추론 수준, 사용량의 보강 결과를 `complete`, `partial`, `unavailable` 중 하나로 기록한다.
 - T0는 실패, 통찰, 결정, 수동 마찰이 있을 때만 Run으로 정제한다.
 - T1과 T2는 Run Ledger 후보를 생성한다.
 - 정제된 Run, 리뷰, 제안, 학습은 Developer OS 볼트에 둔다.

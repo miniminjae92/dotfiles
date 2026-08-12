@@ -20,6 +20,10 @@
     "reasoning_effort": { "type": ["string", "null"] },
     "permission_mode": { "type": ["string", "null"] },
     "transcript_path": { "type": ["string", "null"] },
+    "metrics_status": {
+      "type": "string",
+      "enum": ["complete", "partial", "unavailable"]
+    },
     "usage": {
       "type": "object",
       "required": ["source", "session_total", "last_request"],

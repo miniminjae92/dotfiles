@@ -36,8 +36,15 @@ end
 
 def sessions_root
   configured_root = ENV["AGENT_OS_SESSIONS_DIR"]
-  configured_root = File.expand_path("~/.codex/sessions") if configured_root.to_s.empty?
-  File.realpath(configured_root)
+  return File.realpath(File.expand_path(configured_root)) unless configured_root.to_s.empty?
+
+  codex_home = ENV["CODEX_HOME"]
+  default_root = if codex_home.to_s.empty?
+                   File.expand_path("~/.codex/sessions")
+                 else
+                   File.join(File.expand_path(codex_home), "sessions")
+                 end
+  File.realpath(default_root)
 end
 
 def each_recent_line(path)
@@ -147,6 +154,14 @@ begin
   event["model"] ||= metrics["model"]
   event["reasoning_effort"] = metrics["reasoning_effort"] if metrics["reasoning_effort"]
   event["usage"] = metrics["usage"] if metrics["usage"]
+  metric_values = [event["model"], event["reasoning_effort"], event["usage"]]
+  event["metrics_status"] = if metric_values.all?
+                              "complete"
+                            elsif metric_values.any?
+                              "partial"
+                            else
+                              "unavailable"
+                            end
   event["schema_version"] = 1
   event["recorded_at"] = Time.now.iso8601
 
