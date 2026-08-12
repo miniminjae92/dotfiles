@@ -11,15 +11,11 @@
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <!-- 09:00 고정 트리거는 제거했다(2026-08-12). 아침 웨이크와 겹쳐
+       Wi-Fi 붙기 전 실행을 유발했고, 15분 주기가 이미 있어 불필요하다.
+       일일 보고는 9시 이후 첫 정주기 실행에서 나간다. -->
   <key>StartInterval</key>
   <integer>900</integer>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>9</integer>
-    <key>Minute</key>
-    <integer>0</integer>
-  </dict>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
