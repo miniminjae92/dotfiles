@@ -279,6 +279,27 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 
 ---
 
+### Ports
+
+열려 있는 로컬 포트를 "누가 띄웠는지"와 함께 본다. 에이전트가 띄운 dev 서버는
+세션이 끝나도 PPID 1로 입양되어 계속 살기 때문에, 터미널 탭이 하던 "지금 뭐가
+돌고 있나" 역할이 비어버린다. 그 자리를 메우는 도구다.
+
+```bash
+ports              # 개발 서버만 (시스템 데몬은 숨김)
+ports all          # 전부
+ports 5173         # 한 포트 상세 + 부모 체인
+ports kill 5173    # 확인 후 종료
+ports kill orphans # 고아 전부 정리
+```
+
+소유는 조상 체인을 끝까지 올라가서 판정한다. launchd 등록이면 `launchd`(정상
+서비스, 죽여도 되살아남), 조상에 셸이나 터미널, 에이전트가 있으면 `세션`(주인이
+살아 있음), 둘 다 아니면 `고아`. `ports kill orphans`는 `~/projects` 아래의
+고아만 대상으로 하고, adb 같은 상주 데몬은 `데몬`으로 표시해 건드리지 않는다.
+
+---
+
 ### AI Model Status
 
 Configured model names and non-inference provider status:

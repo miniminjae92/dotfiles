@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""ports - 지금 로컬에서 듣고 있는 포트를 "누가 띄웠는지"와 함께 보여준다.
+
+에이전트가 띄운 dev 서버는 세션이 끝나도 PPID 1로 입양되어 계속 산다.
+터미널 탭이 하던 "지금 뭐가 돌고 있나" 역할을 대신하는 도구.
+
+  ports              개발 서버만 (기본)
+  ports all          시스템 데몬까지 전부
+  ports 5173         한 포트 상세 + 부모 체인
+  ports kill 5173    확인 후 종료
+  ports kill orphans 고아 전부 정리
+
+소유는 조상 체인을 끝까지 올라가서 판정한다.
+  launchd 등록                        -> launchd (정상 서비스, 죽여도 되살아남)
+  조상에 셸/터미널/에이전트가 있음    -> 세션    (주인이 살아 있음)
+  그 외                               -> 고아    (주인이 죽고 서버만 남음)
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import signal
+import subprocess
+import sys
+import unicodedata
+from dataclasses import dataclass
+
+HOME = os.path.expanduser("~")
+PROJECTS = os.path.join(HOME, "projects")
+
+# 조상에 이게 있으면 살아있는 주인이 있다는 뜻
+SESSION_RE = re.compile(
+    r"(^|/)-?(zsh|bash|fish|login|tmux|screen)( |$)"
+    r"|WezTerm|iTerm|Terminal\.app|Ghostty|kitty|Warp|Alacritty"
+    r"|claude|Code Helper"
+)
+
+# 포트를 열지만 개발 서버가 아닌 것들 (있는 게 정상이라 기본 화면에서 뺀다)
+DENY_RE = re.compile(
+    r"^adb |gradle|kotlin-daemon|java .*[Dd]aemon|jetbrains"
+    r"|/Applications/|Simulator|CoreSimulator"
+)
+
+LAUNCHD = "launchd"
+SESSION = "세션"
+ORPHAN = "고아"
+DAEMON = "데몬"
+
+
+def run(cmd: list[str]) -> str:
+    """실패해도 빈 문자열. lsof는 접근 못 하는 프로세스가 있으면 1을 뱉는다."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return p.stdout
+
+
+# ── 수집 ────────────────────────────────────────────────────────────────
+# lsof = LiSt Open Files. 유닉스는 소켓도 파일이라 포트가 여기서 나온다.
+#   -nP  DNS/포트이름 변환 안 함(숫자 그대로, 빠름)
+#   -i   internet 소켓만    -sTCP:LISTEN  듣고 있는 것만
+#   -F   기계용 출력(p=pid, n=주소)
+
+
+def listening() -> dict[int, set[int]]:
+    """{pid: {port, ...}}"""
+    out: dict[int, set[int]] = {}
+    pid = None
+    for line in run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"]).splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:])
+        elif line.startswith("n") and pid is not None:
+            port = line.rsplit(":", 1)[-1]
+            if port.isdigit():
+                out.setdefault(pid, set()).add(int(port))
+    return out
+
+
+@dataclass
+class Proc:
+    pid: int
+    ppid: int
+    etime: str
+    cmd: str
+
+
+def ps_table() -> dict[int, Proc]:
+    """전체 프로세스를 한 번에 읽는다. 체인 추적이 PID당 ps 호출 없이 끝난다."""
+    table: dict[int, Proc] = {}
+    for line in run(["ps", "-axo", "pid=,ppid=,etime=,command="]).splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 4:
+            continue
+        try:
+            table[int(parts[0])] = Proc(int(parts[0]), int(parts[1]), parts[2], parts[3])
+        except ValueError:
+            continue
+    return table
+
+
+def cwd_table(pids: list[int]) -> dict[int, str]:
+    """PID별 작업 디렉터리. cwd도 '열린 파일'의 하나라 lsof로 잡힌다."""
+    if not pids:
+        return {}
+    out: dict[int, str] = {}
+    pid = None
+    args = ["lsof", "-a", "-p", ",".join(map(str, pids)), "-d", "cwd", "-Fpn"]
+    for line in run(args).splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:])
+        elif line.startswith("n") and pid is not None:
+            out.setdefault(pid, line[1:])
+    return out
+
+
+def launchd_pids() -> set[int]:
+    out = set()
+    for line in run(["launchctl", "list"]).splitlines()[1:]:
+        first = line.split("\t", 1)[0]
+        if first.isdigit():
+            out.add(int(first))
+    return out
+
+
+# ── 판정 ────────────────────────────────────────────────────────────────
+
+
+def chain(pid: int, table: dict[int, Proc]) -> list[int]:
+    """pid부터 최상단까지. 사이클과 유실 PID에 걸려도 멈춘다."""
+    out: list[int] = []
+    seen: set[int] = set()
+    while pid > 1 and pid in table and pid not in seen:
+        seen.add(pid)
+        out.append(pid)
+        pid = table[pid].ppid
+    return out
+
+
+def classify(pids: list[int], table: dict[int, Proc], launchd: set[int]) -> str:
+    if any(p in launchd for p in pids):
+        return LAUNCHD
+    if any(SESSION_RE.search(table[p].cmd) for p in pids if p in table):
+        return SESSION
+    return ORPHAN
+
+
+def is_dev(cmd: str, cwd: str) -> bool:
+    if DENY_RE.search(cmd):
+        return False
+    return cwd.startswith(PROJECTS + os.sep) or (PROJECTS + os.sep) in cmd
+
+
+def where_of(cwd: str, cmd: str) -> str:
+    """표시용 위치. cwd 우선, 없으면 명령줄에서 ~/projects 경로를 뽑는다."""
+    path = cwd if cwd.startswith(HOME + os.sep) else ""
+    if not path:
+        m = re.search(re.escape(PROJECTS) + r"/[^\s]*", cmd)
+        if m:
+            path = m.group(0).split("/node_modules")[0]
+    if not path and cwd and cwd != "/":
+        path = cwd
+    if not path:
+        return "-"
+    if path.startswith(PROJECTS + os.sep):
+        return path[len(PROJECTS) + 1 :]
+    if path.startswith(HOME + os.sep):
+        return "~" + path[len(HOME) :]
+    return path
+
+
+def human_up(etime: str) -> str:
+    """[[DD-]HH:]MM:SS -> 3d / 17h / 42m / 8s"""
+    days = 0
+    if "-" in etime:
+        d, etime = etime.split("-", 1)
+        days = int(d)
+    bits = [int(x) for x in etime.split(":")]
+    if len(bits) == 3:
+        h, m, s = bits
+    elif len(bits) == 2:
+        h, (m, s) = 0, bits
+    else:
+        return "?"
+    if days:
+        return f"{days}d"
+    return f"{h}h" if h else (f"{m}m" if m else f"{s}s")
+
+
+# ── 모델 ────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class Row:
+    pid: int
+    ports: list[int]
+    up: str
+    kind: str
+    where: str
+    cmd: str
+    dev: bool
+    chain: list[int]
+
+    @property
+    def shown_kind(self) -> str:
+        """개발 서버가 아닌 고아는 '데몬'. adb처럼 원래 그렇게 사는 것들."""
+        return DAEMON if (self.kind == ORPHAN and not self.dev) else self.kind
+
+    @property
+    def ports_str(self) -> str:
+        return ",".join(str(p) for p in self.ports)
+
+
+def build_rows() -> list[Row]:
+    by_pid = listening()
+    if not by_pid:
+        return []
+    table = ps_table()
+    cwds = cwd_table(sorted(by_pid))
+    launchd = launchd_pids()
+
+    rows: list[Row] = []
+    for pid, ports in by_pid.items():
+        proc = table.get(pid)
+        if proc is None:  # 조회 중 죽은 프로세스
+            continue
+        cwd = cwds.get(pid, "")
+        ch = chain(pid, table)
+        rows.append(
+            Row(
+                pid=pid,
+                ports=sorted(ports),
+                up=human_up(proc.etime),
+                kind=classify(ch, table, launchd),
+                where=where_of(cwd, proc.cmd),
+                cmd=proc.cmd,
+                dev=is_dev(proc.cmd, cwd),
+                chain=ch,
+            )
+        )
+    rows.sort(key=lambda r: r.ports[0])  # 찾을 때는 포트로 찾으니까
+    return rows
+
+
+# ── 출력 ────────────────────────────────────────────────────────────────
+
+
+def dwidth(s: str) -> int:
+    """터미널 표시 폭. 한글은 2칸이라 len()으로는 표가 어긋난다."""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+
+
+def pad(s: str, w: int) -> str:
+    return s + " " * max(0, w - dwidth(s))
+
+
+COLS = (13, 7, 5, 8)
+
+
+def show_list(rows: list[Row], show_all: bool) -> int:
+    print(
+        pad("PORT", COLS[0]),
+        pad("PID", COLS[1]),
+        pad("UP", COLS[2]),
+        pad("OWNER", COLS[3]),
+        "WHERE",
+    )
+    print("─" * 70)
+    shown = hidden = orphans = 0
+    for r in rows:
+        if not r.dev and not show_all:
+            hidden += 1
+            continue
+        if r.kind == ORPHAN and r.dev:
+            orphans += 1
+        print(
+            pad(r.ports_str, COLS[0]),
+            pad(str(r.pid), COLS[1]),
+            pad(r.up, COLS[2]),
+            pad(r.shown_kind, COLS[3]),
+            r.where,
+        )
+        shown += 1
+    if not shown:
+        print("(없음)")
+    print()
+    if hidden:
+        print(f"시스템 데몬 {hidden}개 숨김  ->  ports all")
+    if orphans:
+        print(f"고아 {orphans}개, 띄운 세션이 이미 죽었습니다  ->  ports kill orphans")
+    return 0
+
+
+def find(rows: list[Row], port: int) -> list[Row]:
+    return [r for r in rows if port in r.ports]
+
+
+def show_detail(rows: list[Row], port: int) -> int:
+    hits = find(rows, port)
+    if not hits:
+        print(f"포트 {port} 에서 듣고 있는 프로세스가 없습니다.")
+        return 1
+    table = ps_table()
+    for r in hits:
+        print(f"포트 {port}")
+        print(f"  PID      {r.pid}  (연 포트: {r.ports_str})")
+        print(f"  실행시간 {r.up}")
+        print(f"  소유     {r.shown_kind}")
+        print(f"  위치     {cwd_table([r.pid]).get(r.pid, '-')}")
+        print(f"  명령     {r.cmd}")
+        print()
+        print("  부모 체인 (아래로 내려갈수록 조상)")
+        for p in r.chain:
+            proc = table.get(p)
+            if proc:
+                print(f"    {p:>7} {proc.cmd[:88]}")
+        tail = "   <- 주인이 죽어서 여기로 입양됨" if r.kind == ORPHAN else ""
+        print(f"          1 launchd{tail}")
+        print()
+        print(f"  직접 확인:  lsof -i :{port}")
+    return 0
+
+
+def confirm(msg: str, assume_yes: bool) -> bool:
+    if assume_yes:
+        return True
+    try:
+        return input(f"{msg} [y/N] ").strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def terminate(pid: int) -> bool:
+    try:
+        os.kill(pid, signal.SIGTERM)
+        return True
+    except OSError:
+        return False
+
+
+def do_kill_port(rows: list[Row], port: int, assume_yes: bool) -> int:
+    hits = find(rows, port)
+    if not hits:
+        print(f"포트 {port} 에서 듣고 있는 프로세스가 없습니다.")
+        return 1
+    for r in hits:
+        print(f"포트 {port} -> PID {r.pid} ({r.up}, {r.shown_kind}) {r.where}")
+        print(f"  {r.cmd[:96]}")
+        if r.kind == LAUNCHD:
+            print("  launchd 관리 서비스입니다. 죽여도 되살아납니다. launchctl로 다루세요.")
+            return 1
+        if confirm("종료할까요?", assume_yes):
+            print("  종료 신호를 보냈습니다." if terminate(r.pid) else "  실패.")
+        else:
+            print("  취소.")
+    return 0
+
+
+def do_kill_orphans(rows: list[Row], assume_yes: bool) -> int:
+    targets = [r for r in rows if r.kind == ORPHAN and r.dev]
+    if not targets:
+        print("정리할 고아가 없습니다.")
+        return 0
+    print(f"고아 {len(targets)}개:")
+    for r in targets:
+        print(" ", pad(r.ports_str, COLS[0]), pad(str(r.pid), COLS[1]), pad(r.up, COLS[2]), r.where)
+    print()
+    if not confirm("전부 종료할까요?", assume_yes):
+        print("취소.")
+        return 0
+    for r in targets:
+        print(f"  {r.pid} 종료" if terminate(r.pid) else f"  {r.pid} 실패")
+    return 0
+
+
+# ── 진입 ────────────────────────────────────────────────────────────────
+
+
+def main(argv: list[str]) -> int:
+    assume_yes = False
+    args: list[str] = []
+    for a in argv:
+        if a in ("-y", "--yes"):
+            assume_yes = True
+        elif a in ("-h", "--help"):
+            print(__doc__.strip())
+            return 0
+        else:
+            args.append(a)
+
+    rows = build_rows()
+    if not rows:
+        print("듣고 있는 포트가 없습니다.")
+        return 0
+
+    if not args:
+        return show_list(rows, show_all=False)
+    if args[0] == "all":
+        return show_list(rows, show_all=True)
+    if args[0] == "kill":
+        target = args[1] if len(args) > 1 else ""
+        if target in ("orphans", "orphan"):
+            return do_kill_orphans(rows, assume_yes)
+        if target.isdigit():
+            return do_kill_port(rows, int(target), assume_yes)
+        print("사용법: ports kill <포트> | ports kill orphans")
+        return 2
+    if args[0].isdigit():
+        return show_detail(rows, int(args[0]))
+    print(__doc__.strip())
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:  # ports | head
+        os._exit(0)

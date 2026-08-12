@@ -43,6 +43,7 @@
 | `ops-digest` | 배관 | 이벤트 스트림 → 의사결정 다이제스트 |
 | `ops-event` | 배관 | 백그라운드 잡 구조화 이벤트 수집 CLI |
 | `personal-ops` | 제품 | 주간 리뷰, 보안 점검 자동화 (launchd) |
+| `ports` | 제품 | 듣고 있는 로컬 포트를 소유(세션/고아/launchd)와 함께 표시, 고아 정리 |
 | `prfb` | 글루 | prfb-export 실행 래퍼 |
 | `prfb-export` | 제품 | GitHub PR 피드백 → Obsidian 내보내기 |
 | `prfbo` | 글루 | 내보낸 PR 피드백 fzf 선택 → nvim 열기 |
