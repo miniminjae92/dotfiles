@@ -21,7 +21,10 @@ algorithm	git@github.com:miniminjae92/algorithm.git	all
 asx	git@github.com:miniminjae92/asx.git	all
 audio-workbench	git@github.com:miniminjae92/audio-workbench.git	all
 cho-log~spring-learning-test	https://github.com/cho-log/spring-learning-test.git	all
-claude-code	git@github.com:miniminjae92/claude-code.git	all
+# 원격 miniminjae92/claude-code 는 GitHub 에 존재하지 않는다(채용담당자 정리 때 삭제된 것으로
+# 보인다). 맥북 로컬에만 있는 사본이므로 아이맥에서는 clone 이 불가능하다. 다시 푸시하든
+# 접든 결정이 날 때까지 mac 배치로 묶어 둔다.
+claude-code	git@github.com:miniminjae92/claude-code.git	mac
 claude-code-private	git@github.com:miniminjae92/claude-code-private.git	all
 codex-accounts	git@github.com:miniminjae92/codex-accounts.git	all
 dref	git@github.com:miniminjae92/dref.git	all
