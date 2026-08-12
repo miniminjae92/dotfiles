@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# ko-style-hook — PostToolUse(Write|Edit) 에서 한국어 부호 규칙을 집행한다.
+#
+# 배경(2026-08-12 판정): 훅을 "한글 든 모든 .md"에 걸었더니 46건 전부
+# 자동 수정 불가한 dash 보고였고, 걸린 파일 다수가 스펙/핸드오프 같은
+# 에이전트 소모품이었다. 그런 파일에 보고를 주입하면 컨텍스트만 먹고
+# 작업 흐름을 끊는다. 순이익이 음수다.
+#
+# 그래서 두 등급으로 나눈다:
+#   정본(사람이 읽는 글)  → --fix 후 남은 위반을 모델에게 보고
+#   그 외(에이전트 소모품) → --fix 만 조용히. 보고도 이벤트도 없음
+#
+# 정본 판정은 화이트리스트다. 새 정본 경로가 생기면 is_canonical 에 추가한다.
+#
+# stdin: PostToolUse 훅 페이로드(JSON)
+# stdout: 보고할 게 있으면 hookSpecificOutput JSON, 없으면 빈 출력
+set -uo pipefail
+
+KO_STYLE="$HOME/.local/bin/ko-style"
+[ -x "$KO_STYLE" ] || exit 0
+
+f=$(jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)
+[ -n "$f" ] || exit 0
+case "$f" in
+  *.md) ;;
+  *) exit 0 ;;
+esac
+[ -f "$f" ] || exit 0
+grep -q '[가-힣]' "$f" 2>/dev/null || exit 0
+
+# 사람이 읽는 정본인가. 여기 해당할 때만 모델에게 보고한다.
+is_canonical() {
+  case "$1" in
+    # 옵시디언 볼트 전체(mimir, yggdrasil). 단, 회수 전 인박스는 원문 보존.
+    "$HOME"/.obsidian/*/0-inbox/*) return 1 ;;
+    "$HOME"/.obsidian/*) return 0 ;;
+    # repo 정본 문서
+    */README.md|README.md) return 0 ;;
+    */CONTEXT.md|CONTEXT.md) return 0 ;;
+    */docs/adr/*) return 0 ;;
+  esac
+  return 1
+}
+
+if ! is_canonical "$f"; then
+  # 소모품: 안전 수정만 조용히 적용하고 끝낸다.
+  "$KO_STYLE" --fix "$f" >/dev/null 2>&1
+  exit 0
+fi
+
+out=$("$KO_STYLE" --fix "$f" 2>&1) && exit 0
+
+nd=$(printf '%s\n' "$out" | grep -c '\[dash\]')
+ns=$(printf '%s\n' "$out" | grep -c '\[slash\]')
+if [ -x "$HOME/.local/bin/ops-event" ]; then
+  "$HOME/.local/bin/ops-event" --source ko-style --kind finding --severity low \
+    dash="$nd" slash="$ns" file="$f" >/dev/null 2>&1
+fi
+
+jq -n --arg o "$out" '{
+  hookSpecificOutput: {
+    hookEventName: "PostToolUse",
+    additionalContext: ("ko-style: --fix 로 못 고치는 위반이 남았습니다. dash 와 slash 는 문맥 판단이 필요해 자동 수정 대상이 아닙니다. 이 파일은 사람이 읽는 정본이므로, 방금 쓴 줄이면 좋은 글 작성 기준 3절 대체표대로 고치고, 레거시 줄이면 두십시오.\n" + $o)
+  }
+}'
+exit 0
