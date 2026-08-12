@@ -42,7 +42,12 @@ Format:
   explain-diff-gate ack --path <생성한 HTML 경로>
   ```
 
+- **퀴즈 기록**: 퀴즈를 넣었으면 `agents/skills/explain-diff/quiz-record.html` 의 내용을
+  `</body>` 직전에 그대로 붙인다(수정하지 않는다). 응답이 localStorage 에 남고
+  [기록 저장] 이 떨군 JSON 을 `explain-diff-gate quiz --ingest` 가 수거한다. 마크업 계약은
+  `.q` 컨테이너, 그 안의 `.opt` 버튼, 클릭 뒤 붙는 `right`/`wrong` 클래스 셋뿐이다.
 - **보고**: 사용자에게 파일 경로와 이 변경의 핵심 3줄을 대화로 전한다. 퀴즈는 문서 안에
   두되 풀라고 요구하지 않는다. 통과 의무는 없다(게이트로 쓰지 않기로 한 결정).
+  기록은 읽었다는 증거일 뿐 통과 조건이 아니다.
 - **분량 조절**: diff 가 작고 자명하면 Background 를 과하게 부풀리지 말고 짧게 낸다.
   설명서가 diff 보다 길어질수록 읽히지 않는다.

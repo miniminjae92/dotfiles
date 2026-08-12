@@ -15,6 +15,7 @@
   explain-diff-gate ack [--path FILE]       # 설명서를 만들었음을 기록
   explain-diff-gate skip <사유> [--note N]  # 사용자 승인 skip 을 사유와 함께 기록
   explain-diff-gate status                  # 현재 diff 의 게이트 상태
+  explain-diff-gate quiz [--ingest]         # 퀴즈 응답 요약 / 내보낸 JSON 수거
 
 차단 해제 단위(둘 다 조용히 통과):
   EXPLAIN_DIFF_GATE=off            전역 킬 스위치
@@ -318,6 +319,111 @@ def run_status() -> int:
     return 0
 
 
+def read_records() -> list[dict]:
+    out: list[dict] = []
+    try:
+        with open(records_path(), encoding="utf-8") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    out.append(json.loads(raw))
+                except (ValueError, json.JSONDecodeError):
+                    continue
+    except OSError:
+        pass
+    return out
+
+
+def run_quiz(ingest: bool, directory: str, keep: bool) -> int:
+    """퀴즈 응답 수거·요약.
+
+    설명서 HTML 은 file:// 라 디스크에 못 쓴다. 페이지는 localStorage 에 남기고
+    [기록 저장] 이 떨군 JSON 을 여기서 records.jsonl 로 옮긴다. 이 기록은 약점 2
+    ("훅은 생성만 강제하고 읽기는 강제하지 못한다") 를 겨눈 읽음 증거다.
+    """
+    records = read_records()
+    if not ingest:
+        rows = [r for r in records if r.get("action") == "quiz"]
+        if not rows:
+            print("퀴즈 기록 없음. 설명서에서 [기록 저장] 후 "
+                  "`explain-diff-gate quiz --ingest` 를 실행하세요.")
+            return 0
+        for rec in rows:
+            name = os.path.basename(rec.get("path") or "?")
+            wrong = rec.get("wrong") or []
+            tail = f" · 오답 {', '.join(str(n) for n in wrong)}번" if wrong else " · 전부 정답"
+            print(f"{rec.get('ts', '')[:16]}  {rec.get('correct', '?')}/"
+                  f"{rec.get('answered', '?')}  {name}{tail}")
+        return 0
+
+    # ack 기록으로 설명서 경로 → repo/해시를 되찾는다 (퀴즈는 커밋 시점 정보를 모른다).
+    by_name: dict[str, dict] = {}
+    for rec in records:
+        path = rec.get("path")
+        if rec.get("action") == "ack" and path:
+            by_name[os.path.basename(path)] = rec
+
+    directory = os.path.expanduser(directory)
+    try:
+        found = sorted(n for n in os.listdir(directory)
+                       if n.startswith("explain-diff-quiz-") and n.endswith(".json"))
+    except OSError as err:
+        sys.stderr.write(f"explain-diff-gate: {directory} 를 읽을 수 없습니다: {err}\n")
+        return 1
+    if not found:
+        print(f"수거할 파일 없음 ({directory}/explain-diff-quiz-*.json).")
+        return 0
+
+    count = 0
+    for name in found:
+        src = os.path.join(directory, name)
+        try:
+            with open(src, encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, ValueError, json.JSONDecodeError) as err:
+            sys.stderr.write(f"  건너뜀 {name}: {err}\n")
+            continue
+
+        origin = by_name.get(payload.get("file") or "")
+        record = {
+            "ts": _dt.datetime.now().astimezone().isoformat(),
+            "action": "quiz",
+            "answered": payload.get("answered"),
+            "total": payload.get("total"),
+            "correct": payload.get("correct"),
+            "wrong": payload.get("wrong") or [],
+            "quiz_ts": payload.get("last_ts"),
+        }
+        if origin:
+            record["repo"] = origin.get("repo")
+            record["hashes"] = origin.get("hashes") or []
+            record["path"] = origin.get("path")
+        else:
+            record["path"] = payload.get("file")
+            sys.stderr.write(f"  주의 {name}: 대응하는 ack 기록이 없어 repo/해시 없이 남깁니다.\n")
+
+        try:
+            append_record(record)
+        except OSError as err:
+            sys.stderr.write(f"  실패 {name}: {err}\n")
+            continue
+        count += 1
+        print(f"  {record['correct']}/{record['answered']} · "
+              f"{os.path.basename(record['path'] or '?')}")
+        if not keep:
+            try:
+                os.remove(src)
+            except OSError:
+                pass
+
+    if count:
+        ops_emit("run", "info", action="quiz-ingest", count=count)
+    print(f"{count}건 반영 → {records_path()}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="explain-diff-gate",
@@ -333,6 +439,11 @@ def main() -> int:
     skip.add_argument("--note", help="한 줄 근거")
 
     sub.add_parser("status", help="현재 diff 의 게이트 상태")
+
+    quiz = sub.add_parser("quiz", help="퀴즈 응답 요약 / 내보낸 JSON 수거")
+    quiz.add_argument("--ingest", action="store_true", help="내보낸 JSON 을 records.jsonl 로 옮긴다")
+    quiz.add_argument("--dir", default="~/Downloads", help="수거할 디렉터리 (기본 ~/Downloads)")
+    quiz.add_argument("--keep", action="store_true", help="수거 후 원본 JSON 을 지우지 않는다")
 
     args = parser.parse_args()
 
@@ -350,6 +461,8 @@ def main() -> int:
         return run_record("skip", args.reason, args.note, None)
     if args.command == "status":
         return run_status()
+    if args.command == "quiz":
+        return run_quiz(args.ingest, args.dir, args.keep)
 
     parser.print_help()
     return 1

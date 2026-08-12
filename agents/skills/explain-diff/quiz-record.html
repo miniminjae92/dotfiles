@@ -1,0 +1,136 @@
+<script>
+/* 퀴즈 응답 로컬 기록 (D-027 부속). 설명서 HTML 의 </body> 직전에 그대로 붙인다.
+   file:// 페이지는 디스크에 못 쓰므로 localStorage 에 남기고, [기록 저장] 이 떨군
+   JSON 을 `explain-diff-gate quiz --ingest` 가 records.jsonl 로 옮긴다.
+   퀴즈 채점 로직에는 손대지 않는다 — .opt 클릭 뒤 붙는 right/wrong 클래스만 읽는다. */
+(function () {
+  var qs = [].slice.call(document.querySelectorAll('.q'));
+  if (!qs.length) return;
+
+  var FILE = decodeURIComponent((location.pathname.split('/').pop() || 'explainer.html'));
+  var KEY = 'explain-diff-quiz:' + FILE;
+  var MUT = 'var(--mut, #6b6660)', LINE = 'var(--line, #ddd)';
+  var OK = 'var(--ok, #2f6b3f)', NO = 'var(--no, #96342e)';
+
+  function read() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch (e) { return null; }
+  }
+  var state = read() || { v: 1, file: FILE, first_ts: null, last_ts: null, answers: {} };
+  state.answers = state.answers || {};
+
+  function write() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 사생활 모드 등 */ }
+  }
+  function score() {
+    var keys = Object.keys(state.answers);
+    var wrong = keys.filter(function (k) { return !state.answers[k].correct; })
+                    .map(Number).sort(function (a, b) { return a - b; });
+    return { total: qs.length, answered: keys.length, correct: keys.length - wrong.length, wrong: wrong };
+  }
+
+  /* --- 복원: 지난번 고른 답과 정답에 색만 다시 입힌다 (피드백 문구는 재클릭 시 나온다) --- */
+  Object.keys(state.answers).forEach(function (k) {
+    var q = qs[Number(k) - 1]; if (!q) return;
+    var a = state.answers[k];
+    var opts = q.querySelectorAll('.opt');
+    if (opts[a.chosen]) opts[a.chosen].classList.add(a.correct ? 'right' : 'wrong');
+    if (!a.correct && opts[a.correct_index]) opts[a.correct_index].classList.add('right');
+  });
+
+  /* --- 기록: 페이지 자신의 클릭 핸들러가 먼저 돌고 난 뒤 결과 클래스를 읽는다 --- */
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target && ev.target.closest && ev.target.closest('.opt');
+    if (!btn) return;
+    var q = btn.closest('.q'); if (!q) return;
+    setTimeout(function () {
+      var opts = [].slice.call(q.querySelectorAll('.opt'));
+      var qi = qs.indexOf(q) + 1; if (qi < 1) return;
+      var correctIdx = -1;
+      opts.forEach(function (o, i) { if (o.classList.contains('right')) correctIdx = i; });
+      var ts = new Date().toISOString();
+      state.answers[qi] = {
+        chosen: opts.indexOf(btn),
+        correct_index: correctIdx,
+        correct: btn.classList.contains('right'),
+        ts: ts
+      };
+      state.first_ts = state.first_ts || ts;
+      state.last_ts = ts;
+      write();
+      render();
+    }, 0);
+  });
+
+  /* --- 요약 바 --- */
+  var bar = document.createElement('div');
+  bar.style.cssText = 'margin:1.6rem 0 0;padding:.75rem .9rem;border:1px solid ' + LINE +
+    ';border-radius:8px;font-size:.88rem;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem';
+  var text = document.createElement('span');
+  text.style.cssText = 'flex:1 1 auto;min-width:12rem';
+  var saveBtn = mkBtn('기록 저장');
+  var clearBtn = mkBtn('지우기');
+  bar.appendChild(text); bar.appendChild(saveBtn); bar.appendChild(clearBtn);
+  qs[qs.length - 1].parentNode.insertBefore(bar, qs[qs.length - 1].nextSibling);
+
+  function mkBtn(label) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.style.cssText = 'padding:.35rem .7rem;border:1px solid ' + LINE +
+      ';border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:.85rem;cursor:pointer';
+    return b;
+  }
+
+  function render() {
+    var s = score();
+    if (!s.answered) {
+      text.innerHTML = '<span style="color:' + MUT + '">응답은 이 브라우저에 저장됩니다. ' +
+        '[기록 저장] 을 누르면 JSON 이 떨어지고 <code>explain-diff-gate quiz --ingest</code> 가 줍습니다.</span>';
+      saveBtn.disabled = true; saveBtn.style.opacity = '.45';
+      return;
+    }
+    saveBtn.disabled = false; saveBtn.style.opacity = '1';
+    var wrong = s.wrong.length
+      ? ' · <span style="color:' + NO + '">오답 ' + s.wrong.join(', ') + '번</span>'
+      : ' · <span style="color:' + OK + '">전부 정답</span>';
+    text.innerHTML = '<strong>' + s.total + '문항 중 ' + s.answered + '개 응답 · ' +
+      s.correct + '정답</strong>' + wrong;
+  }
+
+  saveBtn.addEventListener('click', function () {
+    var s = score();
+    var payload = {
+      v: 1, file: FILE, title: document.title || null,
+      total: s.total, answered: s.answered, correct: s.correct, wrong: s.wrong,
+      first_ts: state.first_ts, last_ts: state.last_ts,
+      answers: Object.keys(state.answers).sort(function (a, b) { return a - b; })
+        .map(function (k) {
+          var a = state.answers[k];
+          return { q: Number(k), chosen: a.chosen, correct_index: a.correct_index, correct: a.correct };
+        })
+    };
+    var url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'explain-diff-quiz-' + FILE.replace(/\.html?$/i, '') + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    saveBtn.textContent = '저장됨';
+    setTimeout(function () { saveBtn.textContent = '기록 저장'; }, 1800);
+  });
+
+  clearBtn.addEventListener('click', function () {
+    state = { v: 1, file: FILE, first_ts: null, last_ts: null, answers: {} };
+    try { localStorage.removeItem(KEY); } catch (e) { /* noop */ }
+    qs.forEach(function (q) {
+      q.querySelectorAll('.opt').forEach(function (o) {
+        o.classList.remove('right', 'wrong'); o.disabled = false;
+      });
+      var fb = q.querySelector('.fb');
+      if (fb) { fb.textContent = ''; fb.className = 'fb'; }
+    });
+    render();
+  });
+
+  render();
+})();
+</script>
