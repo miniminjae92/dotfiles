@@ -45,6 +45,7 @@
 | `prfb` | 글루 | prfb-export 실행 래퍼 |
 | `prfb-export` | 제품 | GitHub PR 피드백 → Obsidian 내보내기 |
 | `prfbo` | 글루 | 내보낸 PR 피드백 fzf 선택 → nvim 열기 |
+| `psync` | 배관 | 두 기기 `~/projects` 를 매니페스트로 수렴(clone, 평평화, ff-only pull) |
 | `session-harvest` | 배관 | 세션 수확 파이프라인 2단계(마이닝+적재) |
 | `vault-ai-classify` | 제품 | 볼트 노트 AI 분류 |
 | `zcp` | 글루 | zoxide 질의 대상으로 cp |

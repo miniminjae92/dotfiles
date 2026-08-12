@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# psync — 두 기기의 ~/projects 를 매니페스트 한 장으로 수렴시킨다.
+#
+# 왜 필요한가: 아이맥에 "필요할 때만 clone" 하는 규약은 실제로는 아이맥을 안 쓰게
+# 만들었다. 폴더 목록이 다르면 어느 기기에서 뭘 하던 중이었는지 매번 다시 판단해야
+# 하고, 그 마찰이 기기 전환을 막는다. 한 명령으로 목록이 같아지면 마찰이 사라진다.
+#
+# 계약:
+#   - 정본은 agent-os/projects.manifest 다. 코드가 아니라 데이터가 목록을 정한다.
+#   - 기기 간 rsync·Syncthing 미러링은 하지 않는다. .git/index 를 양방향으로 옮기면
+#     저장소가 깨지고, GitHub 가 이미 동기화 프로토콜이다. clone·fetch 로만 수렴한다.
+#   - 절대 지우지 않는다. 매니페스트에 없는 폴더는 보고만 하고 판단은 사람이 한다
+#     ("clean + pushed ⇒ 삭제 안전"은 거짓이기 때문 — .gitignore 사각지대).
+#   - pull 은 fast-forward 전용이고, 작업 트리가 깨끗하고 upstream 이 있을 때만 한다.
+#   - 중첩 경로(co/·edu/·my/)에 있던 저장소는 지우지 않고 평평한 슬러그로 옮긴다.
+#     단 launchd plist 가 그 경로를 참조하면 옮기지 않고 경고만 한다.
+#
+# 사용법:
+#   psync [status]        차이만 보고한다 (기본, 읽기 전용)
+#   psync apply [-n]      누락 clone · 중첩 평평화 · 깨끗한 저장소 ff-only pull
+#   psync adopt [-n]      매니페스트에 없는 로컬 저장소를 매니페스트에 추가
+#   psync doctor          원격 불일치 · 비-git 폴더 등 이상만 본다
+#
+# 환경변수: PROJECTS_DIR, PSYNC_MANIFEST, PSYNC_MACHINE(mac|imac), GITHUB_USER
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+PROJECTS_DIR="${PROJECTS_DIR:-$HOME/projects}"
+MANIFEST="${PSYNC_MANIFEST:-$DOTFILES_DIR/agent-os/projects.manifest}"
+GITHUB_USER="${GITHUB_USER:-miniminjae92}"
+export GIT_TERMINAL_PROMPT=0
+
+DRY=0
+CMD="status"
+
+bold=$'\033[1m'; dim=$'\033[2m'; red=$'\033[31m'; grn=$'\033[32m'; ylw=$'\033[33m'; rst=$'\033[0m'
+[ -t 1 ] || { bold=""; dim=""; red=""; grn=""; ylw=""; rst=""; }
+
+die() { printf '%spsync: %s%s\n' "$red" "$*" "$rst" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+run() { if [ "$DRY" = 1 ]; then printf '%s  (dry-run) %s%s\n' "$dim" "$*" "$rst"; else "$@"; fi; }
+
+machine() {
+  if [ -n "${PSYNC_MACHINE:-}" ]; then printf '%s' "$PSYNC_MACHINE"; return; fi
+  case "$(hostname -s 2>/dev/null | tr 'A-Z' 'a-z')" in
+    *imac*) printf 'imac' ;;
+    *) printf 'mac' ;;
+  esac
+}
+MACHINE="$(machine)"
+
+# 원격 URL 에서 폴더 슬러그를 유도한다. 내 저장소는 repo 이름, 남의 것은 owner~repo.
+slug_of() {
+  local url="$1" path owner repo
+  path="${url#*github.com}"; path="${path#:}"; path="${path#/}"; path="${path%.git}"
+  owner="${path%%/*}"; repo="${path##*/}"
+  [ "$owner" = "$GITHUB_USER" ] && printf '%s' "$repo" || printf '%s~%s' "$owner" "$repo"
+}
+
+# 같은 원격인지 비교한다. SSH·HTTPS 표기 차이와 .git 접미사를 흡수한다.
+norm_remote() {
+  local u="$1"; u="${u%.git}"; u="${u#git@github.com:}"; u="${u#https://github.com/}"
+  printf '%s' "$(printf '%s' "$u" | tr 'A-Z' 'a-z')"
+}
+
+[ -f "$MANIFEST" ] || die "매니페스트가 없다: $MANIFEST"
+[ -d "$PROJECTS_DIR" ] || die "프로젝트 디렉터리가 없다: $PROJECTS_DIR"
+
+# 매니페스트를 배열로 읽는다 (주석·빈 줄 제외, 이 기기 대상만).
+declare -a M_SLUG=() M_URL=() M_IGNORE=()
+while IFS=$'\t' read -r slug url where _rest; do
+  [ -z "${slug:-}" ] && continue
+  case "$slug" in
+    \#*) continue ;;
+    !*)  M_IGNORE+=("${slug#!}"); continue ;;
+  esac
+  [ -z "${url:-}" ] && continue
+  where="${where:-all}"
+  [ "$where" = "all" ] || [ "$where" = "$MACHINE" ] || continue
+  M_SLUG+=("$slug"); M_URL+=("$url")
+done < "$MANIFEST"
+
+in_manifest() {
+  local s="$1" x
+  for x in "${M_SLUG[@]}"; do [ "$x" = "$s" ] && return 0; done
+  return 1
+}
+
+# 무시 목록에 걸리는 경로인가 (매니페스트의 `!경로`). 인자는 $PROJECTS_DIR 기준 상대 경로.
+ignored() {
+  local rel="$1" x
+  [ ${#M_IGNORE[@]} -eq 0 ] && return 1
+  for x in "${M_IGNORE[@]}"; do
+    [ "$rel" = "$x" ] && return 0
+    case "$rel" in "$x"/*) return 0 ;; esac
+  done
+  return 1
+}
+
+# 저장소를 훑는다. 빌드 산출물·의존성 트리 안의 .git 은 남의 저장소이고 재생성 가능한
+# 사본이므로 세지 않는다 (DerivedData 안의 SPM checkouts 가 대표적).
+find_git_dirs() {
+  find "$PROJECTS_DIR" -mindepth "${1:-2}" -maxdepth "${2:-6}" \
+    \( -name DerivedData -o -name node_modules -o -name Pods -o -name .build \
+       -o -name vendor -o -name .venv -o -name checkouts -o -name .next \) -prune \
+    -o -name .git -print 2>/dev/null
+}
+
+# 중첩 경로에 있는 저장소를 찾는다 (co/·edu/·my/ 같은 옛 분류 폴더의 잔재).
+# 평평한 저장소의 .git 은 깊이 2 이므로, 깊이 3 부터가 중첩이다.
+nested_repos() {
+  local g r
+  find_git_dirs 3 6 |
+    while read -r g; do
+      r="${g%/.git}"
+      ignored "${r#$PROJECTS_DIR/}" && continue
+      printf '%s\n' "$r"
+    done
+}
+
+launchd_references() {
+  local path="$1"
+  grep -rl -- "$path" "$HOME/Library/LaunchAgents" 2>/dev/null | head -1
+}
+
+repo_state() {
+  # 출력: <dirty수> <ahead> <behind> <브랜치> <upstream있음:1/0>
+  local r="$1" dirty ahead=0 behind=0 br up=0 counts
+  dirty=$(git -C "$r" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  br=$(git -C "$r" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
+  if counts=$(git -C "$r" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null); then
+    up=1; behind=$(printf '%s' "$counts" | cut -f1); ahead=$(printf '%s' "$counts" | cut -f2)
+  fi
+  printf '%s %s %s %s %s' "$dirty" "$ahead" "$behind" "$br" "$up"
+}
+
+cmd_status() {
+  local missing=() extra=() nested=() attention=()
+  local i slug url dir
+
+  for i in "${!M_SLUG[@]}"; do
+    slug="${M_SLUG[$i]}"; dir="$PROJECTS_DIR/$slug"
+    if [ ! -d "$dir/.git" ]; then missing+=("$slug"); continue; fi
+    read -r dirty ahead behind br up <<<"$(repo_state "$dir")"
+    if [ "$dirty" != 0 ] || [ "$ahead" != 0 ] || [ "$behind" != 0 ] || [ "$up" = 0 ]; then
+      local note=""
+      [ "$dirty" != 0 ] && note="$note 미커밋 $dirty"
+      [ "$ahead" != 0 ] && note="$note 미푸시 $ahead"
+      [ "$behind" != 0 ] && note="$note 뒤처짐 $behind"
+      [ "$up" = 0 ] && note="$note upstream없음"
+      attention+=("$(printf '%-38s %-26s%s' "$slug" "$br" "$note")")
+    fi
+  done
+
+  for dir in "$PROJECTS_DIR"/*/; do
+    [ -d "$dir" ] || continue
+    slug="$(basename "$dir")"
+    in_manifest "$slug" && continue
+    ignored "$slug" && continue
+    if [ -d "$dir/.git" ]; then extra+=("$slug (git)"); else extra+=("$slug (비-git)"); fi
+  done
+
+  while read -r r; do [ -n "$r" ] && nested+=("${r#$PROJECTS_DIR/}"); done < <(nested_repos)
+
+  say "${bold}기기${rst} $MACHINE   ${bold}매니페스트${rst} ${#M_SLUG[@]}개"
+  say ""
+  if [ ${#missing[@]} -gt 0 ]; then
+    say "${ylw}누락 — clone 필요 (${#missing[@]})${rst}"
+    printf '  %s\n' "${missing[@]}"; say ""
+  fi
+  if [ ${#nested[@]} -gt 0 ]; then
+    say "${ylw}중첩 경로 — 평평화 필요 (${#nested[@]})${rst}"
+    printf '  %s\n' "${nested[@]}"; say ""
+  fi
+  if [ ${#attention[@]} -gt 0 ]; then
+    say "${bold}손이 필요한 저장소 (${#attention[@]})${rst}"
+    printf '  %s\n' "${attention[@]}"; say ""
+  fi
+  if [ ${#extra[@]} -gt 0 ]; then
+    say "${dim}매니페스트에 없는 폴더 (${#extra[@]}) — 지우지 않는다. psync adopt 로 편입${rst}"
+    printf '  %s\n' "${extra[@]}"; say ""
+  fi
+  if [ ${#missing[@]} -eq 0 ] && [ ${#nested[@]} -eq 0 ] && [ ${#attention[@]} -eq 0 ]; then
+    say "${grn}수렴 완료. 매니페스트와 일치한다.${rst}"
+  fi
+  return 0
+}
+
+cmd_apply() {
+  local i slug url dir target ref
+
+  # 0. dotfiles 를 먼저 맞춘다. 도구와 규약 자체가 여기 있기 때문이다.
+  if [ -d "$DOTFILES_DIR/.git" ]; then
+    if [ -z "$(git -C "$DOTFILES_DIR" status --porcelain)" ]; then
+      say "${bold}dotfiles${rst} ff-only pull"
+      run git -C "$DOTFILES_DIR" pull --ff-only --quiet || say "  ${ylw}pull 실패 — 수동 확인${rst}"
+    else
+      say "${ylw}dotfiles 에 미커밋 변경이 있어 pull 을 건너뛴다${rst}"
+    fi
+  fi
+
+  # 1. 중첩 경로를 평평한 슬러그로 옮긴다 (복사·삭제가 아니라 이동).
+  while read -r r; do
+    [ -n "$r" ] || continue
+    url=$(git -C "$r" remote get-url origin 2>/dev/null) || { say "${ylw}원격 없음, 건너뜀: ${r#$PROJECTS_DIR/}${rst}"; continue; }
+    slug="$(slug_of "$url")"
+    target="$PROJECTS_DIR/$slug"
+    if [ -e "$target" ]; then
+      say "${ylw}이동 불가(대상 존재): ${r#$PROJECTS_DIR/} → $slug${rst}"; continue
+    fi
+    if plist=$(launchd_references "$r"); [ -n "${plist:-}" ]; then
+      say "${red}이동 보류: ${r#$PROJECTS_DIR/} 를 launchd 가 참조한다 ($plist)${rst}"; continue
+    fi
+    say "${grn}평평화${rst} ${r#$PROJECTS_DIR/} → $slug"
+    run mv "$r" "$target"
+  done < <(nested_repos)
+
+  # 2. 누락 저장소를 clone 한다.
+  for i in "${!M_SLUG[@]}"; do
+    slug="${M_SLUG[$i]}"; url="${M_URL[$i]}"; dir="$PROJECTS_DIR/$slug"
+    [ -d "$dir/.git" ] && continue
+    say "${grn}clone${rst} $slug"
+    run git clone --quiet "$url" "$dir" || say "  ${red}clone 실패: $slug${rst}"
+  done
+
+  # 3. 깨끗하고 upstream 이 있는 저장소만 ff-only 로 당긴다.
+  for i in "${!M_SLUG[@]}"; do
+    slug="${M_SLUG[$i]}"; dir="$PROJECTS_DIR/$slug"
+    [ -d "$dir/.git" ] || continue
+    read -r dirty ahead behind br up <<<"$(repo_state "$dir")"
+    [ "$up" = 1 ] || continue
+    [ "$dirty" = 0 ] || { say "${dim}pull 건너뜀(미커밋): $slug${rst}"; continue; }
+    git -C "$dir" fetch --quiet --all 2>/dev/null || true
+    read -r dirty ahead behind br up <<<"$(repo_state "$dir")"
+    [ "$behind" = 0 ] && continue
+    if [ "$ahead" != 0 ]; then
+      say "${ylw}갈라짐(ahead $ahead / behind $behind): $slug — 수동 병합 필요${rst}"; continue
+    fi
+    say "${grn}pull${rst} $slug (+$behind)"
+    run git -C "$dir" merge --ff-only --quiet '@{u}' || say "  ${red}ff 실패: $slug${rst}"
+  done
+
+  say ""
+  cmd_status
+}
+
+cmd_adopt() {
+  local dir slug url added=0 tmp
+  tmp="$(mktemp)"
+  cp "$MANIFEST" "$tmp"
+  for dir in "$PROJECTS_DIR"/*/; do
+    [ -d "$dir/.git" ] || continue
+    slug="$(basename "$dir")"
+    in_manifest "$slug" && continue
+    ignored "$slug" && continue
+    url=$(git -C "$dir" remote get-url origin 2>/dev/null) || { say "${ylw}원격 없음, 건너뜀: $slug${rst}"; continue; }
+    say "${grn}편입${rst} $slug	$url"
+    printf '%s\t%s\tall\n' "$slug" "$url" >> "$tmp"
+    added=$((added + 1))
+  done
+  if [ "$added" = 0 ]; then say "편입할 저장소가 없다."; rm -f "$tmp"; return; fi
+  # 주석 머리말은 보존하고 항목만 정렬한다.
+  {
+    grep -E '^(#|$)' "$tmp" | sed -n '1,/^$/p'
+    grep -vE '^(#|$)' "$tmp" | sort -u
+  } > "$tmp.sorted"
+  if [ "$DRY" = 1 ]; then
+    say "${dim}(dry-run) 매니페스트에 $added 개 추가 예정${rst}"; rm -f "$tmp" "$tmp.sorted"; return
+  fi
+  mv "$tmp.sorted" "$MANIFEST"; rm -f "$tmp"
+  say ""
+  say "매니페스트에 $added 개를 추가했다. 커밋해서 다른 기기에도 전파할 것."
+}
+
+cmd_doctor() {
+  local i slug url dir actual
+  say "${bold}원격 불일치${rst}"
+  for i in "${!M_SLUG[@]}"; do
+    slug="${M_SLUG[$i]}"; url="${M_URL[$i]}"; dir="$PROJECTS_DIR/$slug"
+    [ -d "$dir/.git" ] || continue
+    actual=$(git -C "$dir" remote get-url origin 2>/dev/null || echo '')
+    [ -z "$actual" ] && { say "  $slug: origin 없음"; continue; }
+    [ "$(norm_remote "$actual")" = "$(norm_remote "$url")" ] ||
+      say "  $slug: 매니페스트=$url 실제=$actual"
+  done
+  say ""
+  # 원격이 없는 저장소는 어디에도 푸시되지 않았다는 뜻이다. 유실 위험이 가장 큰 항목이라
+  # 무시 목록 안까지 훑는다.
+  say "${bold}원격 없는 저장소 — 유실 위험${rst}"
+  find_git_dirs 2 6 | while read -r g; do
+    dir="${g%/.git}"
+    git -C "$dir" remote get-url origin >/dev/null 2>&1 || say "  ${red}${dir#$PROJECTS_DIR/}${rst}"
+  done
+  say ""
+  # 같은 원격을 두 폴더가 clone 하고 있으면 어느 쪽이 정본인지 판단이 매번 필요해진다.
+  say "${bold}중복 clone (같은 원격, 다른 폴더)${rst}"
+  find_git_dirs 2 6 | while read -r g; do
+    dir="${g%/.git}"
+    actual=$(git -C "$dir" remote get-url origin 2>/dev/null) || continue
+    printf '%s\t%s\n' "$(norm_remote "$actual")" "${dir#$PROJECTS_DIR/}"
+  done | sort | awk -F'\t' '{ if ($1==p) { if (!shown) print "  " p; shown=1; print "    " q; print "    " $2 } else shown=0; p=$1; q=$2 }'
+  say ""
+  say "${bold}비-git 폴더${rst}"
+  for dir in "$PROJECTS_DIR"/*/; do
+    [ -d "$dir/.git" ] || say "  $(basename "$dir")"
+  done
+  return 0
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    status|apply|adopt|doctor) CMD="$1" ;;
+    -n|--dry-run) DRY=1 ;;
+    -h|--help) sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "모르는 인자: $1" ;;
+  esac
+  shift
+done
+
+case "$CMD" in
+  status) cmd_status ;;
+  apply)  cmd_apply ;;
+  adopt)  cmd_adopt ;;
+  doctor) cmd_doctor ;;
+esac

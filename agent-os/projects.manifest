@@ -1,0 +1,53 @@
+# ~/projects 저장소 매니페스트 — 기기 간 수렴의 정본 (psync 가 읽는다).
+#
+# 형식: <슬러그>\t<원격 URL>\t<배치>
+#   슬러그  = 폴더명. 내 저장소는 repo 이름, 남의 저장소는 owner~repo (D-022 관련 규약).
+#   배치    = all(양쪽) | mac | imac. 비우면 all.
+#
+# 규칙:
+#   - ~/projects 는 평평한 단층이다. 하위 분류 폴더를 만들지 않는다.
+#   - 기기 간 rsync·Syncthing 미러링은 금지. GitHub 가 동기화 프로토콜이다.
+#   - psync 는 절대 지우지 않는다. 매니페스트에 없는 폴더는 보고만 한다.
+#
+# `!경로` 는 psync 가 손대지 않을 하위 트리다. 평평화도 clone 도 하지 않고 보고만 한다.
+# 팀 작업 트리처럼 같은 원격을 여러 폴더가 쓰거나, 원격이 없어 옮기면 유실 위험이
+# 있는 곳이 여기 들어간다.
+!glen
+!ww-project
+
+agent-notify	git@github.com:miniminjae92/agent-notify.git	all
+agentos-monitor	git@github.com:miniminjae92/agentos-monitor.git	all
+algorithm	git@github.com:miniminjae92/algorithm.git	all
+asx	git@github.com:miniminjae92/asx.git	all
+audio-workbench	git@github.com:miniminjae92/audio-workbench.git	all
+cho-log~spring-learning-test	https://github.com/cho-log/spring-learning-test.git	all
+claude-code	git@github.com:miniminjae92/claude-code.git	all
+claude-code-private	git@github.com:miniminjae92/claude-code-private.git	all
+codex-accounts	git@github.com:miniminjae92/codex-accounts.git	all
+dref	git@github.com:miniminjae92/dref.git	all
+element-to-markdown	git@github.com:miniminjae92/element-to-markdown.git	all
+f12-debug	git@github.com:miniminjae92/f12-debug.git	all
+gh-mine	git@github.com:miniminjae92/gh-mine.git	all
+git-ai-commit	git@github.com:miniminjae92/git-ai-commit.git	all
+git-dojo	git@github.com:miniminjae92/git-dojo.git	all
+gywns0417~java-stream-practice	https://github.com/gywns0417/java-stream-practice.git	all
+hushaby	git@github.com:miniminjae92/hushaby.git	all
+jaeyeonling~spring-roomescape-member	https://github.com/jaeyeonling/spring-roomescape-member.git	all
+java-coding-test	git@github.com:miniminjae92/java-coding-test.git	all
+java-janggi	git@github.com:miniminjae92/java-janggi.git	all
+jjo2889~minishell	git@github.com:jjo2889/minishell.git	all
+kman	git@github.com:miniminjae92/kman.git	all
+llm-notes	git@github.com:miniminjae92/llm-notes.git	all
+manual-library	git@github.com:miniminjae92/manual-library.git	all
+markup-blueprint	git@github.com:miniminjae92/markup-blueprint.git	all
+mdview	git@github.com:miniminjae92/mdview.git	all
+miniminjae.me	git@github.com:miniminjae92/miniminjae.me.git	all
+naon	git@github.com:miniminjae92/naon.git	all
+simulator-reaper	git@github.com:miniminjae92/simulator-reaper.git	all
+spring-roomescape-admin	git@github.com:miniminjae92/spring-roomescape-admin.git	all
+spring-roomescape-auth	git@github.com:miniminjae92/spring-roomescape-auth.git	all
+spring-roomescape-member	git@github.com:miniminjae92/spring-roomescape-member.git	all
+spring-roomescape-waiting	git@github.com:miniminjae92/spring-roomescape-waiting.git	all
+video-summary	git@github.com:miniminjae92/video-summary.git	all
+ww-final-judge	git@github.com:miniminjae92/ww-final-judge.git	all
+ww-mission-learning	git@github.com:miniminjae92/ww-mission-learning.git	all
