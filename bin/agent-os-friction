@@ -4,6 +4,19 @@
 require "fileutils"
 require "time"
 
+USAGE = "usage: agent-os-friction [--origin user|agent] <message>"
+
+# 도움말은 기록 경로에 들어가기 전에 처리한다. 이게 없으면 --help 가 옵션으로
+# 해석되지 않고 그대로 message 본문이 되어, 도움말을 물어본 행위 자체가
+# "--help" 라는 마찰 항목으로 볼트에 적힌다(2026-07-28, 2026-08-12 재발).
+#
+# 첫 인자만 본다. 마찰 메시지 안에 --help 가 들어갈 수 있고(이 버그를 적으려면
+# 반드시 그렇게 된다), 그걸 도움말 요청으로 삼으면 기록이 조용히 사라진다.
+if %w[-h --help].include?(ARGV.first)
+  puts USAGE
+  exit 0
+end
+
 origin = "user"
 if ARGV.first&.start_with?("--origin=")
   origin = ARGV.shift.split("=", 2).last
@@ -12,10 +25,10 @@ elsif ARGV.first == "--origin"
   origin = ARGV.shift.to_s
 end
 
-abort "usage: agent-os-friction [--origin user|agent] <message>" unless %w[user agent].include?(origin)
+abort USAGE unless %w[user agent].include?(origin)
 
 message = ARGV.join(" ").gsub(/\s+/, " ").strip.gsub("|", "\\|")
-abort "usage: agent-os-friction [--origin user|agent] <message>" if message.empty?
+abort USAGE if message.empty?
 
 # 경로 계약(D-012): 환경변수 > agent-os/paths.env > 내장 기본값(fallback 시 이벤트)
 def contract_path(key, fallback)

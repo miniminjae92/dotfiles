@@ -46,10 +46,15 @@ reasons << "run_threshold" if unreviewed.length >= run_threshold
 reasons << "time_threshold" if unreviewed.any? && days_open >= day_threshold
 reasons << "immediate_incident" if immediate_runs.any?
 
+# 개수만 알려주면 어느 Run 이 미검토인지 사람이 mtime 을 손으로 대조해야 한다.
+# 파일명이 날짜로 시작하므로 이름순 정렬이 곧 오래된 것부터의 검토 순서다.
+unreviewed_run_files = unreviewed.map { |path| File.basename(path) }.sort
+
 puts JSON.pretty_generate(
   due: reasons.any?,
   reasons: reasons,
   unreviewed_runs: unreviewed.length,
+  unreviewed_run_files: unreviewed_run_files,
   days_open: days_open,
   immediate_runs: immediate_runs.map { |path| File.basename(path) },
   thresholds: { runs: run_threshold, days: day_threshold }

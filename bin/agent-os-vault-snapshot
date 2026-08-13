@@ -33,6 +33,8 @@ pushed=0
 skipped=0
 push_failed=0
 conflicted=0
+pull_deferred=0
+pull_err=""
 
 for vault in "${vaults[@]}"; do
   if ! git -C "$vault" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -56,10 +58,34 @@ for vault in "${vaults[@]}"; do
     # 충돌 시에는 반드시 abort 한다 — 무인 잡이 저장소를 rebase 중간 상태로
     # 남기면 다음 실행까지 연쇄로 깨지고 볼트에 충돌 마커가 노출된다.
     if git -C "$vault" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-      if ! git -C "$vault" pull --rebase --quiet origin "$branch" 2>/dev/null; then
+      # pull --rebase 는 실제 충돌 말고도 여러 이유로 실패한다. 원인을 구분하지
+      # 않고 전부 "manual merge needed" 로 보고하면, 있지도 않은 충돌을 찾으러
+      # 가게 된다 — 2026-08-12 에 실제로 그랬다. git status 는 깨끗한데 로그에는
+      # 충돌이 5줄 쌓여 있어서, 볼트 백업이 죽은 것으로 오진했다.
+      # 사람 손이 필요한 경우만 conflicted 로 세고, 다음 실행에서 저절로 풀리는
+      # 경우는 그렇게 적는다.
+      if ! pull_err="$(git -C "$vault" pull --rebase origin "$branch" 2>&1)"; then
         git -C "$vault" rebase --abort >/dev/null 2>&1 || true
-        printf 'agent-os-vault-snapshot: pull conflict, manual merge needed: %s\n' "$vault" >&2
-        conflicted=$((conflicted + 1))
+        case "$pull_err" in
+          *"Could not resolve host"*|*"Could not read from remote"*|*"Connection timed out"*|\
+          *"Connection refused"*|*"Permission denied"*|*"Authentication failed"*)
+            printf 'agent-os-vault-snapshot: pull skipped (offline/auth): %s\n' "$vault" >&2
+            pull_deferred=$((pull_deferred + 1))
+            ;;
+          *"unstaged changes"*|*"uncommitted changes"*|*"local changes"*|*"would be overwritten"*)
+            # add/commit 과 pull 사이에 Obsidian 이 파일을 쓰면 생긴다. 다음 실행이
+            # 그 변경을 커밋하고 넘어가므로 사람이 할 일은 없다.
+            printf 'agent-os-vault-snapshot: pull deferred (vault edited mid-run): %s\n' "$vault" >&2
+            pull_deferred=$((pull_deferred + 1))
+            ;;
+          *)
+            # 원인을 모를 때는 사람에게 올리되, git 이 실제로 한 말을 같이 남긴다.
+            # 이유 없는 "manual merge needed" 는 진단을 처음부터 다시 하게 만든다.
+            printf 'agent-os-vault-snapshot: pull failed, manual check needed: %s\n  git: %s\n' \
+              "$vault" "$(printf '%s' "$pull_err" | grep -v '^$' | tail -3 | tr '\n' ' ')" >&2
+            conflicted=$((conflicted + 1))
+            ;;
+        esac
         continue
       fi
     fi
@@ -80,15 +106,16 @@ if [ -z "$ops_event" ]; then
 fi
 if [ -x "$ops_event" ]; then
   sev=info
-  if [ "$push_failed" -gt 0 ]; then
+  if [ "$push_failed" -gt 0 ] || [ "$pull_deferred" -gt 0 ]; then
     sev=low
   fi
-  # 충돌은 사람이 풀어줄 때까지 그 볼트의 동기화가 멈춘다 — push 실패보다 위다.
+  # 충돌은 사람이 풀어줄 때까지 그 볼트의 동기화가 멈춘다. push 실패보다 위다.
+  # pull_deferred 는 다음 실행이 알아서 넘어가므로 여기에 넣지 않는다.
   if [ "$conflicted" -gt 0 ]; then
     sev=medium
   fi
   "$ops_event" --source vault-snapshot --kind run --severity "$sev" \
     committed="$committed" pushed="$pushed" skipped="$skipped" push_failed="$push_failed" \
-    conflicted="$conflicted" \
+    conflicted="$conflicted" pull_deferred="$pull_deferred" \
     2>/dev/null || true
 fi
