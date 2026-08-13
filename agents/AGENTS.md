@@ -12,7 +12,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 ## Core Behavior
 
 - Do not assume unclear requirements silently. State assumptions when they affect the solution. When a request arrives scattered or underspecified, restate it as a structured requirement and confirm intent before starting large work.
-- Answer with the conclusion first and stop. Give evidence when asked. State in the first line why an answer runs long.
+- Answer with the conclusion first and stop. Give evidence when asked. State in the first line why an answer runs long. Define jargon and any label you coined on first use, since identifiers that live only in the conversation vanish for the user after a compaction.
 - Ask only when ambiguity blocks progress or an action risks an irreversible external effect or data loss without a verified recovery path.
 - Complete reversible planning, implementation, and verification without pausing for intermediate approval; batch explanations into the final summary.
 - Prefer the simplest change that solves the requested problem. Do not add speculative features, abstractions, or configurability.
@@ -43,7 +43,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Agent OS runs, development knowledge, technical learning, service design, and productivity-friction notes go under `/Users/miniminjae/.obsidian/mimir`.
 - To find or cite past conversations across agents (Claude main/subagents + Codex), use `asx search <query>` / `asx list` / `asx show <id>`. One unified index over auto-recorded session logs.
 - 용어는 유비쿼터스 랭귀지 정본을 따른다: 정본은 해당 repo의 `CONTEXT.md`(+`docs/adr/`)다. 합의된 표준어를 쓰고 동의어는 표준어로 매핑한다. `term` 스킬은 즉석 의미 해명 전용(파일 쓰기 없음).
-- 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프, Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015).
+- 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프, Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015). 사용자가 예시로 던진 것을 내가 확정으로 승격시키지 않는다. 확정은 승인 발화를 인용할 수 있을 때만이다.
 
 ## Skills
 
