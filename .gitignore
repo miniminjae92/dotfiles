@@ -25,3 +25,7 @@ __pycache__/
 .gnupg/
 
 **/.claude/settings.local.json
+
+# 세션 인계 노트. 로컬 연속성용이라 저장소에 남기지 않는다.
+# 영속 산출물은 mimir 볼트 00 Inbox/agent-handoffs/ 로 간다.
+docs/conversation/
