@@ -1,0 +1,4 @@
+interface:
+  display_name: "테크니컬 라이팅"
+  short_description: "독자의 과업 성공과 오류 복구를 돕는 기술 문서 작성과 검토"
+  default_prompt: "$tech-writing으로 이 기술 문서가 독자의 과업 수행과 오류 복구를 지원하는지 검토해 주세요."
