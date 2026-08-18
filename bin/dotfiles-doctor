@@ -74,6 +74,70 @@ else
   bad "claude hooks not configured: run install.sh"
 fi
 
+echo "== Codex hooks =="
+python3 - "$HOME" <<'PY'
+import json
+import pathlib
+import re
+import sys
+import tomllib
+
+home = pathlib.Path(sys.argv[1])
+codex_homes = [
+    home / ".codex",
+    home / ".codex-accounts" / "google",
+    home / ".codex-accounts" / "naver",
+]
+failures = []
+checked = 0
+
+
+def event_key(name):
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+for codex_home in codex_homes:
+    config_path = codex_home / "config.toml"
+    hooks_path = codex_home / "hooks.json"
+    if not config_path.is_file():
+        failures.append(f"missing config: {config_path}")
+        continue
+    if not hooks_path.is_file():
+        failures.append(f"missing hooks: {hooks_path}")
+        continue
+
+    with config_path.open("rb") as file:
+        config = tomllib.load(file)
+    hooks = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
+
+    if config.get("features", {}).get("hooks") is False:
+        failures.append(f"hooks feature disabled: {config_path}")
+
+    state = config.get("hooks", {}).get("state", {})
+    for event, groups in hooks.items():
+        for group_index, group in enumerate(groups):
+            for hook_index, _hook in enumerate(group.get("hooks", [])):
+                checked += 1
+                state_key = (
+                    f"{hooks_path}:{event_key(event)}:{group_index}:{hook_index}"
+                )
+                hook_state = state.get(state_key)
+                if not isinstance(hook_state, dict) or not hook_state.get("trusted_hash"):
+                    failures.append(f"hook not trusted: {state_key}")
+                elif hook_state.get("enabled") is False:
+                    failures.append(f"hook disabled: {state_key}")
+
+if failures:
+    for failure in failures:
+        print(f"HOOK {failure}")
+    sys.exit(1)
+print(f"{checked} trusted and enabled handlers across {len(codex_homes)} Codex homes")
+PY
+case $? in
+  0) ok "codex hooks active" ;;
+  *) bad "codex hooks inactive (review HOOK lines; use /hooks to trust or enable)" ;;
+esac
+
 echo "== LaunchAgents =="
 # personal-ops-weekly는 은퇴(2026-07-22, session-harvest-weekly로 대체) — install.sh가 bootout함
 # install.sh 가 reload_agent 로 올리는 잡 전체와 일치시킨다. 목록이 부분집합이면
