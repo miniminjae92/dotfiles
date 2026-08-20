@@ -36,7 +36,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `bin/vault-ai-classify` creates read-only AI classification reports for the Obsidian vault.
     * `bin/zcp` and `bin/zmv` copy or move files into a directory selected with `zoxide query -i`.
     * Local scripts are linked into `~/.local/bin` by `install.sh`.
-* **Conventions**: Commit-message conventions are stored under `conventions/` and linked into `~/.config/commit-message-conventions/`. Korean AngularJS is the default, and the original English AngularJS convention is kept as an alternative.
+* **Conventions**: Commit-message conventions are stored under `conventions/` and linked into `~/.config/commit-message-conventions/`. Korean AngularJS is the default, and the original English AngularJS convention is kept as an alternative. The shared PR template in `conventions/pull-request/` is copied (not linked) into each repo's `.github/`.
 * **Tmux**: A terminal multiplexer setup for persistent sessions and pane management.
     * **Plugins**: Uses `tpm` (Tmux Plugin Manager) with `tmux-tokyo-night` for status bar theming, and `tmux-resurrect` and `tmux-continuum` to automatically save and restore sessions.
     * **Integration**: Seamlessly integrates with Neovim using `vim-tmux-navigator`.
@@ -253,7 +253,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 | `agents/AGENTS.md` | 공급자 중립 공통 지침 | `~/.codex/AGENTS.md`, `~/.gemini/GEMINI.md` |
 | `agents/routing.json` + `models.json` | 라우팅 패키지 (역할→모델, 정형 태스크) | models.json → `~/.config/ai-tools/` |
 | `agents/skills/` | 스킬: 자작 + 벤더(각 VENDOR.md, 대장: `agent-os/upstreams.md`) | `~/.claude/skills/*`, `~/.codex/skills/*` |
-| `agents/conventions/` | 커밋 메시지 규약 | `~/.config/commit-message-conventions/` |
+| `agents/conventions/` | 커밋 메시지 규약 + PR 템플릿 | `~/.config/commit-message-conventions/` (PR 템플릿은 리포별 복사) |
 | `agents/claude/` | Claude 어댑터 (CLAUDE.md, settings 병합 조각) | `~/.claude/CLAUDE.md` |
 | `agents/codex/` | Codex 어댑터 (~/.codex 미러: hooks, agents toml, 전용 스킬) | `~/.codex/{hooks.json,agents,skills}` |
 | `agents/gemini/` | Gemini 어댑터 (알림 훅) | `~/.gemini/config/hooks.json` |

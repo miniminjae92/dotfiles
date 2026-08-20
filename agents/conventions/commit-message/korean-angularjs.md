@@ -1,7 +1,8 @@
 # Korean AngularJS Commit Message Convention
 
 Covers commit messages. The **Register by artifact** section extends to PR titles and bodies,
-issue titles and bodies, and ADR titles.
+issue titles and bodies, and ADR titles. The **Pull requests** section fixes PR structure
+and scope.
 
 ## Which file owns which axis
 
@@ -70,6 +71,9 @@ Generate commit messages in this shape:
 - Use bullet points to enumerate what changed; use prose to explain why it changed or what
   judgment was made. Do not flatten a causal explanation into bullets, because the reasoning is
   what a future reader actually needs.
+- When the change followed a judgment call, also record the rejected alternative and the
+  dated evidence that decided it, e.g. `(2026-08-05 실기 확인)`. The diff already says the
+  what; the body is the only place the why and the not-chosen survive.
 - Omit body and footer when they do not add useful context.
 - Mention breaking changes in the footer as `BREAKING CHANGE: ...`.
 - Return only the commit message. Do not wrap it in Markdown.
@@ -102,6 +106,35 @@ living in the same repo.
 Document prose is `합니다체` by the mimir standard §4, and a PR description or review comment
 addresses a person, so neither is a place to strip polite endings. The `commit` surface has
 no hook feeding it yet, so commit messages are currently unchecked by machine.
+
+## Pull requests
+
+The Register table above fixes the register (명사형 title, 존댓말 description). This section
+fixes the structure. One principle decides what goes where: **a person does not re-enter
+what is already recorded elsewhere.** The issue number lives in a body link, the touched
+module lives in the diff paths, and the how-and-why of each step lives in the commit bodies.
+What remains in the description is what only the author knows.
+
+- Title: same form as a commit subject, but without the scope. The PR page already shows
+  the paths; `git log --oneline` does not, which is why commits keep scope and PR titles
+  drop it. State the resulting change, not the implementation: `feat: 만료 할인 응답에서
+  제외`, not `feat: isExpired 분기 추가`. No issue number in the title.
+- Description, three sections: `Context` (why, plus `Closes #N` when an issue exists),
+  `Verification` (what was actually run or checked), `Notes for reviewers` (optional,
+  delete when empty). No `Changes` section: the commit list already is one, and a
+  hand-written copy of it drifts.
+- One core change per PR. Past roughly 300 changed lines excluding generated files and
+  data, split it.
+- Merge policy in your own repos: merge commits, never squash. Commit bodies carry the why
+  and must survive in history. In someone else's repo this is layer 2, and their policy
+  wins.
+- Rules apply forward only. Never rewrite existing history to conform.
+
+Bootstrap a repo (GitHub reads the template per repo, so copy rather than link):
+
+```sh
+mkdir -p .github && cp ~/.dotfiles/agents/conventions/pull-request/PULL_REQUEST_TEMPLATE.md .github/
+```
 
 ## Types
 
