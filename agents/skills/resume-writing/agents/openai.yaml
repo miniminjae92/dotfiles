@@ -1,0 +1,4 @@
+interface:
+  display_name: "이력서 작성"
+  short_description: "한국 신입 이력서의 사실 채굴, 항목 압축, 면접 방어 검증"
+  default_prompt: "$resume-writing으로 이 이력서를 검토해 주세요."
