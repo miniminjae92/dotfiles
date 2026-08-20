@@ -81,11 +81,11 @@ def effective_bindings(bindings: list[Binding]) -> list[Binding]:
         if binding.task == "git_plan" and binding.provider == "agy":
             override_names = (
                 "GIT_PLAN_AI_AGY_MODEL",
-                "LAZYGIT_AI_COMMIT_AGY_MODEL",
+                "GIT_MSG_AI_AGY_MODEL",
             )
         elif binding.task == "commit_message":
             override_names = (
-                f"LAZYGIT_AI_COMMIT_{binding.provider.upper()}_MODEL",
+                f"GIT_MSG_AI_{binding.provider.upper()}_MODEL",
             )
         elif binding.task == "video_summary" and binding.provider == "codex":
             override_names = ("VIDEO_SUMMARY_MODEL",)

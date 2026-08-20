@@ -2,5 +2,5 @@ customCommands:
   - key: '<c-g>'
     context: 'global'
     description: 'Generate AngularJS commit message and copy it'
-    command: 'bash -lc "$HOME/.dotfiles/bin/lazygit-ai-commit"'
+    command: 'bash -lc "$HOME/.local/bin/git-msg-ai"'
     output: terminal

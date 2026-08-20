@@ -177,7 +177,7 @@ for external_tool in \
   "video-summary:$HOME/projects/video-summary/bin/video-summary" \
   "git-ai-commit:$HOME/projects/git-ai-commit/bin/git-ai-commit" \
   "git-plan-ai:$HOME/projects/git-ai-commit/bin/git-plan-ai" \
-  "lazygit-ai-commit:$HOME/projects/git-ai-commit/bin/lazygit-ai-commit"
+  "git-msg-ai:$HOME/projects/git-ai-commit/bin/git-msg-ai"
 do
   tool_name="${external_tool%%:*}"
   tool_path="${external_tool#*:}"

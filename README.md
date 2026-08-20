@@ -25,7 +25,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 * **Local Scripts**:
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
-    * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository (see Extracted Tools below). `bin/git-cm-ai` stays as a thin compatibility wrapper.
+    * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository (see Extracted Tools below).
     * `agent-notify` (provider-neutral persistent notifications + menu bar app) now lives in its own repository (see Extracted Tools below). Hook wiring and the two LaunchAgents stay here.
     * `codex-accounts` (isolated per-account Codex homes + no-turn quota monitoring: `gcodex`/`ncodex`/`codex-account-usage`) now lives in its own repository (see Extracted Tools below).
     * `bin/personal-ops` creates a weekly Obsidian review and performs a quiet, read-only Mac security check. Slack receives only a completion/deviation notice with an Obsidian link.
@@ -82,7 +82,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     ```
     `install.sh` links local scripts into `~/.local/bin`, so they are available directly after opening a new shell:
     ```bash
-    command -v git-cm-ai
+    command -v git-msg-ai
     command -v personal-ops
     command -v ai-model-status
     command -v prfb
@@ -225,7 +225,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
         ollama serve
         ollama pull qwen2.5-coder:7b
         ```
-        Stage files or hunks, then run `git ai-commit message` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. Every provider uses a compact diff prompt by default; pass `--full` for more context or set `LAZYGIT_AI_COMMIT_CODEX_MODEL=gpt-5.5` for harder Codex changes. The older `git cm-ai` entry point remains compatible.
+        Stage files or hunks, then run `git ai-commit message` to choose an AI provider and copy a Korean AngularJS-style commit message candidate. Every provider uses a compact diff prompt by default; pass `--full` for more context or set `GIT_MSG_AI_CODEX_MODEL=gpt-5.5` for harder Codex changes.
 
 7.  **Install iTerm2 Theme**
     * Download the `Catppuccin Mocha.itermcolors` file from the [official repository](https://github.com/catppuccin/iterm/blob/main/colors/catppuccin-mocha.itermcolors).
@@ -275,7 +275,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 - **kman**: 한국어 man 페이지 (Apple 온디바이스 번역, 용어집, 캐시). <https://github.com/miniminjae92/kman>
 - **mdview**: 마크다운 디렉터리 로컬 리더. <https://github.com/miniminjae92/mdview>
 - **video-summary**: 유튜브 전사 저장(기본 무모델), 옵트인 요약, 채널 배치. <https://github.com/miniminjae92/video-summary>. 에이전트 세션에서는 `vsummary` 스킬이 배치 절차를 안내한다. 노트 저장 위치는 `.zshrc`의 `VIDEO_SUMMARY_DIR`가 vault로 지정
-- **git-ai-commit**: AI 커밋 스위트(plan/apply/message + lazygit 연동 + man 페이지). <https://github.com/miniminjae92/git-ai-commit>. `git cm-ai`·`git plan-ai` 호환 명령은 유지되고, 모델 라우팅은 `~/.config/ai-tools/models.json`(install.sh가 `agents/models.json`을 링크)
+- **git-ai-commit**: AI 커밋 스위트(plan/apply/message + lazygit 연동 + man 페이지). <https://github.com/miniminjae92/git-ai-commit>. 부품 명령은 `git-plan-ai`(계획)와 `git-msg-ai`(메시지)로 통일했고, 모델 라우팅은 `~/.config/ai-tools/models.json`(install.sh가 `agents/models.json`을 링크)
 
 ---
 
