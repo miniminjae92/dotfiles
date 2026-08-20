@@ -81,9 +81,18 @@ return {
 		},
 
 		-- 트리형 탐색기. 훑어보기용이고, 실제 파일 조작은 oil이 맡는다.
-		explorer = { enabled = true },
+		-- replace_netrw: `nvim .`처럼 디렉터리를 열면 이 트리가 뜬다(oil은 `-`로 명시 호출).
+		explorer = { enabled = true, replace_netrw = true },
 		-- explorer가 picker 위에서 돈다. 검색 키맵은 fzf-lua가 갖고 있으므로 여긴 구동용.
-		picker = { enabled = true },
+		picker = {
+			enabled = true,
+			sources = {
+				-- 숨김 파일은 항상 보인다. 세션 중 `H`로 켜면 목록이 통째로 다시 그려지면서
+				-- 커서 아래 항목이 바뀌어(=엔터가 엉뚱한 파일을 연다) 처음부터 켜 둔다.
+				-- .gitignore 대상도 보인다(`I`로 임시로 끌 수 있다).
+				explorer = { hidden = true, ignored = true },
+			},
+		},
 
 		indent = { enabled = true, indent = { char = "┊" }, scope = { char = "┊" } },
 		input = { enabled = true },

@@ -5,7 +5,8 @@ return {
 	dependencies = { "nvim-tree/nvim-web-devicons" },
 	lazy = false,
 	opts = {
-		default_file_explorer = true,
+		-- 디렉터리 열기(`nvim .`)는 snacks.explorer가 맡는다. oil은 `-`로만 부른다.
+		default_file_explorer = false,
 		delete_to_trash = true,
 		view_options = { show_hidden = true },
 	},
