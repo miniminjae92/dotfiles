@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "updated": "2026-07-21",
+  "updated": "2026-08-24",
   "purpose": "모델·계정 라우팅의 단일 진실 공급원. 자동 라우터가 읽는 파일이 아니라 사람이 참조하고 doctor가 drift를 검사하는 선언이다.",
   "models": {
     "claude_opus": {
       "provider": "claude",
       "model": "opus",
-      "note": "Fable/Opus 급 최상위 슬롯. 주간 캡의 실질 지배 변수."
+      "note": "Fable/Opus급 최상위 슬롯. planner와 reviewer에서 필요한 경우에만 사용."
     },
     "claude_sonnet": {
       "provider": "claude",
@@ -42,7 +42,7 @@
       { "profile": "macos-keychain", "command": "agy" }
     ],
     "claude": [
-      { "profile": "max", "command": "claude" }
+      { "profile": "subscription", "command": "claude" }
     ]
   },
   "roles": {
@@ -52,7 +52,7 @@
       "overflow": { "ref": "codex_sol", "effort": "high" }
     },
     "worker": {
-      "description": "일상 구현. 윈도우가 살아있는 동안의 기본값이며, 독립적이고 경계가 명확한 하위 작업은 서브에이전트로 위임 가능.",
+      "description": "일상 구현. 독립적이고 경계가 명확한 하위 작업은 서브에이전트로 위임 가능.",
       "primary": { "ref": "claude_sonnet", "effort": "medium" },
       "overflow": { "ref": "codex_sol", "effort": "medium" },
       "delegate": { "ref": "codex_terra", "effort": "low", "via": "agents/codex/agents/worker.toml" }
@@ -69,9 +69,8 @@
     }
   },
   "policy": {
-    "claude_window": "5시간 윈도우는 부패 자원이다. 놀리지 않고 Sonnet(worker)으로 채운다.",
-    "claude_weekly_cap": "주간 캡은 저장 자원이다. Opus 사용량이 지배 변수이므로 Opus만 배급제로 아낀다.",
-    "overflow": "윈도우·주간 캡 소진 시 작업을 멈추지 않고 Codex(gcodex/ncodex)로 흘린다. Codex 2계정은 예비가 아니라 오버플로우 밸브다.",
+    "claude_subscription": "Claude 구독 잔량을 소진하기 위해 작업을 만들거나 모델을 상향하지 않는다. 역할 매핑과 실제 작업 난이도에 따라 선택한다.",
+    "overflow": "Claude 한도로 작업을 이어갈 수 없으면 다음 독립 작업을 Codex(gcodex/ncodex)로 전환한다. Codex 2계정은 예비가 아니라 오버플로우 밸브다.",
     "without_claude": "Claude 구독이 없는 기간에는 각 역할의 overflow가 primary가 된다. 이 파일에서 claude_* 참조를 제거해도 시스템이 성립해야 한다.",
     "no_auto_routing": "품질·비용 실측 데이터 없이 자동 계정·모델 전환을 구현하지 않는다(D-004, D-009)."
   },
