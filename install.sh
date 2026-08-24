@@ -177,7 +177,8 @@ for external_tool in \
   "video-summary:$HOME/projects/video-summary/bin/video-summary" \
   "git-ai-commit:$HOME/projects/git-ai-commit/bin/git-ai-commit" \
   "git-plan-ai:$HOME/projects/git-ai-commit/bin/git-plan-ai" \
-  "git-msg-ai:$HOME/projects/git-ai-commit/bin/git-msg-ai"
+  "git-msg-ai:$HOME/projects/git-ai-commit/bin/git-msg-ai" \
+  "devcap:$HOME/projects/devcap/bin/devcap"
 do
   tool_name="${external_tool%%:*}"
   tool_path="${external_tool#*:}"
