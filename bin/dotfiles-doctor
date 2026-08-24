@@ -74,6 +74,48 @@ else
   bad "claude hooks not configured: run install.sh"
 fi
 
+echo "== Codex policy =="
+python3 - "$HOME" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+home = pathlib.Path(sys.argv[1])
+expected = {
+    "approval_policy": "on-request",
+    "sandbox_mode": "danger-full-access",
+    "approvals_reviewer": "user",
+}
+failures = []
+for codex_home in (
+    home / ".codex",
+    home / ".codex-accounts" / "google",
+    home / ".codex-accounts" / "naver",
+):
+    config_path = codex_home / "config.toml"
+    try:
+        with config_path.open("rb") as file:
+            config = tomllib.load(file)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        failures.append(f"{config_path}: {error}")
+        continue
+    for key, value in expected.items():
+        if config.get(key) != value:
+            failures.append(
+                f"{config_path}: {key}={config.get(key)!r} (expected {value!r})"
+            )
+
+for failure in failures:
+    print(f"CODEX_POLICY {failure}")
+if failures:
+    sys.exit(1)
+print("default, Google, and Naver Codex homes use the Agent OS permission policy")
+PY
+case $? in
+  0) ok "codex permission policy active" ;;
+  *) bad "codex permission policy drift (update the local config or D-002)" ;;
+esac
+
 echo "== Codex hooks =="
 python3 - "$HOME" <<'PY'
 import json
