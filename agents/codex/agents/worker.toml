@@ -1,5 +1,5 @@
 name = "worker"
-description = "Low-cost worker for independent, bounded scans, classification, summarization, and simple mechanical tasks."
+description = "Low-cost worker for independent, bounded implementation, tests, and reproducible codebase investigation."
 model = "gpt-5.6-terra"
 model_reasoning_effort = "low"
 developer_instructions = """
