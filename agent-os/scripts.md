@@ -18,7 +18,7 @@
 
 | 이름 | 계층 | 목적 |
 |---|---|---|
-| `agent-os-capture-event` | 배관 | Stop 훅에서 세션 Run 이벤트 캡처 |
+| `agent-os-capture-event` | 배관 | Stop 훅에서 턴 종료 Run 이벤트 캡처 |
 | `agent-os-core-check` | 배관 | SessionStart 훅: 공통 core drift 탐지 |
 | `agent-os-friction` | 배관 | 생산성 불편일기에 마찰 항목 append |
 | `agent-os-review-due` | 배관 | 리뷰 도래 여부 판정(JSON 출력) |
