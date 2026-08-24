@@ -41,6 +41,28 @@ local header = [[
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⢯⡞⣧⡛⢧⡹⠃⠀⢱⡞⣙⠾⣬⢳⠽⣡⠫⢄⠀⢰⡍⢢⡍⠔⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ]]
 
+-- 탐색기에서 선택한 실제 디렉터리만 끝까지 펼친다. 링크 디렉터리는 순환을 피하려고
+-- 표시만 열고 그 아래로는 내려가지 않는다.
+local function expand_explorer_recursively(picker, item)
+	if not item or not item.dir then
+		return
+	end
+
+	local tree = require("snacks.explorer.tree")
+	local function expand(node)
+		tree:open(node.path)
+		tree:expand(node)
+		for _, child in pairs(node.children) do
+			if child.dir and child.type ~= "link" then
+				expand(child)
+			end
+		end
+	end
+
+	expand(tree:find(item.file))
+	require("snacks.explorer.actions").update(picker, { target = item.file, refresh = true })
+end
+
 return {
 	"folke/snacks.nvim",
 	priority = 1000,
@@ -90,7 +112,23 @@ return {
 				-- 숨김 파일은 항상 보인다. 세션 중 `H`로 켜면 목록이 통째로 다시 그려지면서
 				-- 커서 아래 항목이 바뀌어(=엔터가 엉뚱한 파일을 연다) 처음부터 켜 둔다.
 				-- .gitignore 대상도 보인다(`I`로 임시로 끌 수 있다).
-				explorer = { hidden = true, ignored = true },
+				explorer = {
+					hidden = true,
+					ignored = true,
+					actions = {
+						explorer_expand_recursively = expand_explorer_recursively,
+					},
+					win = {
+						list = {
+							keys = {
+								["zo"] = {
+									"explorer_expand_recursively",
+									desc = "선택 디렉터리 재귀 펼치기",
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 
