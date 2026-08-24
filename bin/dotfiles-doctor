@@ -456,18 +456,61 @@ fi
 
 echo "== Registry drift =="
 python3 - "$DOTFILES_DIR" <<'PY'
-import json, pathlib, re, sys
+import json, pathlib, sys, tomllib
 
 root = pathlib.Path(sys.argv[1])
 failures = []
 routing = json.loads((root / "agents" / "routing.json").read_text())
 routing_models = {entry["model"] for entry in routing["models"].values()}
 
-# Codex agent TOMLs must use models declared in routing.json.
+# Codex agent TOMLs must be complete, installed as regular files, and match role routing.
+agent_configs = {}
 for toml_path in sorted((root / "agents" / "codex" / "agents").glob("*.toml")):
-    match = re.search(r'^model\s*=\s*"([^"]+)"', toml_path.read_text(), re.MULTILINE)
-    if match and match.group(1) not in routing_models:
-        failures.append(f"{toml_path.name}: model '{match.group(1)}' not in routing.json")
+    try:
+        config = tomllib.loads(toml_path.read_text())
+    except tomllib.TOMLDecodeError as error:
+        failures.append(f"{toml_path.name}: invalid TOML: {error}")
+        continue
+
+    missing = [key for key in ("name", "description", "developer_instructions") if not config.get(key)]
+    if missing:
+        failures.append(f"{toml_path.name}: missing required fields: {', '.join(missing)}")
+    if config.get("model") not in routing_models:
+        failures.append(f"{toml_path.name}: model '{config.get('model')}' not in routing.json")
+    agent_configs[toml_path.relative_to(root).as_posix()] = config
+
+    installed = pathlib.Path.home() / ".codex" / "agents" / toml_path.name
+    if not installed.exists():
+        failures.append(f"{toml_path.name}: installed Codex agent missing")
+    elif installed.is_symlink():
+        failures.append(f"{toml_path.name}: installed Codex agent must be a regular file")
+    elif installed.read_bytes() != toml_path.read_bytes():
+        failures.append(f"{toml_path.name}: installed Codex agent differs from source")
+
+for role_name, route_name in (("worker", "delegate"), ("reviewer", "overflow")):
+    route = routing["roles"][role_name][route_name]
+    config = agent_configs.get(route["via"])
+    if config is None:
+        failures.append(f"{role_name}: routed agent file missing or invalid: {route['via']}")
+        continue
+    expected_model = routing["models"][route["ref"]]["model"]
+    if config.get("name") != role_name:
+        failures.append(f"{role_name}: agent name is '{config.get('name')}'")
+    if config.get("model") != expected_model:
+        failures.append(f"{role_name}: expected model '{expected_model}', got '{config.get('model')}'")
+    if config.get("model_reasoning_effort") != route["effort"]:
+        failures.append(
+            f"{role_name}: expected effort '{route['effort']}', "
+            f"got '{config.get('model_reasoning_effort')}'"
+        )
+
+default_agents = pathlib.Path.home() / ".codex" / "agents"
+for profile in ("google", "naver"):
+    account_agents = pathlib.Path.home() / ".codex-accounts" / profile / "agents"
+    if not account_agents.exists():
+        failures.append(f"{profile}: shared Codex agents directory missing")
+    elif account_agents.resolve() != default_agents.resolve():
+        failures.append(f"{profile}: Codex agents directory does not share the default installation")
 
 # models.json (script-facing registry) must agree with routing.json.
 legacy = json.loads((root / "agents" / "models.json").read_text())

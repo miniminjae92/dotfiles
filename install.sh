@@ -36,6 +36,47 @@ link_file() {
   ln -sfn "$source" "$target"
 }
 
+copy_agent_file() {
+  local source="$1"
+  local target="$2"
+
+  if [ ! -f "$source" ]; then
+    printf 'missing source: %s\n' "$source" >&2
+    return
+  fi
+
+  mkdir -p "$(dirname "$target")"
+
+  if [ -L "$target" ]; then
+    if [ "$(readlink "$target")" = "$source" ]; then
+      rm "$target"
+    elif [ "$REPLACE_EXISTING" -eq 1 ]; then
+      local backup="${target}.bak.$(date +%Y%m%d%H%M%S)"
+      mv "$target" "$backup"
+      printf 'backup: %s -> %s\n' "$target" "$backup"
+    else
+      printf 'skip: %s is an unmanaged symlink\n' "$target" >&2
+      SKIPPED_LINKS+=("$target")
+      return
+    fi
+  elif [ -e "$target" ]; then
+    if cmp -s "$source" "$target"; then
+      return
+    fi
+    if [ "$REPLACE_EXISTING" -eq 1 ]; then
+      local backup="${target}.bak.$(date +%Y%m%d%H%M%S)"
+      mv "$target" "$backup"
+      printf 'backup: %s -> %s\n' "$target" "$backup"
+    else
+      printf 'skip: %s differs from the managed agent source\n' "$target" >&2
+      SKIPPED_LINKS+=("$target")
+      return
+    fi
+  fi
+
+  cp "$source" "$target"
+}
+
 # launchd 잡 하나를 내렸다가 다시 올린다.
 #
 # `launchctl bootout` 은 반환해도 해체가 끝난 게 아니다. 곧바로 bootstrap 하면
@@ -128,7 +169,7 @@ if [ -d "$DOTFILES_DIR/agents/codex/agents" ]; then
   for agent_path in "$DOTFILES_DIR"/agents/codex/agents/*.toml; do
     [ -f "$agent_path" ] || continue
     agent_name="$(basename "$agent_path")"
-    link_file "$agent_path" "$HOME/.codex/agents/$agent_name"
+    copy_agent_file "$agent_path" "$HOME/.codex/agents/$agent_name"
   done
 fi
 if [ -d "$DOTFILES_DIR/agents/codex/skills" ]; then
@@ -345,13 +386,13 @@ if command -v bat >/dev/null 2>&1; then
   bat cache --build
 fi
 
-printf 'Installed dotfile links.\n'
+printf 'Installed managed dotfiles.\n'
 printf 'Open a new shell or run: exec zsh\n'
 
 if [ "${#SKIPPED_LINKS[@]}" -gt 0 ]; then
   printf 'Skipped regular files that were not replaced:\n' >&2
   printf '  %s\n' "${SKIPPED_LINKS[@]}" >&2
-  printf 'Run with --replace to back them up and restore symlinks.\n' >&2
+  printf 'Run with --replace to back them up and install managed targets.\n' >&2
 fi
 
 if [ "${#LAUNCHD_FAILURES[@]}" -gt 0 ]; then
