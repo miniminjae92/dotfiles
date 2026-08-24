@@ -1,0 +1,6 @@
+interface:
+  display_name: "Delegate"
+  short_description: "독립 업무를 적절한 역할에 저비용으로 위임합니다"
+  default_prompt: "$delegate로 이 작업에서 위임할 독립 단위를 골라 실행해줘."
+policy:
+  allow_implicit_invocation: false
