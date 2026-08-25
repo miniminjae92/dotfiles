@@ -23,7 +23,7 @@ IntelliJ급 자바 개발을 터미널에서 하되, **모든 조각이 왜 있�
 │       ├── ui/               보이는 것 — colorscheme, lualine, bufferline, snacks, colorizer
 │       ├── editor/           움직이는 것 — fzf-lua, oil, gitsigns, trouble, persistence,
 │       │                     which-key, todo-comments, 마크다운 4종, kulala, diffview,
-│       │                     grug-far, obsidian, dadbod, maximizer
+│       │                     grug-far, obsidian, dadbod, maximizer, treesitter-context
 │       ├── coding/           쓰는 것 — blink.cmp, conform, nvim-lint, surround, mini.pairs,
 │       │                     ts-comments, substitute, cosco, ts-autotag
 │       ├── lang/             언어별 — java.lua
@@ -107,6 +107,7 @@ jdtls가 두 번 기동됐고(`vim.lsp` 경로 + `nvim-jdtls` 경로), 워크스
 | `gd` | 정의로 (여러 개면 fzf-lua 목록) |
 | `gD` | 선언으로 |
 | `gR` | 참조 목록 |
+| `gC` | 현재 함수를 호출하는 곳 목록 |
 | `gi` | 구현 목록 |
 | `gt` | 타입 정의 |
 | `gh` | 문서 보기 |
@@ -132,10 +133,10 @@ jdtls가 두 번 기동됐고(`vim.lsp` 경로 + `nvim-jdtls` 경로), 워크스
 
 | 그룹 | 키 | 하는 일 |
 | --- | --- | --- |
-| **찾기 f** | `ff` `fr` `fs` `fc` | 파일 / 최근 파일 / 문자열 / 커서 단어 |
+| **찾기 f** | `ff` `fr` `fs` `fc` `fo` | 파일 / 최근 파일 / 문자열 / 커서 단어 / 현재 파일 심볼 |
 | | `fb` `fk` `fh` `fg` `ft` | 버퍼 / 키맵 / 도움말 / 변경된 파일 / TODO |
 | **탐색기 e** | `ee` `ef` | 트리 토글 / 현재 파일 위치 열기 |
-| **코드 c** | `cf` `cl` `ca` `ch` `co` | 포맷 / 린트 / 코드 액션 / 인레이 힌트 / import 정리(자바) |
+| **코드 c** | `cf` `cl` `ca` `ch` `co` `cu` | 포맷 / 린트 / 코드 액션 / 인레이 힌트 / import 정리(자바) / 바깥 스코프로 이동 |
 | **git 헝크 h** | `hs` `hr` `hS` `hR` `hu` | 스테이징 / 되돌리기 / 파일 전체 / 스테이징 취소 |
 | | `hp` `hb` `hB` `hd` `hD` | 미리보기 / blame / blame 상시 / diff / 직전 커밋과 diff |
 | | `hh` | 검색 하이라이트 지우기 |

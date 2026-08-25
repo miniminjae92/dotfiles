@@ -26,5 +26,6 @@ return {
 		{ "<leader>fh", "<cmd>FzfLua helptags<cr>", desc = "도움말 찾기" },
 		{ "<leader>fg", "<cmd>FzfLua git_status<cr>", desc = "변경된 파일" },
 		{ "<leader>ft", "<cmd>TodoFzfLua<cr>", desc = "TODO/FIXME 찾기" },
+		{ "<leader>fo", "<cmd>FzfLua lsp_document_symbols<cr>", desc = "현재 파일 심볼" },
 	},
 }
