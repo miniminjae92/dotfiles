@@ -61,6 +61,11 @@ setopt hist_verify
 # (bindings set before `bindkey -v` are lost when the main keymap switches).
 bindkey -v
 
+# Let Backspace remove text that existed before the current vi insert session.
+# The vi-specific widget stops at the point where insert mode was entered.
+bindkey -M viins '^?' backward-delete-char
+bindkey -M viins '^H' backward-delete-char
+
 # History search on arrow keys
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
