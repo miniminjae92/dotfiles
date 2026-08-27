@@ -39,7 +39,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 
 ## Personal Paths
 
-- When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/yggdrasil`. AI-generated reports go under `3-stash/ai-work-reports` there.
+- When the user says "내 옵시디언" or asks to write to Obsidian without a path, use `/Users/miniminjae/.obsidian/yggdrasil`. AI-generated reports go under `3-stash/ai-work-reports`; `$make-artifact` outputs follow its own output config.
 - Agent OS runs, development knowledge, technical learning, service design, and productivity-friction notes go under `/Users/miniminjae/.obsidian/mimir`.
 - To find or cite past conversations across agents (Claude main/subagents + Codex), use `asx search <query>` / `asx list` / `asx show <id>`. One unified index over auto-recorded session logs.
 - 용어는 유비쿼터스 랭귀지 정본을 따른다: 정본은 해당 repo의 `CONTEXT.md`(+`docs/adr/`)다. 합의된 표준어를 쓰고 동의어는 표준어로 매핑한다. `term` 스킬은 즉석 의미 해명 전용(파일 쓰기 없음).
