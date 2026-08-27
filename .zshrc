@@ -16,6 +16,11 @@ fi
 export LANG="en_US.UTF-8"
 export EDITOR="vim"
 
+# ---- Personal shell variables ----
+# 반복 입력하는 개인 경로와 명령 인수를 이 아래에 모은다.
+P_DIR="$HOME/projects"
+GD_DIR="$HOME/Downloads/google-downloads"
+
 # Keep PATH entries unique — dedups even if installers re-append later.
 typeset -U path PATH
 
