@@ -113,7 +113,15 @@ This repository contains my personal dotfiles for macOS, designed to create a st
 5.  **Verify the installation**
     ```bash
     dotfiles-doctor
+    machine-sync --check   # 맥북 정본과 아이맥의 현재 수렴 상태 확인
+    machine-sync           # 안전한 ff-only pull, 설치, Codex 로컬 상태 수렴, 검증
     ```
+    `machine-sync` is run manually on the iMac while the MacBook is reachable as
+    SSH host `mbp`. The MacBook is the reference machine. It syncs committed Git
+    state and managed local setup, but never copies uncommitted files, auth,
+    sessions, Keychain items, or per-project Codex trust. `--skip-projects` limits
+    the run to dotfiles and the agent environment.
+
     Read-only health check over symlinks, required tools, agent CLI auth, launchd
     jobs, and model-registry drift. It never changes state; the exit code is the
     number of `FAIL` findings. `WARN` lines are usually the per-machine steps in
@@ -123,7 +131,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     LaunchAgents that would not load. An empty report plus `Installed dotfile links.`
     is what a clean run looks like.
 
-6.  **Per-machine setup that no script performs**
+6.  **Per-machine setup that remains local**
 
     * **Shell environment.** Oh My Zsh is **not** used and must not be installed.
         It was removed in favour of Starship (Ghostty) and Powerlevel10k (iTerm2),
@@ -167,7 +175,9 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     `~/Applications/AgentNotifyMenu.app` from the clone when it exists. Codex
     `PermissionRequest` hooks create priority attention events without storing
     the requested command or tool input; after changing the hook file, open
-    `/hooks` once in Codex to review and trust the new hook hash. Slack
+    `/hooks` once in Codex to review and trust the new hook hash. On the iMac,
+    `machine-sync` may import that trust only after the MacBook doctor passes and
+    both hook sources have the same hash. Slack
     escalation is per-machine Keychain state (the webhook URL never lands in
     this repository):
 

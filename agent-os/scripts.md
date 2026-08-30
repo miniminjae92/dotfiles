@@ -35,6 +35,7 @@
 | `jobs-mcp` | 글루 | 키체인 인증키로 채용 MCP 서버(stdio) 기동 |
 | `ko-style` | 배관 | 한국어 산출물 부호 규칙 검사, 수정(`--fix`) |
 | `ko-style-hook` | 글루 | PostToolUse 훅. 정본만 보고, 소모품은 조용히 `--fix` |
+| `machine-sync` | 배관 | 맥북 정본을 아이맥 저장소, dotfiles 설치, Codex 로컬 상태에 수렴 |
 | `mirror-from-imac` | 배관 | 아이맥 → 맥북 역방향 미러(세션, 상태) |
 | `mirror-to-imac` | 배관 | 맥북 → 아이맥 단방향 미러(수확 원천) |
 | `notion-job` | 배관 | 노션 허브 정기 잡 실행(launchd, 수동 겸용) |

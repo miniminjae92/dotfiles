@@ -1,0 +1,418 @@
+#!/usr/bin/env python3
+"""Converge this iMac to the trusted MacBook workstation state."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import socket
+import stat
+import subprocess
+import sys
+import tempfile
+import tomllib
+
+
+EXPECTED_POLICY = {
+    "approval_policy": "on-request",
+    "sandbox_mode": "danger-full-access",
+    "approvals_reviewer": "user",
+}
+PROFILES = ("google", "naver")
+SHARED_CODEX_PATHS = (
+    "config.toml",
+    "AGENTS.md",
+    "hooks.json",
+    "agents",
+    "skills",
+    "rules",
+    "plugins",
+    "vendor_imports",
+    "computer-use",
+)
+
+
+class SyncError(RuntimeError):
+    pass
+
+
+def run(
+    command: list[str], *, capture: bool = False, display: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    shown = display or " ".join(shlex.quote(part) for part in command)
+    print(f"$ {shown}", flush=True)
+    return subprocess.run(
+        command,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+    )
+
+
+def git_output(root: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+    return result.stdout.strip()
+
+
+def source_snapshot(host: str) -> dict[str, object]:
+    code = r'''
+import base64, json, os, pathlib, socket, subprocess, tomllib
+home = pathlib.Path.home()
+dotfiles = home / ".dotfiles"
+def git(*args):
+    return subprocess.run(
+        ["git", "-C", str(dotfiles), *args],
+        check=True, text=True, stdout=subprocess.PIPE,
+    ).stdout.strip()
+with (home / ".codex/config.toml").open("rb") as file:
+    config = tomllib.load(file)
+payload = {
+    "home": str(home),
+    "hostname": socket.gethostname(),
+    "head": git("rev-parse", "HEAD"),
+    "status": git("status", "--porcelain"),
+    "policy": {
+        key: config.get(key)
+        for key in ("approval_policy", "sandbox_mode", "approvals_reviewer")
+    },
+    "hook_state": config.get("hooks", {}).get("state", {}),
+    "hooks": base64.b64encode((dotfiles / "agents/codex/hooks.json").read_bytes()).decode(),
+    "doctor_ok": subprocess.run(
+        [str(dotfiles / "bin/dotfiles-doctor")],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0,
+    "projects_ok": subprocess.run(
+        [str(dotfiles / "bin/psync"), "status"],
+        env={**os.environ, "PSYNC_STRICT": "1"},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0,
+}
+print(json.dumps(payload))
+'''
+    remote_command = f"python3 -c {shlex.quote(code)}"
+    command = [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        host,
+        f"/bin/zsh -lc {shlex.quote(remote_command)}",
+    ]
+    try:
+        result = run(command, capture=True, display=f"ssh {host} <workstation snapshot>")
+        return json.loads(result.stdout)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        raise SyncError(f"맥북 상태를 읽지 못했다: {error}") from error
+
+
+def event_key(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+def expected_hook_keys(hooks: dict, home: Path) -> list[str]:
+    hook_paths = [home / ".codex/hooks.json"] + [
+        home / ".codex-accounts" / profile / "hooks.json" for profile in PROFILES
+    ]
+    keys = []
+    for hook_path in hook_paths:
+        for event, groups in hooks["hooks"].items():
+            for group_index, group in enumerate(groups):
+                for hook_index, _hook in enumerate(group.get("hooks", [])):
+                    keys.append(
+                        f"{hook_path}:{event_key(event)}:{group_index}:{hook_index}"
+                    )
+    return keys
+
+
+def portable_hook_state(
+    source_config: dict,
+    hooks: dict,
+    source_home: Path,
+    target_home: Path,
+) -> dict[str, dict]:
+    state = source_config.get("hooks", {}).get("state", {})
+    source_keys = expected_hook_keys(hooks, source_home)
+    target_keys = expected_hook_keys(hooks, target_home)
+    portable = {}
+    for source_key, target_key in zip(source_keys, target_keys, strict=True):
+        value = state.get(source_key)
+        if not isinstance(value, dict) or not value.get("trusted_hash"):
+            raise SyncError(f"맥북 훅이 신뢰되지 않았다: {source_key}")
+        if value.get("enabled") is False:
+            raise SyncError(f"맥북 훅이 비활성화됐다: {source_key}")
+        portable[target_key] = {"trusted_hash": value["trusted_hash"]}
+    return portable
+
+
+def render_hook_state(state: dict[str, dict]) -> str:
+    lines = ["[hooks.state]", ""]
+    for key, value in state.items():
+        lines.append(f"[hooks.state.{json.dumps(key)}]")
+        lines.append(f"trusted_hash = {json.dumps(value['trusted_hash'])}")
+        if value.get("enabled") is False:
+            lines.append("enabled = false")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def upsert_top_level(text: str, values: dict[str, str]) -> str:
+    lines = text.splitlines(keepends=True)
+    first_table = next(
+        (index for index, line in enumerate(lines) if line.lstrip().startswith("[")),
+        len(lines),
+    )
+    for key, value in values.items():
+        pattern = re.compile(rf"^{re.escape(key)}\s*=")
+        replacement = f"{key} = {json.dumps(value)}\n"
+        for index in range(first_table):
+            if pattern.match(lines[index]):
+                lines[index] = replacement
+                break
+        else:
+            lines.insert(first_table, replacement)
+            first_table += 1
+    return "".join(lines)
+
+
+def replace_hook_state(text: str, rendered: str) -> str:
+    lines = text.splitlines(keepends=True)
+    start = next(
+        (index for index, line in enumerate(lines) if line.strip() == "[hooks.state]"),
+        None,
+    )
+    if start is None:
+        separator = "" if text.endswith("\n\n") else "\n"
+        return text + separator + rendered
+
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("[") and not stripped.startswith("[hooks.state."):
+            end = index
+            break
+    suffix = "".join(lines[end:])
+    if suffix and not rendered.endswith("\n\n"):
+        rendered += "\n"
+    return "".join(lines[:start]) + rendered + suffix
+
+
+def merge_codex_config(target_text: str, policy: dict[str, str], state: dict) -> str:
+    merged = upsert_top_level(target_text, policy)
+    merged = replace_hook_state(merged, render_hook_state(state))
+    parsed = tomllib.loads(merged)
+    for key, value in policy.items():
+        if parsed.get(key) != value:
+            raise SyncError(f"Codex 정책 병합 검증 실패: {key}")
+    if parsed.get("hooks", {}).get("state", {}) != state:
+        raise SyncError("Codex 훅 신뢰 상태 병합 검증 실패")
+    return merged
+
+
+def atomic_write(path: Path, text: str) -> None:
+    mode = stat.S_IMODE(path.stat().st_mode)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, delete=False
+    ) as temporary:
+        temporary.write(text)
+        temporary_path = Path(temporary.name)
+    os.chmod(temporary_path, mode)
+    os.replace(temporary_path, path)
+
+
+def validate_account_links(home: Path, *, allow_missing: bool = False) -> None:
+    for profile in PROFILES:
+        account_home = home / ".codex-accounts" / profile
+        for shared_name in SHARED_CODEX_PATHS:
+            source = home / ".codex" / shared_name
+            if not source.exists():
+                continue
+            target = account_home / shared_name
+            if not target.exists() and not target.is_symlink() and allow_missing:
+                continue
+            expected = source.resolve()
+            if not target.is_symlink() or target.resolve() != expected:
+                raise SyncError(f"계정 공유 링크가 수렴하지 않았다: {target}")
+
+
+def ensure_account_links(home: Path) -> None:
+    account_command = home / ".local/bin/codex-account"
+    if not account_command.is_file():
+        raise SyncError(f"codex-account가 없다: {account_command}")
+    for profile in PROFILES:
+        run([str(account_command), profile, "--version"])
+    validate_account_links(home)
+
+
+def validate_source(
+    snapshot: dict[str, object], *, require_projects: bool = True
+) -> tuple[dict, dict, bytes]:
+    if snapshot["status"]:
+        raise SyncError("맥북 dotfiles에 미커밋 변경이 있다. 먼저 커밋하고 push한다.")
+    if not snapshot["doctor_ok"]:
+        raise SyncError("맥북 dotfiles-doctor가 실패했다. 정본 기기를 먼저 복구한다.")
+    if require_projects and not snapshot["projects_ok"]:
+        raise SyncError(
+            "맥북 프로젝트가 수렴 상태가 아니다. psync status의 손이 필요한 항목을 먼저 정리한다."
+        )
+    hooks_bytes = base64.b64decode(snapshot["hooks"])
+    policy = snapshot["policy"]
+    for key, expected in EXPECTED_POLICY.items():
+        if policy.get(key) != expected:
+            raise SyncError(f"맥북 정책이 정본과 다르다: {key}={policy.get(key)!r}")
+    hooks = json.loads(hooks_bytes)
+    config = {**policy, "hooks": {"state": snapshot["hook_state"]}}
+    return config, hooks, hooks_bytes
+
+
+def check_target_machine() -> None:
+    if "imac" not in socket.gethostname().lower():
+        raise SyncError("machine-sync는 현재 맥북 정본을 아이맥으로 수렴하는 명령이다.")
+
+
+def origin_contains_commit(root: Path, commit: str) -> bool:
+    references = git_output(
+        root, "for-each-ref", "--format=%(refname)", "refs/remotes/origin"
+    ).splitlines()
+    return any(
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "merge-base",
+                "--is-ancestor",
+                commit,
+                reference,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+        for reference in references
+    )
+
+
+def apply(skip_projects: bool) -> None:
+    check_target_machine()
+    home = Path.home()
+    dotfiles = Path(os.environ.get("DOTFILES_DIR", home / ".dotfiles")).resolve()
+    snapshot = source_snapshot("mbp")
+    source_config, hooks, source_hooks = validate_source(
+        snapshot, require_projects=not skip_projects
+    )
+
+    if git_output(dotfiles, "status", "--porcelain"):
+        raise SyncError("아이맥 dotfiles에 미커밋 변경이 있어 중단한다.")
+    validate_account_links(home, allow_missing=True)
+
+    run(["git", "-C", str(dotfiles), "fetch", "--quiet", "--prune", "origin"])
+    source_head = snapshot["head"]
+    if not origin_contains_commit(dotfiles, source_head):
+        raise SyncError("맥북 최신 커밋이 GitHub에 없다. 맥북에서 먼저 push한다.")
+    ancestor = subprocess.run(
+        ["git", "-C", str(dotfiles), "merge-base", "--is-ancestor", "HEAD", source_head]
+    )
+    if ancestor.returncode != 0:
+        raise SyncError("아이맥 dotfiles가 맥북과 갈라졌다. 자동 병합하지 않는다.")
+    if git_output(dotfiles, "rev-parse", "HEAD") != source_head:
+        run(["git", "-C", str(dotfiles), "merge", "--ff-only", "--quiet", source_head])
+
+    if not skip_projects:
+        run(["env", "PSYNC_STRICT=1", str(dotfiles / "bin/psync"), "apply"])
+    run([str(dotfiles / "install.sh")])
+    ensure_account_links(home)
+
+    local_hooks_path = dotfiles / "agents/codex/hooks.json"
+    local_hooks = local_hooks_path.read_bytes()
+    if hashlib.sha256(local_hooks).digest() != hashlib.sha256(source_hooks).digest():
+        raise SyncError("맥북과 아이맥의 Codex 훅 정본이 다르다.")
+
+    source_home = Path(snapshot["home"])
+    state = portable_hook_state(source_config, hooks, source_home, home)
+    config_path = home / ".codex/config.toml"
+    merged = merge_codex_config(config_path.read_text(encoding="utf-8"), EXPECTED_POLICY, state)
+    atomic_write(config_path, merged)
+
+    run([str(dotfiles / "bin/dotfiles-doctor")])
+    print(f"수렴 완료: {snapshot['hostname']} {source_head[:12]} → {socket.gethostname()}")
+
+
+def check(skip_projects: bool) -> None:
+    check_target_machine()
+    home = Path.home()
+    dotfiles = Path(os.environ.get("DOTFILES_DIR", home / ".dotfiles")).resolve()
+    snapshot = source_snapshot("mbp")
+    _config, _hooks, source_hooks = validate_source(
+        snapshot, require_projects=not skip_projects
+    )
+    failures = []
+    if git_output(dotfiles, "status", "--porcelain"):
+        failures.append("아이맥 dotfiles 미커밋 변경")
+    if git_output(dotfiles, "rev-parse", "HEAD") != snapshot["head"]:
+        failures.append("dotfiles 커밋 불일치")
+    local_hooks_path = dotfiles / "agents/codex/hooks.json"
+    if not local_hooks_path.is_file() or local_hooks_path.read_bytes() != source_hooks:
+        failures.append("Codex 훅 정본 불일치")
+    if not skip_projects:
+        project_status = subprocess.run(
+            [str(dotfiles / "bin/psync"), "status"],
+            env={**os.environ, "PSYNC_STRICT": "1"},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if project_status.returncode != 0:
+            failures.append("아이맥 프로젝트 미수렴")
+    try:
+        validate_account_links(home)
+    except SyncError as error:
+        failures.append(str(error))
+    doctor = subprocess.run(
+        [str(dotfiles / "bin/dotfiles-doctor")],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if doctor.returncode != 0:
+        failures.append("dotfiles-doctor 실패")
+    if failures:
+        if doctor.returncode != 0:
+            print(doctor.stdout, end="")
+        raise SyncError(", ".join(failures))
+    print(f"수렴 상태: {snapshot['hostname']} {snapshot['head'][:12]} = {socket.gethostname()}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="맥북 정본을 아이맥의 저장소와 에이전트 환경에 안전하게 수렴"
+    )
+    parser.add_argument("--check", action="store_true", help="변경 없이 현재 수렴 상태 확인")
+    parser.add_argument(
+        "--skip-projects", action="store_true", help="dotfiles와 에이전트 환경만 수렴"
+    )
+    arguments = parser.parse_args()
+    try:
+        if arguments.check:
+            check(arguments.skip_projects)
+        else:
+            apply(arguments.skip_projects)
+    except (OSError, subprocess.CalledProcessError, SyncError, tomllib.TOMLDecodeError) as error:
+        print(f"machine-sync: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

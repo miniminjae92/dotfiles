@@ -184,6 +184,11 @@ cmd_status() {
   if [ ${#missing[@]} -eq 0 ] && [ ${#nested[@]} -eq 0 ] && [ ${#attention[@]} -eq 0 ]; then
     say "${grn}수렴 완료. 매니페스트와 일치한다.${rst}"
   fi
+  if [ "${PSYNC_STRICT:-0}" = 1 ] &&
+     { [ ${#missing[@]} -gt 0 ] || [ ${#nested[@]} -gt 0 ] ||
+       [ ${#attention[@]} -gt 0 ] || [ ${#extra[@]} -gt 0 ]; }; then
+    return 1
+  fi
   return 0
 }
 
