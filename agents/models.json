@@ -1,6 +1,6 @@
 {
   "models": {
-    "agy_gemini_fast": "Gemini 3.5 Flash (Low)",
+    "agy_gemini_fast": "Gemini 3.7 Flash (Low)",
     "codex_compact": "gpt-5.4-mini",
     "ollama_local": "qwen2.5-coder:7b"
   },
