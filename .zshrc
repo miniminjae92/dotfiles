@@ -196,6 +196,7 @@ alias gcalw="gcalcli calw"
 alias gcala="gcalcli agenda"
 alias pc="pbcopy"
 alias vsummary="video-summary"
+alias usagegn="gcodex usage && ncodex usage"
 
 # ---- PR Feedback ----
 export PRFB_OUT="$HOME/.obsidian/yggdrasil/3. Resource/GitHub/PR Feedback"
