@@ -1,38 +1,45 @@
+filetype plugin indent on
+syntax on
+
+let g:netrw_banner = 0
+let g:netrw_liststyle = 3
+let g:netrw_browse_split = 4
+let g:netrw_winsize = 20
+let mapleader = " "
+
 set number
 set clipboard=unnamed
-
-set autoindent
-set smartindent
-
 set tabstop=4
 set shiftwidth=4
-set noexpandtab
+set softtabstop=4
+set expandtab
+set autoindent
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+set splitright
+set splitbelow
+set scrolloff=5
 
-inoremap " ""<left>
-inoremap ' ''<left>
-inoremap ( ()<left>
-inoremap [ []<left>
-inoremap { {}<left>
-inoremap {<CR> {<CR>}<ESC>O
-inoremap {;<CR> {<CR>};<ESC>O
+nnoremap <leader>sc :source ~/.vimrc<CR>
+nnoremap <leader>ee :Lexplore<CR>
+nnoremap <leader>sh :sp<CR>
+nnoremap <leader>sv :vsp<CR>
+nnoremap <leader>hh :nohlsearch<CR>
+nnoremap <leader>nn :set number!<CR>
 
-" Syntax Highlighting
-if has("syntax")
-    syntax on
-endif
+augroup netrw_start
+    autocmd!
+    autocmd VimEnter * if argc() == 1 && isdirectory(argv(0)) | enew | execute 'Lexplore ' . fnameescape(argv(0)) | endif
+augroup END
 
-set hlsearch " 검색어 하이라이팅
-set incsearch " 점진적 검색 
+augroup netrw_keys
+    autocmd!
+    autocmd FileType netrw nnoremap <buffer> <nowait> q :close<CR>
+augroup END
 
-"set laststatus=2 " 상태바 표시를 항상한다
-"set statusline=\ %<%l:%v\ [%P]%=%a\ %h%m%r\ %F\
-
-"커서를 마지막 수정 위치로 이동
-au BufReadPost *
-\ if line("'\"") > 0 && line("'\"") <= line("$") |
-\   exe "norm g`\"" |
-\ endif
-
-" call plug#begin('~/.vim/plugged')
-"
-" call plug#end()
+augroup restore_cursor
+    autocmd!
+    autocmd BufReadPost * if line("'\"") > 0 && line("'\"") <= line("$") | execute "normal! g`\"" | endif
+augroup END

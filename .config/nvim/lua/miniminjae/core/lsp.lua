@@ -66,7 +66,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
 
 		map("n", "gd", pick("lsp_definitions", vim.lsp.buf.definition), "정의로")
 		map("n", "gD", vim.lsp.buf.declaration, "선언으로")
-		map("n", "gR", pick("lsp_references", vim.lsp.buf.references), "참조 목록")
+		map("n", "gr", pick("lsp_references", vim.lsp.buf.references), "참조 목록")
 		map("n", "gC", pick("lsp_incoming_calls", vim.lsp.buf.incoming_calls), "호출자 목록")
 		map("n", "gi", pick("lsp_implementations", vim.lsp.buf.implementation), "구현 목록")
 		map("n", "gt", pick("lsp_typedefs", vim.lsp.buf.type_definition), "타입 정의")
