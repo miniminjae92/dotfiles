@@ -26,7 +26,7 @@
     },
     "gemini_flash": {
       "provider": "agy",
-      "model": "Gemini 3.5 Flash (Low)"
+      "model": "Gemini 3.7 Flash (Low)"
     },
     "ollama_local": {
       "provider": "ollama",

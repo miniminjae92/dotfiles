@@ -63,7 +63,7 @@ def agy_model():
             return m
     except (OSError, ValueError):
         pass
-    return "Gemini 3.5 Flash (Low)"
+    return "Gemini 3.7 Flash (Low)"
 
 
 def log_friction(message):

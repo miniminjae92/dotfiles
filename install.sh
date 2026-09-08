@@ -323,8 +323,8 @@ fi
 # settings.json stays unlinked because Claude Code rewrites it at runtime
 # (model preference, theme); only missing keys are added, and unmanaged entries
 # are never touched. Managed hooks are matched by the tool they invoke, so a new
-# hook lands inside an event that already exists and an edited one is updated in
-# place instead of being appended as a duplicate.
+# hook lands inside an event that already exists and an edited one replaces its
+# legacy spelling instead of being appended as a duplicate.
 python3 - "$DOTFILES_DIR/agents/claude/settings-fragment.json" "$HOME/.claude/settings.json" <<'PY'
 import json, pathlib, re, sys
 
@@ -334,6 +334,7 @@ settings_path.parent.mkdir(parents=True, exist_ok=True)
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 
 TOOL = re.compile(r"\$HOME/(?:\.local/bin|projects/[^/\s\"']+/bin)/([\w-]+)")
+LEGACY_TOOL_IDENTITY = {"ko-style": "ko-style-hook"}
 
 
 def identity(hook):
@@ -341,7 +342,8 @@ def identity(hook):
     command. Otherwise editing a hook in the fragment would append a duplicate
     instead of updating the existing one."""
     m = TOOL.search(hook.get("command", ""))
-    return m.group(1) if m else hook.get("command", "")
+    tool = m.group(1) if m else hook.get("command", "")
+    return LEGACY_TOOL_IDENTITY.get(tool, tool)
 
 
 added = []
@@ -355,14 +357,22 @@ for event, groups in fragment.get("hooks", {}).items():
             target = {**group, "hooks": []}
             existing.append(target)
         current = target.setdefault("hooks", [])
+        group_changed = False
         for hook in group.get("hooks", []):
-            same = next((h for h in current if identity(h) == identity(hook)), None)
-            if same is None:
+            matches = [h for h in current if identity(h) == identity(hook)]
+            if not matches:
                 current.append(hook)
-            elif same != hook:
-                same.update(hook)      # fragment is canonical for managed hooks
+                group_changed = True
             else:
-                continue
+                primary = matches[0]
+                if primary != hook:
+                    primary.clear()
+                    primary.update(hook)  # fragment is canonical for managed hooks
+                    group_changed = True
+                for duplicate in matches[1:]:
+                    current.remove(duplicate)
+                    group_changed = True
+        if group_changed:
             label = f"hooks.{event}"
             if group.get("matcher"):
                 label += f"[{group['matcher']}]"

@@ -22,7 +22,7 @@ class AiModelStatusTest(unittest.TestCase):
 
         self.assertIn(
             ai_model_status.Binding(
-                "git_plan", "agy", "agy_gemini_fast", "Gemini 3.5 Flash (Low)"
+                "git_plan", "agy", "agy_gemini_fast", "Gemini 3.7 Flash (Low)"
             ),
             bindings,
         )
