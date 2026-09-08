@@ -12,6 +12,7 @@
 
 사용법:
   explain-diff-gate --hook pretooluse       # Claude PreToolUse(Bash) 훅
+  explain-diff-gate metadata                # 현재 diff 바인딩 HTML 메타데이터
   explain-diff-gate ack [--path FILE]       # 설명서를 만들었음을 기록
   explain-diff-gate skip <사유> [--note N]  # 사용자 승인 skip 을 사유와 함께 기록
   explain-diff-gate status                  # 현재 diff 의 게이트 상태
@@ -37,11 +38,15 @@ import re
 import shutil
 import subprocess
 import sys
+from html import escape
+from html.parser import HTMLParser
 
 SOURCE = "explain-diff"
 HOME = os.path.expanduser("~")
 GIT_TIMEOUT = 8
 MAX_DIFF_BYTES = 5_000_000
+DOCUMENT_MARKER = "explain-diff-gate"
+DOCUMENT_CONTRACT = "explain-diff-v1"
 
 # `git ... commit` 을 명령 위치에서만 잡는다. 복합 명령(`a && git commit -m x`)과
 # 환경변수 접두(`FOO=1 git commit`)는 포함하되, 아래는 오탐이므로 제외한다:
@@ -203,6 +208,127 @@ def in_progress(repo: str) -> bool:
                             "rebase-merge", "rebase-apply"))
 
 
+class DocumentParser(HTMLParser):
+    """D-027 설명서의 생성 시점 메타데이터와 본문 구조를 읽는다."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tags: set[str] = set()
+        self.metadata: dict[str, str] = {}
+        self._heading: str | None = None
+        self._heading_parts: list[str] = []
+        self.sections: dict[str, str] = {}
+        self.body_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        self.tags.add(tag)
+        if tag == "meta":
+            values = dict(attrs)
+            name = values.get("name")
+            content = values.get("content")
+            if name and content is not None:
+                self.metadata[name.lower()] = content
+        if tag in ("h1", "h2"):
+            self._heading = tag
+            self._heading_parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag == self._heading:
+            heading = " ".join(self._heading_parts).strip().lower()
+            if tag == "h2":
+                self.sections[heading] = ""
+            self._heading = None
+            self._heading_parts = []
+
+    def handle_data(self, data: str) -> None:
+        normalized = " ".join(data.split())
+        if not normalized:
+            return
+        self.body_parts.append(normalized)
+        if self._heading:
+            self._heading_parts.append(normalized)
+        elif self.sections:
+            last = next(reversed(self.sections))
+            self.sections[last] += " " + normalized
+
+
+def required_section_text(parser: DocumentParser, names: tuple[str, ...]) -> str | None:
+    for heading, content in parser.sections.items():
+        if any(name in heading for name in names):
+            return content.strip()
+    return None
+
+
+def validate_document(text: str, repo: str, hashes: list[str]) -> bool:
+    """현재 repo/diff 에 생성된 실제 설명서의 계약을 검증한다."""
+    parser = DocumentParser()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:
+        return False
+
+    required_tags = {"html", "head", "title", "body", "h1", "h2"}
+    if not required_tags.issubset(parser.tags):
+        return False
+    if parser.metadata.get("explain-diff-contract") != DOCUMENT_CONTRACT:
+        return False
+    if parser.metadata.get("explain-diff-repo") != repo:
+        return False
+    if parser.metadata.get("explain-diff-hashes") != ",".join(hashes):
+        return False
+
+    sections = (
+        ("background", "배경"),
+        ("intuition", "직관"),
+        ("code", "코드", "변경"),
+        ("quiz", "퀴즈"),
+    )
+    texts = [required_section_text(parser, names) for names in sections]
+    # 제목 단어만 나열한 골격은 설명서가 아니다. 각 설명 단위에 문장 하나 이상,
+    # 전체에는 생성 스킬이 요구한 설명 분량이 있어야 한다.
+    return all(section and len(section) >= 40 for section in texts) and len(" ".join(parser.body_parts)) >= 250
+
+
+def bind_document(path: str, repo: str, hashes: list[str]) -> str | None:
+    """읽기 전용으로 생성 시점 메타데이터와 설명서 구조를 검증한다."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read(MAX_DIFF_BYTES + 1)
+    except (OSError, UnicodeError):
+        return None
+    if len(text.encode("utf-8")) > MAX_DIFF_BYTES:
+        return None
+
+    if not validate_document(text, repo, hashes):
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def document_metadata(repo: str, hashes: list[str]) -> str:
+    """생성 스킬이 HTML head 에 그대로 넣을 현재 diff 바인딩 메타데이터."""
+    return "\n".join((
+        f'<meta name="explain-diff-contract" content="{DOCUMENT_CONTRACT}">',
+        f'<meta name="explain-diff-repo" content="{escape(repo, quote=True)}">',
+        f'<meta name="explain-diff-hashes" content="{escape(",".join(hashes), quote=True)}">',
+    ))
+
+
+def run_metadata() -> int:
+    repo = repo_root(os.getcwd())
+    if not repo:
+        sys.stderr.write("explain-diff-gate: git 저장소가 아닙니다.\n")
+        return 1
+    hashes, _ = diff_hashes(repo)
+    if not hashes:
+        sys.stderr.write("explain-diff-gate: 메타데이터를 만들 변경이 없습니다.\n")
+        return 1
+    print(document_metadata(repo, hashes))
+    return 0
+
+
 BLOCK_MESSAGE = """explain-diff 게이트(D-027): 이 diff 에 대한 설명서 기록이 없습니다.
   대상 {stats} · 해시 {digest}
 
@@ -273,6 +399,26 @@ def run_record(action: str, reason: str | None, note: str | None, path: str | No
         sys.stderr.write("explain-diff-gate: 기록할 변경이 없습니다 (staged/HEAD diff 비어 있음).\n")
         return 1
 
+    if action == "ack":
+        if not path:
+            sys.stderr.write("explain-diff-gate: ack에는 비어 있지 않은 설명서 파일 경로가 필요합니다.\n")
+            return 1
+        path = os.path.realpath(os.path.expanduser(path))
+        expected_root = os.path.realpath(state_dir())
+        try:
+            within_state_dir = os.path.commonpath((path, expected_root)) == expected_root
+        except ValueError:
+            within_state_dir = False
+        valid_document = False
+        if within_state_dir and path.endswith(".html") and os.path.isfile(path):
+            document_digest = bind_document(path, repo, hashes)
+            valid_document = document_digest is not None
+        if not valid_document:
+            sys.stderr.write(
+                "explain-diff-gate: ack 설명서는 EXPLAIN_DIFF_DIR 아래의 "
+                "설명 단위가 갖춰진 .html 일반 파일이어야 합니다.\n")
+            return 1
+
     record = {
         "ts": _dt.datetime.now().astimezone().isoformat(),
         "action": action,
@@ -288,6 +434,7 @@ def run_record(action: str, reason: str | None, note: str | None, path: str | No
         record["note"] = note
     if path:
         record["path"] = os.path.abspath(os.path.expanduser(path))
+        record["document_sha256"] = document_digest
 
     try:
         append_record(record)
@@ -435,13 +582,14 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command")
 
     ack = sub.add_parser("ack", help="설명서를 만들었음을 기록")
-    ack.add_argument("--path", help="생성한 설명서 파일 경로")
+    ack.add_argument("--path", required=True, help="생성한 비어 있지 않은 설명서 파일 경로")
 
     skip = sub.add_parser("skip", help="사용자가 승인한 skip 을 사유와 함께 기록")
     skip.add_argument("reason", help="kebab 한 단어 사유 (docs-only, version-bump 등)")
     skip.add_argument("--note", help="한 줄 근거")
 
     sub.add_parser("status", help="현재 diff 의 게이트 상태")
+    sub.add_parser("metadata", help="생성 HTML head 에 넣을 현재 diff 메타데이터")
 
     quiz = sub.add_parser("quiz", help="퀴즈 응답 요약 / 내보낸 JSON 수거")
     quiz.add_argument("--ingest", action="store_true", help="내보낸 JSON 을 records.jsonl 로 옮긴다")
@@ -464,6 +612,8 @@ def main() -> int:
         return run_record("skip", args.reason, args.note, None)
     if args.command == "status":
         return run_status()
+    if args.command == "metadata":
+        return run_metadata()
     if args.command == "quiz":
         return run_quiz(args.ingest, args.dir, args.keep)
 
