@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reasoning Reviewer"
+  short_description: "사고의 빈틈과 가장 작은 검증 행동을 찾는 빠른 조언가"
+  default_prompt: "$reasoning-reviewer로 내 생각의 가장 큰 빈틈과 다음 검증 행동을 찾아줘."
