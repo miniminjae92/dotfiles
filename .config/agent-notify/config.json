@@ -6,11 +6,11 @@
   "profiles": {
     "normal": {
       "local": "temporary",
-      "slack": "delayed"
+      "slack": "off"
     },
     "watch": {
       "local": "persistent",
-      "slack": "delayed"
+      "slack": "off"
     },
     "away": {
       "local": "off",
