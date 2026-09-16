@@ -7,6 +7,14 @@
 Session.vim
 nvim.log
 
+# Eclipse/JDT가 로컬에서 다시 만드는 프로젝트 메타데이터는 추적하지 않는다.
+# Java 소스 경로, 라이브러리, 빌드 출력 경로
+.classpath
+# 프로젝트 이름, 빌더, Java 프로젝트 성격(nature)
+.project
+# 컴파일러, 포매터 등 프로젝트별 Eclipse/JDT 설정
+.settings/
+
 # nvim/vim spell check 데이터
 nvim/spell/
 vim/spell/
