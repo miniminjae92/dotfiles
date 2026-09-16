@@ -26,18 +26,44 @@ return {
 	end,
 	keys = {
 		{
-			"<leader>Tt",
+			"<leader>1",
 			function()
-				require("neotest").run.run()
+				local dap = require("dap")
+				if dap.session() then
+					dap.terminate()
+				else
+					require("neotest").run.stop()
+				end
 			end,
-			desc = "커서 근처 테스트 실행",
+			desc = "테스트 / 디버그 중지 (IdeaVim)",
 		},
 		{
-			"<leader>Tf",
+			"<leader>2",
 			function()
 				require("neotest").run.run(vim.fn.expand("%"))
 			end,
-			desc = "이 파일 테스트 실행",
+			desc = "현재 파일 테스트 (IdeaVim RunClass)",
+		},
+		{
+			"<leader>3",
+			function()
+				require("neotest").run.run({ vim.fn.expand("%"), strategy = "dap" })
+			end,
+			desc = "현재 파일 디버그 (IdeaVim DebugClass)",
+		},
+		{
+			"<leader>4",
+			function()
+				require("neotest").run.run()
+			end,
+			desc = "커서 근처 테스트 (IdeaVim Run)",
+		},
+		{
+			"<leader>5",
+			function()
+				require("neotest").run.run({ strategy = "dap" })
+			end,
+			desc = "커서 근처 테스트 디버그 (IdeaVim Debug)",
 		},
 		{
 			"<leader>Ta",
@@ -45,13 +71,6 @@ return {
 				require("neotest").run.run(vim.uv.cwd())
 			end,
 			desc = "프로젝트 전체 테스트",
-		},
-		{
-			"<leader>Td",
-			function()
-				require("neotest").run.run({ strategy = "dap" })
-			end,
-			desc = "커서 근처 테스트 디버그",
 		},
 		{
 			"<leader>Ts",
