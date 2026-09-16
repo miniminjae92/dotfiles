@@ -7,7 +7,15 @@ return {
 		"nvim-lua/plenary.nvim",
 		"nvim-treesitter/nvim-treesitter",
 	},
-	opts = { adapters = {} },
+	opts = {
+		adapters = {},
+		output = { open_on_run = false },
+		output_panel = {
+			open = function()
+				return require("miniminjae.test_tool_window").create_window()
+			end,
+		},
+	},
 	config = function(_, opts)
 		local adapters = {}
 		for name, config in pairs(opts.adapters or {}) do
@@ -23,10 +31,16 @@ return {
 		end
 		opts.adapters = adapters
 		require("neotest").setup(opts)
+		require("miniminjae.test_tool_window").setup()
 	end,
 	keys = {
+		{ "<leader>1", "<leader>Tx", remap = true, desc = "테스트 / 디버그 중지 (IdeaVim)" },
+		{ "<leader>2", "<leader>Tf", remap = true, desc = "현재 파일 테스트 (IdeaVim RunClass)" },
+		{ "<leader>3", "<leader>TD", remap = true, desc = "현재 파일 디버그 (IdeaVim DebugClass)" },
+		{ "<leader>4", "<leader>Tt", remap = true, desc = "커서 근처 테스트 (IdeaVim Run)" },
+		{ "<leader>5", "<leader>Td", remap = true, desc = "커서 근처 테스트 디버그 (IdeaVim Debug)" },
 		{
-			"<leader>1",
+			"<leader>Tx",
 			function()
 				local dap = require("dap")
 				if dap.session() then
@@ -35,40 +49,40 @@ return {
 					require("neotest").run.stop()
 				end
 			end,
-			desc = "테스트 / 디버그 중지 (IdeaVim)",
+			desc = "테스트 / 디버그 중지",
 		},
 		{
-			"<leader>2",
+			"<leader>Tf",
 			function()
-				require("neotest").run.run(vim.fn.expand("%"))
+				require("miniminjae.test_tool_window").run(vim.fn.expand("%"))
 			end,
-			desc = "현재 파일 테스트 (IdeaVim RunClass)",
+			desc = "현재 파일 테스트",
 		},
 		{
-			"<leader>3",
+			"<leader>TD",
 			function()
 				require("neotest").run.run({ vim.fn.expand("%"), strategy = "dap" })
 			end,
-			desc = "현재 파일 디버그 (IdeaVim DebugClass)",
+			desc = "현재 파일 테스트 디버그",
 		},
 		{
-			"<leader>4",
+			"<leader>Tt",
 			function()
-				require("neotest").run.run()
+				require("miniminjae.test_tool_window").run()
 			end,
-			desc = "커서 근처 테스트 (IdeaVim Run)",
+			desc = "커서 근처 테스트",
 		},
 		{
-			"<leader>5",
+			"<leader>Td",
 			function()
 				require("neotest").run.run({ strategy = "dap" })
 			end,
-			desc = "커서 근처 테스트 디버그 (IdeaVim Debug)",
+			desc = "커서 근처 테스트 디버그",
 		},
 		{
 			"<leader>Ta",
 			function()
-				require("neotest").run.run(vim.uv.cwd())
+				require("miniminjae.test_tool_window").run(vim.uv.cwd())
 			end,
 			desc = "프로젝트 전체 테스트",
 		},
@@ -82,9 +96,16 @@ return {
 		{
 			"<leader>To",
 			function()
-				require("neotest").output.open({ enter = true, auto_close = true })
+				require("miniminjae.test_tool_window").toggle()
 			end,
-			desc = "테스트 출력 보기",
+			desc = "테스트 도구 창 열기 / 숨기기",
+		},
+		{
+			"<leader>Ty",
+			function()
+				require("miniminjae.test_tool_window").copy_all()
+			end,
+			desc = "테스트 결과 복사",
 		},
 	},
 }
