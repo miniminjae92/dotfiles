@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test List"
+  short_description: "요구사항을 살아 있는 테스트 목록과 설계 기록으로 관리"
+  default_prompt: "$test-list로 이 미션의 요구사항을 WHAT 중심 테스트 목록으로 분해하고 설계 기록을 검토해줘."
