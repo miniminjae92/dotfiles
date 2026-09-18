@@ -1,0 +1,4 @@
+interface:
+  display_name: "Java Refactoring Coach"
+  short_description: "Java 객체지향 리팩터링의 다음 한 수를 제안합니다"
+  default_prompt: "$java-refactoring-coach로 현재 Java 변경에서 가장 중요한 리팩터링 인사이트를 알려 주세요."
