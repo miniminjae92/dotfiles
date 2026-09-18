@@ -20,7 +20,8 @@ set hlsearch
 set ignorecase
 set smartcase
 set incsearch
-set relativenumber
+set number
+" set relativenumber
 set notimeout
 " set timeoutlen=300
 
