@@ -138,6 +138,13 @@ return {
 	},
 	keys = {
 		{
+			"<leader>nh",
+			function()
+				require("snacks").notifier.show_history()
+			end,
+			desc = "알림 기록 열기 (복사 가능)",
+		},
+		{
 			"<leader>ee",
 			function()
 				require("snacks").explorer()
