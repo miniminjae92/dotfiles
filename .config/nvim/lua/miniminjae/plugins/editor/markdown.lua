@@ -1,4 +1,4 @@
--- 마크다운을 "읽기 좋게" 만드는 네 가지: 버퍼 안 렌더, 브라우저 미리보기, 이미지 붙여넣기, 표 정렬.
+-- 마크다운을 읽고 쓰기 좋게 만드는 다섯 가지: 목록 편집, 버퍼 안 렌더, 브라우저 미리보기, 이미지 붙여넣기, 표 정렬.
 local mdview_job
 local intentionally_stopped_jobs = {}
 
@@ -101,6 +101,46 @@ local function toggle_mdview()
 end
 
 return {
+	-- Enter로 불릿, 번호, 체크박스 목록을 잇는다. 후보를 고른 상태에서는 blink.cmp의 확정을 우선한다.
+	{
+		"bullets-vim/bullets.vim",
+		ft = { "markdown", "mdx" },
+		init = function()
+			vim.g.bullets_enabled_file_types = { "markdown", "mdx" }
+			-- <C-d>, >>, o 등 기존 편집 키를 덮지 않고 새 목록에 필요한 Enter만 직접 연결한다.
+			vim.g.bullets_set_mappings = 0
+		end,
+		config = function()
+			local function attach(buf)
+				local filetype = vim.bo[buf].filetype
+				if filetype ~= "markdown" and filetype ~= "mdx" then
+					return
+				end
+
+				vim.keymap.set("i", "<CR>", function()
+					local loaded, blink = pcall(require, "blink.cmp")
+					if loaded and blink.get_selected_item() then
+						blink.accept()
+						return ""
+					end
+
+					return "<Plug>(bullets-newline)"
+				end, { buffer = buf, expr = true, remap = true, desc = "목록 이어 쓰기 / 완성 확정" })
+			end
+
+			local group = vim.api.nvim_create_augroup("miniminjae_markdown_bullets", { clear = true })
+			vim.api.nvim_create_autocmd("FileType", {
+				group = group,
+				pattern = { "markdown", "mdx" },
+				callback = function(ev)
+					attach(ev.buf)
+				end,
+			})
+
+			attach(vim.api.nvim_get_current_buf())
+		end,
+	},
+
 	-- 편집 중인 버퍼에서 헤딩·코드블록·표를 바로 렌더한다
 	{
 		"MeanderingProgrammer/render-markdown.nvim",

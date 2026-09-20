@@ -22,7 +22,7 @@ IntelliJ급 자바 개발을 터미널에서 하되, **모든 조각이 왜 있�
 │   └── plugins/
 │       ├── ui/               보이는 것 — colorscheme, lualine, bufferline, snacks, colorizer
 │       ├── editor/           움직이는 것 — fzf-lua, oil, gitsigns, trouble, persistence,
-│       │                     which-key, todo-comments, 마크다운 4종, kulala, diffview,
+│       │                     which-key, todo-comments, 마크다운 5종, kulala, diffview,
 │       │                     grug-far, obsidian, dadbod, maximizer, treesitter-context
 │       ├── coding/           쓰는 것 — blink.cmp, conform, nvim-lint, surround, mini.pairs,
 │       │                     ts-comments, substitute, cosco, ts-autotag
@@ -128,6 +128,8 @@ jdtls가 두 번 기동됐고(`vim.lsp` 경로 + `nvim-jdtls` 경로), 워크스
 | `<C-l>` / `<C-h>` | 스니펫 다음 / 이전 자리 |
 
 아무것도 미리 선택돼 있지 않다. 엔터를 잘못 눌러 엉뚱한 후보가 박히는 일을 막기 위해서다.
+Markdown과 MDX에서는 목록 안의 `<CR>`이 다음 불릿, 번호, 체크박스를 만든다. 완성 후보를 직접 고른
+상태에서는 목록보다 후보 확정을 우선한다. 빈 목록에서 한 번 더 누르면 목록을 끝낸다.
 
 ### leader 그룹
 
