@@ -30,6 +30,21 @@ Check Java-specific correctness when it bears on the design, including collectio
 nullability, equality, exceptions, transaction boundaries, and framework lifecycle. Do not turn this
 into an exhaustive defect audit; route a completed branch or PR audit to `code-review`.
 
+Apply these Java naming and readability conventions when they bear on the current change:
+
+- Start method names with a verb that states the operation. Reserve `get` for a field or property getter.
+- Use `find` for a lookup where absence is a normal result, commonly returned as `Optional<T>`.
+- Start boolean questions with `is`, `has`, or `can`, and name commands with the action they perform.
+- Prefer direct control flow over a fluent chain when the chain is harder for the developer to read. Use
+  `flatMap` when it genuinely flattens nested containers and makes composition clearer, not merely to avoid
+  an `if` statement.
+- Give `orElseThrow` an exception supplier whose type and message identify the violated contract and affected
+  variable; avoid the context-free no-argument form. Order exception messages as failure reason, variable name,
+  then a safe diagnostic value so stable, important information appears first. Write a one-off message as a
+  string literal at the throw site instead of creating a second constant or variable to maintain. Include an
+  actual value only when it materially helps diagnosis and is not a credential, token, personal datum, or other
+  sensitive value.
+
 ## Judge
 
 Recommend a refactoring only when the current code shows a concrete cost: duplicated decisions,

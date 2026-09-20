@@ -13,6 +13,8 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) so test names and 
 
 Tests verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't. A good test reads like a specification — "user can checkout with valid cart" tells you exactly what capability exists — and survives refactors because it doesn't care about internal structure.
 
+테스트 이름은 테스트가 관찰하는 경계의 언어로 작성한다.
+
 Treat one test responsibility as one observable behavior that can change independently. Splitting assertions against the same broad interface does not create smaller responsibilities by itself.
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking guidelines.
