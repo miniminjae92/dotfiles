@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development for unit and integration tests. Use when the user wants to build or fix behavior test-first, write Java unit tests, choose a test seam, or run a red-green loop.
+description: Test-driven development for features, bug fixes, and test design. Use when the user wants to write or refactor unit or integration tests, derive a public interface from tests, work test-first, or run a red-green loop, including Java test work.
 ---
 
 # Test-Driven Development
@@ -19,6 +19,18 @@ Treat one test responsibility as one observable behavior that can change indepen
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking guidelines.
 
+## Derive the interface from behavior
+
+Use this order for a new behavior:
+
+1. Express the required observable behavior as a failing test.
+2. Derive the cohesive module and public interface that can provide that behavior.
+3. Add only enough implementation to pass the test.
+
+The test drives the public interface. Add a public method when it expresses a cohesive capability for callers, not merely to expose an internal step to tests. Verify behavior through that interface and leave private implementation free to change.
+
+When starting from a `test-list`, take one unchecked observable behavior into this loop. Do not implement the whole list horizontally.
+
 ## Seams — where tests go
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
@@ -36,6 +48,15 @@ For a new behavior, let the test drive the smallest cohesive module and public i
 - **Implementation-coupled** — mocks internal collaborators, tests private methods, or verifies through a side channel (querying the database instead of using the interface). The tell: the test breaks when you refactor but behavior hasn't changed.
 - **Tautological** — the assertion recomputes the expected value the way the code does (`expect(add(a, b)).toBe(a + b)`, a snapshot derived by hand the same way, a constant asserted equal to itself), so it passes by construction and can never disagree with the code. Expected values must come from an independent source of truth — a known-good literal, a worked example, the spec.
 - **Horizontal slicing** — writing all tests first, then all implementation. Bulk tests verify _imagined_ behavior: you test the _shape_ of things rather than user-facing behavior, the tests go insensitive to real changes, and you commit to test structure before understanding the implementation. Work in **vertical slices** instead — one test → one implementation → repeat, each test a **tracer bullet** that responds to what the last cycle taught you.
+
+## Existing behavior
+
+When code already implements the behavior, first identify its current public interface and existing evidence.
+
+- A test added after the implementation is a regression test or characterization test, not a Red in a TDD loop.
+- Repeating the same large public interface with one assertion per test does not create smaller responsibilities.
+- Derive a new module and public interface only when an independently changing behavior needs a cohesive owner.
+- Keep test parsing, fixture construction, and other observation mechanics in test support code rather than promoting them to product responsibilities.
 
 ## Rules of the loop
 
