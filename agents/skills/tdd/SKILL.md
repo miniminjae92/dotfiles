@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+description: Test-driven development for unit and integration tests. Use when the user wants to build or fix behavior test-first, write Java unit tests, choose a test seam, or run a red-green loop.
 ---
 
 # Test-Driven Development
@@ -12,6 +12,8 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) so test names and 
 ## What a good test is
 
 Tests verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't. A good test reads like a specification — "user can checkout with valid cart" tells you exactly what capability exists — and survives refactors because it doesn't care about internal structure.
+
+Treat one test responsibility as one observable behavior that can change independently. Splitting assertions against the same broad interface does not create smaller responsibilities by itself.
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking guidelines.
 
@@ -25,6 +27,8 @@ Ask: "What's the public interface, and which seams should we test?"
 
 When the shape of that interface is itself in question — how deep the module is, where the seam belongs, what the interface should expose — use the `/codebase-design` skill for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
 
+For a new behavior, let the test drive the smallest cohesive module and public interface needed by that behavior. Do not add public methods only to expose private implementation to tests. If only a broad public interface exists, repeated focused tests at that same interface may improve failure messages, but they do not prove that responsibility has been decomposed.
+
 ## Anti-patterns
 
 - **Implementation-coupled** — mocks internal collaborators, tests private methods, or verifies through a side channel (querying the database instead of using the interface). The tell: the test breaks when you refactor but behavior hasn't changed.
@@ -35,4 +39,5 @@ When the shape of that interface is itself in question — how deep the module i
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
+- **Classify honestly.** A test added after the behavior exists is a regression or characterization test, not a TDD cycle.
 - **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
