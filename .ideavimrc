@@ -179,9 +179,9 @@ Plug 'tpope/vim-surround'
 " See https://github.com/terryma/vim-multiple-cursors for details
 """
 Plug 'terryma/vim-multiple-cursors'
-map mm <A-n>
-map mx <A-x>
-map mp <A-p>
+map mm <C-n>
+map mx <C-x>
+map mp <C-p>
 
 " -- Reference
 " You can find a list of commands here: https://jb.gg/h38q75
