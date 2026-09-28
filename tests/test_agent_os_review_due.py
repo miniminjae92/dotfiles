@@ -93,6 +93,57 @@ class AgentOsReviewDueTest(unittest.TestCase):
         self.assertEqual(report["immediate_runs"], ["2026-08-04-incident.md"])
         self.assertEqual(report["unreviewed_run_files"], ["2026-08-04-incident.md"])
 
+    def test_explicitly_reviewed_run_does_not_reappear_after_its_file_is_edited(self):
+        now = time.time()
+        self.write(
+            self.periodic,
+            "2026-09-01-review.md",
+            body="---\nsource_runs: 2026-08-01-reviewed.md, 2026-08-02-reviewed.md\n---\n",
+            mtime=now - 200,
+        )
+        self.write(
+            self.runs,
+            "2026-08-01-reviewed.md",
+            body="accepted_success: false\n",
+            mtime=now - 100,
+        )
+        self.write(self.runs, "2026-08-02-reviewed.md", mtime=now - 100)
+        self.write(self.runs, "2026-09-02-new.md", mtime=now - 100)
+
+        report = self.run_due()
+
+        self.assertEqual(report["unreviewed_run_files"], ["2026-09-02-new.md"])
+        self.assertEqual(report["immediate_runs"], [])
+
+    def test_yaml_list_of_reviewed_runs_is_respected(self):
+        now = time.time()
+        self.write(
+            self.periodic,
+            "2026-09-01-review.md",
+            body="---\nsource_runs:\n  - 2026-08-01-a.md\n  - 2026-08-02-b.md\ntrigger: run_threshold\n---\n",
+            mtime=now - 200,
+        )
+        for name in ("2026-08-01-a.md", "2026-08-02-b.md", "2026-09-02-new.md"):
+            self.write(self.runs, name, mtime=now - 100)
+
+        report = self.run_due()
+
+        self.assertEqual(report["unreviewed_run_files"], ["2026-09-02-new.md"])
+
+    def test_aggregate_count_does_not_claim_to_review_unnamed_runs(self):
+        now = time.time()
+        self.write(
+            self.periodic,
+            "2026-09-01-review.md",
+            body="---\nsource_runs: 50 unreviewed Runs\nreviewed_run_count: 50\n---\n",
+            mtime=now - 200,
+        )
+        self.write(self.runs, "2026-08-01-unknown.md", mtime=now - 100)
+
+        report = self.run_due()
+
+        self.assertEqual(report["unreviewed_run_files"], ["2026-08-01-unknown.md"])
+
 
 if __name__ == "__main__":
     unittest.main()

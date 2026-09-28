@@ -30,7 +30,24 @@ reviews = Dir.glob(File.join(vault, "40 Reviews", "Periodic", "*.md"))
              .reject { |path| File.basename(path) == "README.md" }
 
 last_review_at = reviews.map { |path| File.mtime(path) }.max
-unreviewed = runs.select { |path| last_review_at.nil? || File.mtime(path) > last_review_at }
+# Review에 명시된 Run은 이후 본문을 고쳐도 이미 검토한 것으로 본다.
+# 집계 수만 적힌 옛 Review는 대상 파일을 알 수 없으므로 기존 mtime 판정을 유지한다.
+reviewed_files = reviews.flat_map do |path|
+  frontmatter = File.read(path, encoding: "UTF-8").match(/\A---\s*\n(.*?)\n---\s*\n/m)&.captures&.first
+  next [] unless frontmatter
+
+  source = frontmatter.match(/^source_runs:\s*(.*)$/)
+  next [] unless source
+
+  lines = [source[1]]
+  following = frontmatter.lines.drop_while { |line| !line.start_with?("source_runs:") }.drop(1)
+  lines.concat(following.take_while { |line| line.match?(/^\s+-\s+/) })
+  lines.flat_map { |line| line.scan(/[\p{L}\p{N}_.-]+\.md/) }
+end.uniq
+unreviewed = runs.select do |path|
+  !reviewed_files.include?(File.basename(path)) &&
+    (last_review_at.nil? || File.mtime(path) > last_review_at)
+end
 oldest_unreviewed_at = unreviewed.map { |path| File.mtime(path) }.min
 days_open = oldest_unreviewed_at ? ((Time.now - oldest_unreviewed_at) / 86_400).floor : 0
 

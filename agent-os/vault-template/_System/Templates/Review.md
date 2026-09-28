@@ -4,7 +4,7 @@ status: archived
 origin: agent
 created:
 period:
-source_runs:
+source_runs: [] # 검토한 Run 파일명을 목록으로 적는다. 개수만 적으면 재검토 여부를 판정할 수 없다.
 trigger:
 reviewed_run_count:
 ---
