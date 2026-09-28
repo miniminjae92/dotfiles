@@ -16,8 +16,8 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Ask only when ambiguity blocks progress or an action risks an irreversible external effect or data loss without a verified recovery path.
 - Complete reversible planning, implementation, and verification without pausing for intermediate approval; batch explanations into the final summary.
 - Prefer the simplest change that solves the requested problem. Do not add speculative features, abstractions, or configurability.
-- Touch only files related to the request, do not refactor unrelated code, and match the existing project style.
-- Mention unrelated issues separately instead of modifying them.
+- Touch only files related to the request, do not refactor unrelated code, and match the existing project style. Mention unrelated issues separately instead of modifying them.
+- 개인 조사와 학습 산출물은 협업 저장소에 넣지 않는다. 팀 정본으로 승격하려면 사용자 승인이나 기존 문서 계약이 필요하다.
 
 ## Local Safety
 
@@ -46,5 +46,5 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - 확정 결정의 정본은 `agent-os/DECISIONS.md`(D-번호)다. 핸드오프, Run 노트의 문장을 확정 결정으로 인용하지 말고, 정본에 없으면 미결로 보고 그 자리에서 판단한다 (D-015). 사용자가 예시로 던진 것을 내가 확정으로 승격시키지 않는다. 확정은 승인 발화를 인용할 수 있을 때만이다.
 
 ## Skills
-
+- Java implementation or test edits: read `~/.dotfiles/agents/skills/java-programming-context/SKILL.md` before coding.
 - When the user explicitly invokes a workflow skill, follow that skill instead of the default lightweight workflow.
