@@ -74,7 +74,7 @@ alias gdw='git diff --word-diff'
 
 # ---- log ----
 
-alias glog='git log --oneline --decorate --graph'
+alias glog='git log --graph --oneline --all --decorate'
 alias glo='git log --oneline --decorate'
 alias glg='git log --stat'
 alias glol='git log --graph --pretty="%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ar) %C(bold blue)<%an>%Creset"'
@@ -133,6 +133,7 @@ alias grev='git revert'
 # ---- worktree ----
 
 alias gwt='git worktree'
+alias gwtl='git worktree list'
 
 # ---- WIP 관용구 ----
 
