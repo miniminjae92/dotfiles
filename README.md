@@ -129,6 +129,15 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     sessions, Keychain items, or per-project Codex trust. `--skip-projects` limits
     the run to dotfiles and the agent environment.
 
+    `agent-master` is in `agent-os/projects.manifest`, so `psync apply` installs
+    and updates its Git repository on both machines. Run
+    `~/projects/agent-master/install.sh` once on each machine to link `am`.
+    Keep `~/.local/state/agent-master` local to each machine: it contains task
+    records, approvals, and Codex sessions. Share am code and policy changes by
+    committing and pushing `~/projects/agent-master`, then pulling on the other
+    machine. A changed `policy/` is not activated by Git pull; use am's
+    `version stage`, `version verify`, and `version activate` workflow there.
+
     Read-only health check over symlinks, required tools, agent CLI auth, launchd
     jobs, and model-registry drift. It never changes state; the exit code is the
     number of `FAIL` findings. `WARN` lines are usually the per-machine steps in

@@ -16,6 +16,7 @@
 !ww-project
 
 agent-notify	git@github.com:miniminjae92/agent-notify.git	all
+agent-master	git@github.com:miniminjae92/agent-master.git	all
 agentos-monitor	git@github.com:miniminjae92/agentos-monitor.git	all
 algorithm	git@github.com:miniminjae92/algorithm.git	all
 asx	git@github.com:miniminjae92/asx.git	all
