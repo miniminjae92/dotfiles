@@ -1,87 +1,157 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: 코드 변경, PR, 브랜치 또는 지정한 구현을 정확성, 변경 용이성, 이해 용이성으로 리뷰한다. 중요한 발견과 판단 근거, 대안, 미확인 조건을 정리한다. 한국어 코멘트 작성까지 요청되면 korean-review-comments로 연결한다. 문서 검토나 코드 구현 요청에는 사용하지 않는다.
 ---
 
-Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+# Code Review
 
-- **Standards** — does the code conform to this repo's documented coding standards?
-- **Spec** — does the code faithfully implement the originating issue / spec?
+## 목적과 역할
 
-Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
+요구사항을 올바르게 충족하고, 변경하기 쉬우며, 사람이 정확하게 이해할 수 있는 소프트웨어를 만드는 데 기여한다.
 
-The issue tracker should have been provided to you — run `/setup-matt-pocock-skills` if `docs/agents/issue-tracker.md` is missing.
+에이전트는 코드 탐색, 근거 수집, 검증과 대안 비교를 맡는다. 사용자는 중요한 발견 사항부터 확인하고, 근거를 이해한 뒤 리뷰 의견과 설계 선택을 결정할 수 있어야 한다. 작성자에게 전달할 표현은 분석이 끝난 뒤 별도로 다룬다.
 
-## Process
+- 정확성, 변경 용이성, 이해 용이성의 순서로 검토한다. 보고 순서는 기준의 종류가 아니라 실제 영향과 발생 조건에 따라 정한다.
+- 확인한 사실, 추론, 아직 모르는 조건을 구분한다. 테스트 통과만으로 요구사항 전체의 충족을 선언하지 않는다.
+- 설계 대안을 제시할 때는 현재 조건에 맞는 권고와 이유를 밝힌다. 우열이 불명확하면 판단을 바꾸는 조건을 설명한다. 최종 설계 선택은 사용자에게 맡긴다.
+- 리뷰 의견은 코드에 관한 것이어야 한다. 작성자의 능력, 의도, 성격을 추정하지 않는다.
+- 사용자가 수정을 요청한 범위가 없다면 제품 코드와 기존 테스트를 수정하지 않는다. 최소 재현이 필요하면 임시 작업 공간을 사용한다.
+- 코멘트는 기본적으로 초안이다. 외부 게시와 승인, 변경 요청 같은 리뷰 상태 변경은 사용자가 해당 행동을 명시적으로 요청한 범위에서 수행한다.
 
-### 1. Pin the fixed point
+## 1. 범위와 판단 근거 정하기
 
-Whatever the user said is the fixed point — a commit SHA, branch name, tag, `main`, `HEAD~5`, etc. If they didn't specify one, ask for it.
+사용자의 요청에서 리뷰 대상, 목적, 요구사항, 제약을 확인한다. 이미 제공된 내용을 다시 질문하지 않는다.
 
-Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+- 변경 리뷰: 비교 기준과 대상 버전, 포함하는 미커밋 변경을 확인한다. 변경으로 발생하거나 악화된 문제를 중심으로 보고한다.
+- 구현 리뷰: 지정한 클래스, 모듈 또는 기능과 그 계약을 대상으로 삼는다.
+- 두 경우 모두 판단에 필요한 호출자, 의존 대상과 테스트를 함께 읽는다. 관련된 기존 문제를 보고할 때는 이번 변경과의 관계를 밝힌다.
+- 범위가 생략되었으면 제공된 코드와 작업 상태를 확인한다. 합리적인 범위가 하나로 정해지면 이를 밝히고 진행한다. 서로 다른 해석이 리뷰 결과를 바꾸는 경우에만 질문한다.
 
-Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside two parallel sub-agents.
+미션 원문, 완료 조건, 승인된 설계와 저장소의 규칙을 확인하고 구현 및 테스트와 대응시킨다. 테스트와 기존 구현은 현재 동작의 증거이지만, 그 자체가 항상 의도한 요구사항의 정본인 것은 아니다.
 
-### 2. Identify the spec source
+자료가 충돌하면 각각이 주장하는 계약과 충돌 지점을 밝힌다. 해결되지 않은 해석을 확정 요구사항으로 삼지 않는다. 정보가 없는 부분은 확인 가능한 범위를 리뷰하고, 남은 판단 조건을 기록한다.
 
-Look for the originating spec, in this order:
+## 2. 세 가지 품질 기준
 
-1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.) — fetch via the workflow in `docs/agents/issue-tracker.md`.
-2. A path the user passed as an argument.
-3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
-4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
+### 정확성
 
-### 3. Identify the standards sources
+요구사항을 충족하며 실제로 올바르게 동작하는지 평가한다.
 
-Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
+- 요구사항의 누락, 정상 상황, 예외 상황, 경계 조건과 기존 계약의 회귀를 확인한다.
+- 변경과 관련된 보안, 데이터 무결성, 동시성, 성능의 실패 경로를 추적한다. 관련성을 확인하지 않은 항목을 일괄 점검 목록으로 확대하지 않는다.
+- 테스트가 요구사항의 관찰 가능한 결과를 검증하는지 확인한다.
+- 가능한 경우 관련 테스트나 최소 재현으로 의심한 문제를 검증한다. 실행하지 못해도 코드와 계약으로 성립이 확인되는 문제는 그 논리를 설명할 수 있다.
+- 요구사항에 없는 동작이나 추측한 의도를 새로운 계약으로 확정하지 않는다.
 
-On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
+### 변경 용이성
 
-- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
-- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation — and, like any standard here, skip anything tooling already enforces.
+근거 있는 변경이 발생할 때 수정 범위와 위험을 줄일 수 있는지 평가한다.
 
-Each smell reads *what it is* → *how to fix*; match it against the diff:
+1. 현재 요구사항, 도메인 규칙 또는 변경 이력에서 근거 있는 변경 시나리오를 선정한다.
+2. 현재 구조에서 수정할 지점, 영향을 받는 기능, 필요한 검증을 추적한다.
+3. 대안이 줄이는 수정 범위와 결합을, 추가하는 간접 참조, 상태, 설정 및 검증 부담과 비교한다. 전환에 필요한 수정과 재검증 비용도 포함한다.
+4. 대안의 이점이 현재 조건에서 변경 비용을 감수할 만한지 판단한다. 현재 구조를 유지하는 선택도 비교하고 권고할 수 있다.
 
-- **Mysterious Name** — a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
-- **Duplicated Code** — the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
-- **Feature Envy** — a method that reaches into another object's data more than its own. → move the method onto the data it envies.
-- **Data Clumps** — the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
-- **Primitive Obsession** — a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
-- **Repeated Switches** — the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
-- **Shotgun Surgery** — one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
-- **Divergent Change** — one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
-- **Speculative Generality** — abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
-- **Message Chains** — long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
-- **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
-- **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
+책임의 결합, 서로 다른 이유로 바뀌는 코드의 결합, 동일한 정책의 중복, 추상화가 실제 변경에 미치는 효과를 살핀다. 비슷하게 생긴 코드가 같은 정책을 표현하는지는 따로 확인한다.
 
-### 4. Spawn both sub-agents in parallel
+클래스나 인터페이스의 수, 구현체가 하나라는 사실, 코드 길이, 추상화 계층 수, 특정 패턴의 미사용만으로 문제를 선언하지 않는다. 근거 없는 미래 요구사항을 만들거나, 미래 요구사항이 명시되지 않았다는 이유만으로 기존 추상화를 부정하지 않는다.
 
-**Standards sub-agent prompt** — include:
+오버엔지니어링은 검증할 가설이다. 이 표현을 쓴다면 구조가 추가하는 구체적인 비용과 얻는 이점을 설명한다.
 
-- The full diff command and commit list.
-- The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full — the sub-agent has no other access to it.
-- The brief: "Report — per file/hunk where relevant — (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
+### 이해 용이성
 
-**Spec sub-agent prompt** — include:
+호출자와 유지보수자가 실제 동작과 의도를 정확하게 예측할 수 있는지 평가한다.
 
-- The diff command and commit list.
-- The path or fetched contents of the spec.
-- The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
+- 이름과 실제 역할, 입력, 출력, 부작용 및 전제조건이 일치하는지 확인한다.
+- 조건과 분기의 의미, 상태 변화, 암묵적 지식을 추적한다.
+- 네이밍 문제를 제시할 때는 예상되는 해석과 실제 동작의 차이를 설명한다.
+- 명령과 조회의 분리처럼 알려진 설계 원칙은 판단 도구로 사용한다. 원칙의 이름만으로 변경을 요구하지 않는다.
+- 메서드 길이만으로 분리를 권고하지 않는다. 자동 포맷터로 해결되는 단순 스타일 차이는 원칙적으로 보고하지 않는다.
+- 리뷰어가 도메인에 익숙하지 않아서 생긴 질문과, 일반적인 코드 독자도 겪을 오해를 구분한다.
 
-If the spec is missing, skip the Spec sub-agent and note this in the final report.
+책임의 결합이 만드는 수정 부담은 변경 용이성에서, 의미의 불명확함은 이해 용이성에서 설명한다. 같은 원인의 문제는 한 번 보고하고 필요하면 두 영향을 함께 설명한다.
 
-### 5. Aggregate
+## 3. 발견 사항을 검증하고 분류하기
 
-Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings — the two axes are deliberately separate (see _Why two axes_).
+발견 사항마다 성립 조건, 근거와 반례를 확인한다. 다른 호출 경로의 보장, 앞선 검증, 명시된 제약 때문에 지적이 성립하지 않는지 확인한다. 추상적인 평가만 남는 지적과 중복은 제거한다.
 
-End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes — that's the reranking the separation exists to prevent.
+동작 차이를 재현했다면 기대 동작의 근거를 요구사항, 공개 계약 또는 보장하기로 한 기존 동작에서 확인한다. 재현 결과는 실제 동작의 증거이며, 수정 필요성은 그 동작이 계약을 위반하는지로 판단한다. 근거가 없는 경우에는 관찰 사실로 남기고, 이번 변경에서 논의할 가치가 있는지 판단한 뒤 설계 질문으로 전달하거나 생략한다.
 
-## Why two axes
+| 분류 | 성립 조건 | 설명할 내용 |
+|---|---|---|
+| 확인된 문제 | 코드, 계약, 요구사항 또는 실행 결과로 결함이 확인됨 | 위치, 위반한 계약, 발생 조건, 영향, 수정 방향 |
+| 잠재적 위험 | 구체적인 실패 경로가 있으나 성립에 필요한 조건이 아직 확인되지 않음 | 실패 경로, 확인하지 못한 조건, 영향, 검증 방법 |
+| 개선 제안 | 현재 구현에 구체적인 변경 부담이나 오해 가능성이 있고, 비교할 가치가 있는 대안이 있음 | 현재 부담, 대안과 유지안의 이점 및 비용, 권고 |
+| 설계 질문 | 의도나 제약에 따라 판단이 달라지며 자료만으로 해소되지 않음 | 관찰한 코드, 필요한 정보, 답에 따라 달라지는 판단 |
 
-A change can pass one axis and fail the other:
+대안이 존재한다는 사실만으로 개선 제안을 만들지 않는다. 문제가 없는 코드에는 개선 사항을 채워 넣지 않는다.
 
-- Code that follows every standard but implements the wrong thing → **Standards pass, Spec fail.**
-- Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
+중요도는 분류와 별개로 정한다.
 
-Reporting them separately stops one axis from masking the other.
+- 높음: 데이터 손실, 보안 경계 위반, 핵심 기능 중단 등 영향이 큰 경우.
+- 보통: 특정 조건의 요구사항 위반이나 반복적인 수정 부담, 의미 있는 오해 가능성이 있는 경우.
+- 낮음: 영향이 제한적인 국소 개선인 경우.
+
+중요도에는 영향 범위와 발생 조건을 근거로 붙인다. 미확인이라는 이유만으로 큰 위험을 낮추거나, 확인됐다는 이유만으로 사소한 문제를 높이지 않는다. 판단할 정보가 없으면 중요도도 미정으로 표시한다.
+
+관련 테스트를 실행한 경우 명령, 결과와 검증한 범위를 기록한다. 실행하지 않은 검증과 실행했으나 환경 문제로 완료하지 못한 검증을 구분한다. 추가 검증이 판단을 바꾸지 않는다면 반복 실행하지 않는다.
+
+검토 완료 시점에는 명시한 대상 범위를 살폈고, 보고하는 지적의 성립 조건을 확인했으며, 남은 검증 한계를 설명할 수 있어야 한다. 범위 일부를 살피지 못했다면 부분 리뷰로 명시한다.
+
+## 4. 사용자가 읽는 결과 구성
+
+사용자가 첫 부분만 읽어도 무엇을 먼저 확인해야 하는지 알 수 있게 한다. 상세 근거는 해당 발견 사항 가까이에 배치한다. 사용자가 출력 형식을 지정했다면 그 형식에 맞춘다.
+
+### 먼저 확인할 내용
+
+- 전체 판단과 검토 범위를 짧게 적는다. 확인된 주요 위험과 결론을 제한하는 미확인 조건을 포함한다.
+- 발견 사항을 중요도에 따라 한 줄씩 요약한다. 각 줄에 분류, 중요도, 위치, 발생 조건과 영향, 사용자가 확인하거나 결정할 내용을 담는다.
+- 상세 설명과 연결되는 번호 또는 링크를 제공한다. 중요한 발견 사항을 임의의 개수 제한 때문에 누락하지 않는다.
+- 지적이 없으면 확인한 범위에서 문제를 발견하지 못했다고 말한다. 검증하지 않은 범위까지 안전하다고 보증하지 않는다.
+
+### 근거와 이해
+
+각 발견 사항은 사용자가 코드를 다시 전부 탐색하지 않아도 판단할 수 있을 만큼 설명한다. 위치는 가능한 경우 파일 링크와 관련 줄 번호로 특정하고, 어떤 버전을 본 것인지 알 수 있게 한다.
+
+분류별 필수 내용에 맞춰 다음 흐름을 활용한다. 정보를 모르는 항목은 양식을 채우기 위해 만들어내지 않는다.
+
+1. 이 코드가 하는 일과 기대한 계약.
+2. 특정 입력이나 상태가 실제 코드 경로를 지나며 만드는 결과.
+3. 그 차이가 결함, 위험 또는 개선 대상으로 이어지는 이유.
+4. 수정 방향 또는 대안, 현재 조건에서의 권고.
+
+코드 일부가 이해에 필요하면 관련 부분만 인용한다. 문제와 해결책을 구분하고, 작성자의 설계를 대신 완성하는 데 불필요하게 범위를 쓰지 않는다.
+
+학습 설명은 현재 판단에 필요한 개념에 붙인다. 낯선 용어는 처음 나오는 자리에서 정의하고, 구체적인 코드 흐름을 설명한 뒤 일반 원칙을 연결한다. 모든 발견 사항에 같은 길이의 강의나 퀴즈를 붙이지 않는다.
+
+재사용할 가치가 있는 판단이 있다면 짧게 남긴다. 예를 들어 다음 리뷰에서 무엇을 보면 같은 위험을 알아볼 수 있는지 설명한다. 실제로 잘된 선택도 그 효과를 근거로 설명할 수 있다. 긍정적인 평가의 개수를 의무적으로 채우지는 않는다.
+
+### 검증 현황과 남은 결정
+
+실행한 검증, 확인하지 못한 범위, 사용자가 결정해야 할 요구사항 해석이나 설계 선택을 정리한다. 같은 설명을 반복하기보다 해당 발견 사항을 참조한다. 에이전트가 추가로 확인할 수 있는 사실 조사를 사용자에게 떠넘기지 않는다.
+
+## 5. 다음 판단에 필요한 근거 남기기
+
+리뷰 결과만 읽고도 각 발견의 타당성을 판단하고 코멘트를 작성할 수 있어야 한다. 다음 정보는 해당 발견의 설명 안에 남긴다. 별도 양식을 반복해서 채울 필요는 없으며, 해당하지 않는 항목은 생략한다.
+
+| 정보 | 남길 내용 |
+|---|---|
+| 대상과 사실 | 버전, 코드 위치, 관찰한 구현과 호출 경로 |
+| 판단 근거 | 요구사항이나 계약, 구체적인 발생 조건과 영향, 확인한 증거 |
+| 확신의 경계 | 발견의 분류와 중요도, 사실과 추론, 아직 확인하지 못한 조건 |
+| 선택의 비교 | 설계 의견이라면 현재 선택의 이점과 부담, 유지안과 대안의 비용, 현재 권고 |
+| 남은 판단 | 어떤 정보가 있으면 판단이 달라지는지, 작성자에게만 확인할 수 있는 이유나 제약 |
+
+- 코드나 테스트로 알아낼 수 있는 사실은 먼저 확인한다. 작성자에게 할 질문으로 조사를 대신하지 않는다.
+- 현재 선택의 이점이나 대안의 비용을 모르면 그 범위를 밝힌다. 균형을 맞추려고 장단점을 만들어내지 않는다.
+- 설계 질문에는 답이 판단을 어떻게 바꾸는지 남긴다. 이미 PR 설명이나 이전 답변에서 해소된 질문은 제외한다.
+- 좋은 점을 남길 때도 어떤 선택이 어떤 요구사항이나 설계 목적에 기여하는지 설명한다. 사용한 패턴이나 구현 결과를 나열하는 데서 끝내지 않는다. 작성자의 사고 과정은 확인된 발언이 있을 때만 인용한다.
+- 설명을 들은 뒤에도 다음 코드 독자에게 그 지식이 필요하다면, 이름이나 흐름으로 드러낼지 주석이나 관련 문서에 남길지 판단한다. 리뷰 대화에서만 해결할 문제인지도 구분한다.
+
+## 6. 한국어 코멘트로 연결하기
+
+- 리뷰만 요청되면 분석 결과까지 제공한다. 모든 발견을 코멘트로 만들거나 칭찬을 채우지 않는다.
+- 한국어 리뷰 코멘트의 작성, 다듬기 또는 게시를 요청받으면 [korean-review-comments](../korean-review-comments/SKILL.md)를 읽고 적용한다. 분석과 코멘트를 함께 요청받으면 이 리뷰를 마친 뒤 연결한다.
+- 다음 스킬에는 완성된 코멘트 초안만 넘기지 말고, 5절의 근거가 담긴 발견 사항과 관련 PR 설명, 작성자의 기존 답변, 사용자가 전하고 싶은 요점을 전달한다. 다른 세션으로 넘긴다면 대화에만 남은 근거도 포함한다.
+- 코멘트 단계에서 근거 부족이나 모순이 드러나면 해당 발견의 분석을 보충한다. 추가 확인 없이 표현만으로 결함을 확정하거나 설계 제안을 필수 수정으로 바꾸지 않는다.
+- 외부 게시와 리뷰 상태 변경은 사용자가 명시적으로 요청한 범위에서만 수행한다.

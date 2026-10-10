@@ -1,0 +1,4 @@
+interface:
+  display_name: "한국어 코드 리뷰 코멘트"
+  short_description: "리뷰 근거를 살려 선택의 이유를 함께 살피는 한국어 코멘트 작성"
+  default_prompt: "$korean-review-comments로 이 리뷰 결과를 작성자에게 전달할 한국어 코멘트로 다듬어줘."
