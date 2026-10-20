@@ -70,6 +70,7 @@ return {
 		require("lualine").setup({
 			options = { theme = theme },
 			sections = {
+				lualine_c = { { "filename", path = 1, shorting_target = 0 } },
 				lualine_x = {
 					-- 업데이트가 밀려 있으면 여기 숫자가 뜬다
 					{
@@ -81,6 +82,9 @@ return {
 					{ "fileformat" },
 					{ "filetype" },
 				},
+			},
+			inactive_sections = {
+				lualine_c = { { "filename", path = 1, shorting_target = 0 } },
 			},
 		})
 	end,
