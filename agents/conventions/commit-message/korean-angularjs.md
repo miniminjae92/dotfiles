@@ -67,13 +67,13 @@ Generate commit messages in this shape:
 - Do not use sentence endings such as `합니다`, `했다`, `함`, or `입니다` in the subject.
 - Keep the subject concise, preferably 50 Korean characters or fewer.
 - Do not end the subject with a period.
-- Write the body in Korean when it adds useful context.
-- Use bullet points to enumerate what changed; use prose to explain why it changed or what
-  judgment was made. Do not flatten a causal explanation into bullets, because the reasoning is
-  what a future reader actually needs.
-- When the change followed a judgment call, also record the rejected alternative and the
-  dated evidence that decided it, e.g. `(2026-08-05 실기 확인)`. The diff already says the
-  what; the body is the only place the why and the not-chosen survive.
+- Keep the Korean body focused on code changes, their causes, reasons, and relevant constraints
+  that the subject and diff do not explain. Omit work chronology and personal learning.
+- Use concise, natural Korean: noun phrases for change lists, short declarative sentences for
+  reasons. Avoid formal report language and forced sentence endings.
+- Include alternatives or verification evidence only when they explain the final design.
+  Routine test/build results, manual checks, and missing-test reports belong in work records,
+  not a default checklist in every commit body.
 - Omit body and footer when they do not add useful context.
 - Mention breaking changes in the footer as `BREAKING CHANGE: ...`.
 - Return only the commit message. Do not wrap it in Markdown.
@@ -87,7 +87,7 @@ register.
 | Artifact | Addressee | Register | Example |
 |---|---|---|---|
 | Commit subject | none | 명사형 | `feat(auth): 토큰 갱신 흐름 추가` |
-| Commit body | none | 평서형 (`~한다`, `~였다`) | `적재 시점에 계산해 캐시에 굳히면 자정을 넘기지 못한다.` |
+| Commit body | none | 간결한 기록체 (변경은 명사구, 이유는 자연스러운 평서문) | `저장 코드가 종료 검사를 우회해 안내가 다시 표시됐다.` |
 | PR title | none (it labels a change) | 명사형, same as commit subject | `feat: 만료 할인 응답에서 제외` |
 | PR description | reviewer | **존댓말** (`합니다체`) | `…제외합니다. 근거는 ADR-008에 정리했습니다.` |
 | Review comment | a person | **존댓말** | |
