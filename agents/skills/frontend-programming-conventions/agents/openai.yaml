@@ -1,0 +1,4 @@
+interface:
+  display_name: "프론트 프로그래밍 컨벤션"
+  short_description: "이름과 구조로 의도를 드러내는 프론트 설계, 구현, 테스트 기준"
+  default_prompt: "$frontend-programming-conventions를 적용해 현재 프론트 작업의 설계와 코드, 테스트를 검토하고 요청한 범위에서 진행해줘."

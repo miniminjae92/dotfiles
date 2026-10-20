@@ -6,7 +6,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 
 ## Language
 
-- Respond in Korean unless the user explicitly asks for another language.
+- Respond in Korean unless the user explicitly asks for another language. Use English names without spaces for new files and directories; keep existing names unless a rename is requested.
 - Korean writing follows mimir `20 Knowledge/좋은 글 작성 기준.md`. 부호는 예외 없이: 엠대시 `—` 금지(삽입구는 괄호나 문장 분리), 글자 사이 가운뎃점 `·` 금지(쉼표), 슬래시 한쪽만 띄우지 않음. Commit, PR, and issue form follows `~/.config/commit-message-conventions/korean-angularjs.md`.
 
 ## Core Behavior
