@@ -37,3 +37,6 @@ __pycache__/
 # 세션 인계 노트. 로컬 연속성용이라 저장소에 남기지 않는다.
 # 영속 산출물은 mimir 볼트 00 Inbox/agent-handoffs/ 로 간다.
 docs/conversation/
+
+# 개인 테스트 계약 지도는 각 저장소 루트에 로컬로 둔다.
+/TESTMAP.md

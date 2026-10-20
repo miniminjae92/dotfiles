@@ -10,15 +10,20 @@
 
 | upstream | 방식 | 로컬 위치 | 상태 |
 | --- | --- | --- | --- |
-| [mattpocock/skills](https://github.com/mattpocock/skills) | 벤더 (스킬별 VENDOR.md) | `agents/skills/`: active 29종 (2026-08-13 갱신, v1.2.3/84fdeff 기준) + upstream 삭제 2종 로컬 보존(edit-article, obsidian-vault) | 시험 기간 (CLAUDE.md 규약) |
+| [mattpocock/skills](https://github.com/mattpocock/skills) | 벤더 (스킬별 VENDOR.md) | `agents/skills/`: active 25종 (2026-08-13 갱신, v1.2.3/84fdeff 기준, 2026-10-09 미사용 2종 및 tdd 은퇴, code-review 로컬 교체) + upstream 삭제 2종 로컬 보존(edit-article, obsidian-vault) | 시험 기간 (CLAUDE.md 규약) |
 
 - 갱신법: upstream 저장소를 받아 각 스킬의 VENDOR.md 기준 커밋/버전과 diff → 원하는 변경만 반영 → VENDOR.md의 commit과 날짜 갱신. `in-progress` 범주는 active가 아니므로 벤더링하지 않는다.
 - 확인 주기: 정해 두지 않았다. 마지막 두 번의 확인이 2026-08-06 과 2026-08-13 이다. 주기를 정할지는 시험 기간 종료 시 함께 판단한다.
-- 수정 현황: `obsidian-vault` 1건 (자동 발동 봉인, VENDOR.md에 사유 기록, upstream 삭제로 갱신 중단). 나머지 전부 무수정.
+- 수정 현황: `obsidian-vault` 1건 (자동 발동 봉인, VENDOR.md에 사유 기록, upstream 삭제로 갱신 중단). `implement`, `ask-matt`는 2026-10-09 은퇴한 tdd 호출을 testing으로 연결했다(D-033). `ask-matt`의 리뷰 설명은 로컬 code-review에 맞췄다(D-034). 로컬로 교체한 code-review는 상류 갱신 대상에서 제외한다. 나머지 전부 무수정.
 - 플러그인 구독은 2026-07-25 해지 (이중 로드 방지).
 
 ### 갱신 이력
 
+- 2026-10-09, 벤더 code-review를 폐기 보관하고 사용자와 작성한 로컬 스킬로 교체했다. 정확성, 변경 용이성, 이해 용이성 평가와 빠른 확인, 학습 설명, 코멘트 초안을 제공한다. 벤더 active 수에서 제외하며 보관 위치와 복구 방법은 D-034를 따른다.
+
+- 2026-10-09, 로컬 testing/TESTMAP을 적용하고 tdd와 개인 test-list를 폐기 보관했다. 상류 스킬인 tdd만 active 수에서 제외한다. implement, ask-matt의 연결을 갱신했으며 D-033을 따른다.
+
+- 2026-10-09, 로컬 미사용 스킬 `setup-pre-commit`, `migrate-to-shoehorn`을 폐기 보관했다. 상류 버전 갱신은 아니며 보관 위치와 복구 방법은 D-032를 따른다.
 - **2026-08-13, v1.2.2 → v1.2.3 (13커밋).** 차이가 있던 5종만 반영했다. `diagnosing-bugs`
   에 `## Redact` 절이 추가됐다(명령, 출력, 캡처 산출물의 시크릿을 `<REDACTED>` 로 치환하고,
   마스킹한 출력으로 진단이 안 되면 사용자에게 묻는다). `wizard` 는 `TOTAL_MINUTES` 와 남은

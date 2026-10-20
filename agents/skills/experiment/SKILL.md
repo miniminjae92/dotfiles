@@ -1,6 +1,6 @@
 ---
 name: experiment
-description: "Run one decision-bound verification cycle (assumption, pre-registered hypothesis, minimal experiment, judgment) whose working doc doubles as a share-ready artifact. Use when a costly-to-reverse decision rests on an unverified assumption: '이 가정 검증하자', '실험 설계하자', '실험으로 확인하자'. Also to resume or judge a running experiment: '실험 판정하자', '실험 이어서'. 분 단위 코드 사이클은 tdd, diagnosing-bugs가 담당한다."
+description: "Run one decision-bound verification cycle (assumption, pre-registered hypothesis, minimal experiment, judgment) whose working doc doubles as a share-ready artifact. Use when a costly-to-reverse decision rests on an unverified assumption: '이 가정 검증하자', '실험 설계하자', '실험으로 확인하자'. Also to resume or judge a running experiment: '실험 판정하자', '실험 이어서'. 분 단위 코드 사이클은 testing, diagnosing-bugs가 담당한다."
 ---
 
 # experiment: 결정에 걸린 검증 사이클
@@ -9,7 +9,7 @@ description: "Run one decision-bound verification cycle (assumption, pre-registe
 
 ## 진입 기준
 
-되돌리기 비싼 결정이 검증 안 된 하중 가정 위에 서 있을 때 연다. 사소한 판단(T0)은 그 자리에서 처리하고, 분 단위 코드 사이클은 tdd와 diagnosing-bugs로 보낸다. 이 스킬은 시간 단위 이상의 결정 실험 전용이다.
+되돌리기 비싼 결정이 검증 안 된 하중 가정 위에 서 있을 때 연다. 사소한 판단(T0)은 그 자리에서 처리하고, 분 단위 코드 사이클은 testing와 diagnosing-bugs로 보낸다. 이 스킬은 시간 단위 이상의 결정 실험 전용이다.
 
 ## 준비
 

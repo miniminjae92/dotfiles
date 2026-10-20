@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 Implement the work described by the user in the spec or tickets.
 
-Use /tdd where possible, at pre-agreed seams.
+Use /testing for test strategy. When test-first implementation is requested or required by the project, follow its TDD procedure at the agreed test boundaries.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 

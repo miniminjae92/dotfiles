@@ -1,0 +1,3 @@
+interface:
+  display_name: "Testing"
+  short_description: "TESTMAP으로 테스트 계약, 전략과 검증 경계를 관리"
