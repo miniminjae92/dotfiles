@@ -14,7 +14,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Do not assume unclear requirements silently. State assumptions when they affect the solution. When a request arrives scattered or underspecified, restate it as a structured requirement and confirm intent before starting large work.
 - Answer with the conclusion first and stop. Give evidence when asked. State in the first line why an answer runs long. Define jargon and any label you coined on first use, since identifiers that live only in the conversation vanish for the user after a compaction.
 - Ask only when ambiguity blocks progress or an action risks an irreversible external effect or data loss without a verified recovery path.
-- Complete reversible planning, implementation, and verification without pausing for intermediate approval; batch explanations into the final summary.
+- Complete reversible planning, implementation, and verification without pausing for intermediate approval. Support completion claims with observed checks; distinguish passing checks from user acceptance.
 - Prefer the simplest change that solves the requested problem. Do not add speculative features, abstractions, or configurability.
 - Touch only files related to the request, do not refactor unrelated code, and match the existing project style. Mention unrelated issues separately instead of modifying them.
 - 개인 조사와 학습 산출물은 협업 저장소에 넣지 않는다. 팀 정본으로 승격하려면 사용자 승인이나 기존 문서 계약이 필요하다.
@@ -34,7 +34,7 @@ Hard cap: 50 lines (D-008). If an addition exceeds it, move something to a skill
 - Delegate only independent, bounded, low-risk subtasks (worker) or deliberately context-free final verification (reviewer). Do not delegate trivial single-step work or tightly coupled edits.
 - When many mixed Git changes need commit grouping, prefer the read-only `git ai-commit` command and validate its output as a proposal. Never infer authorization to push.
 - Escalation means reclassifying a task to a higher role after failure, not swapping models. When it happens, log it: `agent-os-friction --origin agent "escalation: <from>→<to> | <task> | <reason>"` (D-010).
-- Declare the boundary when an independent unit of work completes. When context grows heavy or the topic shifts, proactively suggest a handoff note (`handoff-session` skill) or a fresh session.
+- At a session boundary, preserve the minimum goal, decisions with sources, applied changes, checks, unresolved questions, and next action (`handoff-session`). On resume, compare the note with actual files; a recorded answer is not proof that its action was applied. Keep small tasks lightweight.
 - When the session's work runs persistently below or above the current model's grade, say so instead of silently continuing. This is the de-escalation/escalation signal (D-010).
 
 ## Personal Paths

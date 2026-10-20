@@ -129,14 +129,20 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     sessions, Keychain items, or per-project Codex trust. `--skip-projects` limits
     the run to dotfiles and the agent environment.
 
-    `agent-master` is in `agent-os/projects.manifest`, so `psync apply` installs
-    and updates its Git repository on both machines. Run
-    `~/projects/agent-master/install.sh` once on each machine to link `am`.
-    Keep `~/.local/state/agent-master` local to each machine: it contains task
-    records, approvals, and Codex sessions. Share am code and policy changes by
-    committing and pushing `~/projects/agent-master`, then pulling on the other
-    machine. A changed `policy/` is not activated by Git pull; use am's
-    `version stage`, `version verify`, and `version activate` workflow there.
+    Use `gcodex` / `ncodex` for the normal Agent OS environment. The standalone
+    `codex-plain --account google` (or `naver`) starts a cold environment without
+    personal instructions, skills, plugins, hooks, or memories. Project instructions
+    and settings (including project MCP configuration) remain applicable, along with
+    the selected account's login. `codex-plain resume --all`
+    finds its own sessions under `~/.local/state/codex-plain`; it does not need am.
+    `install.sh` links the launcher from this repository's `bin/` directory.
+
+    Agent Master is retired from active project synchronization. Existing
+    `~/.local/state/agent-master` records and sessions must be preserved; retiring
+    the launcher does not authorize deleting that data. See
+    [migration and recovery](agent-os/agent-master-retirement.md) for the archive,
+    asset inventory, remaining cleanup, and rollback steps. Each machine's local
+    records need their own inventory before removal.
 
     Read-only health check over symlinks, required tools, agent CLI auth, launchd
     jobs, and model-registry drift. It never changes state; the exit code is the

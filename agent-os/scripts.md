@@ -28,6 +28,7 @@
 | `ai-model-status` | 제품 | 설정된 AI 모델 표시, 라이브 프로브 |
 | `claude-statusline` | 배관 | Claude Code statusLine 렌더러 |
 | `cleanclip` | 제품 | 클립보드 공백 정리 (tmux prefix+T) |
+| `codex-plain` | 제품 | am에 의존하지 않는 계정별 콜드 환경 실행과 재개 |
 | `codex-session-export` | 배관 | codex 세션 jsonl → Markdown 내보내기 (은퇴 예정: D-019, `asx export` 구현 시 삭제) |
 | `dotfiles-doctor` | 배관 | dotfiles, 에이전트 환경 read-only 헬스체크 |
 | `explain-diff-gate` | 배관 | 커밋 직전 diff 설명서 게이트, skip 사유 기록 (D-027) |

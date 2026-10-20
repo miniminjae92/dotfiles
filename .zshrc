@@ -197,7 +197,7 @@ alias gcala="gcalcli agenda"
 alias pc="pbcopy"
 alias vsummary="video-summary"
 alias usagegn="gcodex usage && ncodex usage"
-alias am="agent-master"
+# Agent OS: gcodex/ncodex for normal work, codex-plain for a cold environment.
 
 # ---- PR Feedback ----
 export PRFB_OUT="$HOME/.obsidian/yggdrasil/3. Resource/GitHub/PR Feedback"

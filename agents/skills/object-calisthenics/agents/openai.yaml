@@ -1,0 +1,4 @@
+interface:
+  display_name: "객체지향 생활체조"
+  short_description: "Java 객체지향 생활체조 아홉 규칙과 예외 근거를 검토"
+  default_prompt: "$object-calisthenics 기준으로 Java 코드의 책임과 캡슐화를 검토하고 예외의 근거를 설명해 주세요."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "RDD"
+  short_description: "프로그래밍 미션의 요구 분석부터 테스트와 검증까지 안내"
+  default_prompt: "$rdd 흐름으로 요구와 책임을 확인한 뒤 작은 단위로 구현해 주세요."

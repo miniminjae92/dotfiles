@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""Independent clean Codex homes. Python 3.11+; no agent-master dependency."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import time
+import tomllib
+import uuid
+
+ACCOUNTS = ("naver", "google")
+MANIFEST = "plain-session.json"
+ISOLATION = [
+    'cli_auth_credentials_store="file"',
+    'features.memories=false', 'memories.use_memories=false',
+    'memories.generate_memories=false', 'features.remote_plugin=false',
+    'features.plugins=false', 'features.apps=false',
+]
+
+
+class Invalid(ValueError):
+    pass
+
+
+def read_json(path, default=None):
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError:
+        return default
+
+
+def write_json(path, value):
+    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    try:
+        temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+        temporary.chmod(0o600)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def account_home(account):
+    return Path.home() / ".codex-accounts" / account
+
+
+def choose(label, choices):
+    if not sys.stdin.isatty():
+        raise Invalid(f"{label}: 비대화형 실행은 명시적으로 선택하세요.")
+    for number, (_, title) in enumerate(choices, 1):
+        print(f"{number}. {title}")
+    try:
+        selected = int(input(f"{label} [1-{len(choices)}]: ")) - 1
+    except (ValueError, EOFError):
+        raise Invalid("잘못된 선택입니다.") from None
+    if not 0 <= selected < len(choices):
+        raise Invalid("잘못된 선택입니다.")
+    return choices[selected][0]
+
+
+def select_account(root, selected):
+    if selected:
+        return selected
+    available = [a for a in ACCOUNTS if (account_home(a) / "auth.json").is_file()]
+    if len(available) > 1 and sys.stdin.isatty():
+        return choose("사용 계정", [(a, a) for a in available])
+    preference = read_json(root / "preferences.json", {})
+    if preference.get("account") in available:
+        return preference["account"]
+    if len(available) == 1:
+        return available[0]
+    raise Invalid("--account naver 또는 --account google을 지정하세요.")
+
+
+def config_values(path):
+    return tomllib.loads(path.read_text()) if path.is_file() else {}
+
+
+def clean_config(source, cwd):
+    lines = ['cli_auth_credentials_store = "file"']
+    for key in ("model", "model_reasoning_effort", "service_tier"):
+        if isinstance(source.get(key), str):
+            lines.append(f"{key} = {json.dumps(source[key])}")
+    for path in [cwd, *cwd.parents]:
+        trust = source.get("projects", {}).get(str(path), {}).get("trust_level")
+        if trust in ("trusted", "untrusted"):
+            lines.extend([f"[projects.{json.dumps(str(path))}]", f"trust_level = {json.dumps(trust)}"])
+            break
+    tui = source.get("tui", {})
+    status = tui.get("status_line") if isinstance(tui, dict) else None
+    if isinstance(status, list) and all(isinstance(part, str) for part in status):
+        lines.extend(["[tui]", "status_line = " + json.dumps(status)])
+    return "\n".join(lines) + "\n"
+
+
+def personal_skills():
+    # Inspect directory entries only; never read personal skill contents.
+    paths = set()
+    for base in (Path.home() / ".agents/skills", Path.home() / ".codex/skills"):
+        pending = [base]
+        visited = set()
+        while pending:
+            directory = pending.pop()
+            if not directory.is_dir() or directory.resolve() in visited:
+                continue
+            visited.add(directory.resolve())
+            skill = directory / "SKILL.md"
+            if skill.is_file():
+                paths.update((str(skill.absolute()), str(skill.resolve())))
+            pending.extend(entry for entry in directory.iterdir()
+                           if entry.name != ".system" and entry.is_dir())
+    return sorted(paths)
+
+
+def session_home(root, session):
+    if session.get("account") not in ACCOUNTS or not re.fullmatch(r"[a-f0-9]{12}", session.get("id", "")):
+        raise Invalid("대화 메타데이터가 잘못됐습니다.")
+    return root / "homes" / session["account"] / session["id"]
+
+
+def candidates(root, args):
+    rows = []
+    for path in (root / "homes").glob("*/*/" + MANIFEST):
+        row = read_json(path)
+        if not isinstance(row, dict) or row.get("schema_version") != 1:
+            raise Invalid(f"대화 메타데이터가 잘못됐습니다: {path}")
+        if path.parent != session_home(root, row):
+            raise Invalid(f"대화 경로가 잘못됐습니다: {path}")
+        if args.account and row["account"] != args.account:
+            continue
+        if not args.all and Path(row["cwd"]).resolve() != Path(args.cwd).resolve():
+            continue
+        rows.append(row)
+    return sorted(rows, key=lambda row: (row["updated"], row["id"]), reverse=True)
+
+
+def find_session(root, args):
+    if args.session:
+        if not re.fullmatch(r"[a-f0-9]{12}", args.session):
+            raise Invalid("대화 ID는 resume --all --list에서 확인하세요.")
+        matches = list((root / "homes").glob("*/" + args.session + "/" + MANIFEST))
+        if len(matches) != 1:
+            raise Invalid("대화를 찾을 수 없습니다.")
+        row = read_json(matches[0])
+        if matches[0].parent != session_home(root, row):
+            raise Invalid("대화 경로가 잘못됐습니다.")
+        if args.account and row["account"] != args.account:
+            raise Invalid("대화 계정과 --account가 다릅니다.")
+        return row
+    rows = candidates(root, args)
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return None
+    if not rows:
+        print("이어갈 대화가 없습니다. 다른 프로젝트는 resume --all로 확인하세요.")
+        return None
+    labels = [(row["id"], f"{row['goal'] or '제목 없는 대화'} · {row['account']} · {row['cwd']} [{row['id']}]") for row in rows]
+    if args.list:
+        for _, title in labels:
+            print(title)
+        return None
+    selected = rows[0]["id"] if args.last else choose("이어서 할 대화", labels)
+    return next(row for row in rows if row["id"] == selected)
+
+
+def bind_session(home, session):
+    """Bind the one CLI parent using rollout metadata, never modification time."""
+    roots = set()
+    saw_rollout = False
+    for directory in ("sessions", "archived_sessions"):
+        for path in (home / directory).rglob("*.jsonl"):
+            saw_rollout = True
+            try:
+                with path.open() as stream:
+                    first = stream.readline(1048576)
+                item = json.loads(first)
+                meta = item.get("payload", {}) if item.get("type") == "session_meta" else {}
+                identity = meta.get("id")
+                if (meta.get("source") == "cli" and not meta.get("parent_thread_id")
+                        and isinstance(identity, str)):
+                    roots.add(str(uuid.UUID(identity)))
+            except (OSError, ValueError, TypeError, AttributeError):
+                continue
+    bound = session.get("thread_id")
+    if bound:
+        if bound not in roots:
+            raise Invalid("연결된 본 대화의 세션 메타데이터를 찾을 수 없습니다.")
+        return bound
+    if len(roots) == 1:
+        session["thread_id"] = next(iter(roots))
+        return session["thread_id"]
+    if saw_rollout:
+        raise Invalid("본 대화를 하나로 확인할 수 없습니다. 자동으로 다른 대화를 재개하지 않습니다.")
+    return None
+
+
+def plan(root, session, resume):
+    home = session_home(root, session)
+    executable = shutil.which("codex")
+    if not executable:
+        raise Invalid("codex 실행 파일을 찾을 수 없습니다.")
+    overrides = list(ISOLATION)
+    skills = personal_skills()
+    if skills:
+        overrides.append("skills.config=[" + ",".join("{path=" + json.dumps(p) + ",enabled=false}" for p in skills) + "]")
+    argv = [executable, "--no-daemon", "-C", session["cwd"]]
+    argv.extend(arg for value in overrides for arg in ("--config", value))
+    thread_id = bind_session(home, session) if resume else None
+    if thread_id:
+        argv.extend(["resume", thread_id])
+    elif session["goal"]:
+        argv.append(session["goal"])
+    return {"argv": argv, "home": str(home), "id": session["id"], "account": session["account"]}
+
+
+def prepare(root, session, resume):
+    home = session_home(root, session)
+    auth = account_home(session["account"]) / "auth.json"
+    if not auth.is_file():
+        raise Invalid(f"선택한 계정 인증이 없습니다: {session['account']}")
+    if not Path(session["cwd"]).is_dir():
+        raise Invalid("프로젝트 폴더를 찾을 수 없습니다.")
+    if resume:
+        if not home.is_dir() or not (home / "auth.json").is_symlink() or (home / "auth.json").resolve() != auth.resolve():
+            raise Invalid("대화의 인증 참조가 바뀌었습니다.")
+        for name in ("AGENTS.md", "AGENTS.override.md", "WORKFLOWS.md", "hooks.json", "agents", "plugins", "memories"):
+            if (home / name).exists() or (home / name).is_symlink():
+                raise Invalid(f"빈 환경에 개인 지침/확장이 추가됐습니다: {name}")
+        skills = home / "skills"
+        if skills.is_symlink() or (skills.exists() and any(p.name != ".system" for p in skills.iterdir())):
+            raise Invalid("빈 환경에 개인 스킬이 추가됐습니다.")
+        if (home / "config.toml").is_symlink():
+            raise Invalid("빈 환경 설정은 심볼릭 링크일 수 없습니다.")
+        source = config_values(home / "config.toml")
+    else:
+        home.mkdir(parents=True, mode=0o700, exist_ok=False)
+        (home / "auth.json").symlink_to(auth)
+        source = config_values(account_home(session["account"]) / "config.toml")
+    # Keep native model/status-line changes, drop extension settings on every launch.
+    config = home / "config.toml"
+    config.write_text(clean_config(source, Path(session["cwd"])))
+    config.chmod(0o600)
+    write_json(home / MANIFEST, session)
+    write_json(root / "preferences.json", {"account": session["account"]})
+
+
+def parser():
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--state-dir", default=os.environ.get("CODEX_PLAIN_STATE_DIR", str(Path.home() / ".local/state/codex-plain")))
+    sub = result.add_subparsers(dest="command", required=True)
+    for command in ("start", "resume"):
+        child = sub.add_parser(command)
+        child.add_argument("--account", choices=ACCOUNTS)
+        child.add_argument("--cwd", default=os.getcwd())
+        child.add_argument("--dry-run", action="store_true", help="파일 생성이나 Codex 실행 없이 명령 표시")
+        if command == "start":
+            child.add_argument("--goal", default="")
+        else:
+            child.add_argument("session", nargs="?")
+            child.add_argument("--all", action="store_true")
+            child.add_argument("--last", action="store_true")
+            child.add_argument("--list", action="store_true")
+            child.add_argument("--json", action="store_true")
+    return result
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Permit codex-plain --account ... and a leading --state-dir.
+    offset = 2 if argv[:1] == ["--state-dir"] else 1 if argv and argv[0].startswith("--state-dir=") else 0
+    if len(argv) <= offset or argv[offset] not in ("start", "resume", "-h", "--help"):
+        argv.insert(offset, "start")
+    args = parser().parse_args(argv)
+    root = Path(args.state_dir).expanduser().resolve()
+    if args.command == "resume":
+        if (args.session and (args.last or args.list or args.json)) or (args.last and (args.list or args.json)):
+            raise Invalid("대화 ID/--last/목록 옵션은 함께 사용할 수 없습니다.")
+        session = find_session(root, args)
+        if session is None:
+            return 0
+    else:
+        session = {"schema_version": 1, "id": uuid.uuid4().hex[:12],
+                   "account": select_account(root, args.account), "cwd": str(Path(args.cwd).expanduser().resolve()),
+                   "goal": args.goal, "updated": time.time()}
+    launch = plan(root, session, args.command == "resume")
+    if args.dry_run:
+        print(json.dumps(launch, ensure_ascii=False, indent=2))
+        return 0
+    prepare(root, session, args.command == "resume")
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("AGENT_MASTER_") and key not in
+           ("CODEX_SESSION_ID", "CODEX_THREAD_ID", "CODEX_API_KEY", "OPENAI_API_KEY",
+            "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_ORGANIZATION", "OPENAI_PROJECT_ID", "OPENAI_PROJECT")}
+    env["CODEX_HOME"] = launch["home"]
+    print(f"plain · {session['account']} · {session['cwd']} · {session['id']}", flush=True)
+    try:
+        return subprocess.run(launch["argv"], env=env).returncode
+    finally:
+        session["updated"] = time.time()
+        try:
+            bind_session(Path(launch["home"]), session)
+        finally:
+            write_json(Path(launch["home"]) / MANIFEST, session)
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (Invalid, OSError, ValueError, TypeError, KeyError) as error:
+        print(f"codex-plain: {error}", file=sys.stderr)
+        raise SystemExit(2)
