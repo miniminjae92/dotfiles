@@ -236,3 +236,11 @@ alias cd="z"
 
 # Syntax highlighting must be sourced last (after all zle widgets are defined).
 source "$HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+# func
+
+repocpy() {
+  repomix &&
+  pbcopy < repomix-output.xml &&
+  rm repomix-output.xml
+}
