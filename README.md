@@ -23,6 +23,7 @@ This repository contains my personal dotfiles for macOS, designed to create a st
     * `fzf` with `fd` for fast and efficient file and directory searching.
     * `gh` for GitHub CLI workflows.
 * **Local Scripts**:
+    * `bin/mac-check` inspects Mac disk usage and RAM without deleting files or stopping apps. `--save` keeps local reports for comparison.
     * `bin/prfb` exports GitHub PR review feedback to Obsidian Markdown and JSON.
     * `bin/prfbo` opens saved PR feedback through `fzf` and `nvim`.
     * `git-ai-commit` (AI commit suite: plan/apply/message + lazygit integration) now lives in its own repository (see Extracted Tools below).
@@ -333,6 +334,32 @@ ports kill orphans # 고아 전부 정리
 고아만 대상으로 하고, adb 같은 상주 데몬은 `데몬`으로 표시해 건드리지 않는다.
 
 ---
+
+### Mac Check
+
+```bash
+mac-check                 # Read-only folder sizes, memory pressure, swap, top RSS processes
+mac-check --quick         # Skip folder scans
+mac-check --save          # Save a new Markdown/JSON pair for the next comparison
+mac-check --json          # Structured output for an agent
+```
+
+Requires macOS and Python 3 (standard library only). The installed command is a
+symlink from `~/.local/bin/mac-check` to `bin/mac-check`, following `install.sh`.
+Reports are local to `~/.local/state/mac-check/reports/`; only `--save` writes them.
+The report explains each folder's role and what to check before deleting anything.
+Ask an agent to run `mac-check --save` and explain the largest items or changes.
+This command collects measurements; it does not run an AI model or a background job.
+
+Each folder scan has a 120-second limit, with at most three scans in parallel.
+Missing, unreadable, or timed-out paths remain explicit; partial measurements are
+excluded from comparisons. A full scan compares against the latest saved full scan
+on the same host and home directory, even if a quick scan was saved more recently.
+Selected folders do not reproduce macOS Storage categories or account for the
+whole disk. APFS shared blocks and snapshots can make folder sizes differ from
+reclaimable space. RSS is per process, includes shared memory, and is not an app
+total. Process arguments and file contents are not collected. Saved reports may
+contain local paths, app names, and simulator names, so review them before sharing.
 
 ### AI Model Status
 
